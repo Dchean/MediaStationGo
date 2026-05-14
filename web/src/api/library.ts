@@ -19,6 +19,9 @@ export const libraryAPI = {
   scan: (id: string) =>
     api.post<ScanResult>(`/libraries/${id}/scan`).then((r) => r.data),
 
+  scrape: (id: string) =>
+    api.post(`/libraries/${id}/scrape`).then((r) => r.data),
+
   listMedia: (id: string, page = 1, pageSize = 50) =>
     api
       .get<MediaPage>(`/libraries/${id}/media`, {

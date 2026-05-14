@@ -1,0 +1,37 @@
+// Package handler — subtitle endpoints.
+package handler
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/ShukeBta/MediaStationGo/internal/service"
+)
+
+func listSubtitlesHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tracks, err := svc.Subtitle.Discover(c.Request.Context(), c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"tracks": tracks})
+	}
+}
+
+func serveSubtitleHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Query("path")
+		if path == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing path"})
+			return
+		}
+		c.Header("Content-Type", "text/vtt; charset=utf-8")
+		c.Header("Cache-Control", "public, max-age=3600")
+		if err := svc.Subtitle.Serve(c.Request.Context(), c.Param("id"), path, c.Writer); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+	}
+}

@@ -76,6 +76,7 @@ func main() {
 	if err := services.Auth.SeedAdmin(context.Background()); err != nil {
 		logger.Warn("seed admin failed", zap.Error(err))
 	}
+	services.Boot()
 
 	router := buildRouter(cfg, logger, services)
 

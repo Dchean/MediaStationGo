@@ -40,6 +40,10 @@ func createLibraryHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		uid, _ := c.Get("ctx_user_id")
+		svc.Audit.Record(c.Request.Context(), toString(uid), "library.create", l.ID, c.ClientIP(), l.Path)
+		// Refresh fsnotify watcher to pick up the new library root.
+		go func() { _ = svc.Watcher.Refresh(c.Request.Context()) }()
 		c.JSON(http.StatusOK, l)
 	}
 }
@@ -51,6 +55,9 @@ func deleteLibraryHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		uid, _ := c.Get("ctx_user_id")
+		svc.Audit.Record(c.Request.Context(), toString(uid), "library.delete", id, c.ClientIP(), "")
+		go func() { _ = svc.Watcher.Refresh(c.Request.Context()) }()
 		c.Status(http.StatusNoContent)
 	}
 }

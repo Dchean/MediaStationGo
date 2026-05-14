@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { mediaAPI } from '../api/library'
 import { hlsURL, streamURL } from '../api/client'
 import { playbackAPI } from '../api/playback'
+import { subtitlesAPI, type SubtitleTrack } from '../api/subtitles'
 import type { Media } from '../types'
 
 type Mode = 'direct' | 'hls'
@@ -19,6 +20,9 @@ type Mode = 'direct' | 'hls'
 // We pick a sensible default based on the source codec: H.264 + AAC in
 // MP4 / WebM containers play directly; everything else (HEVC, MKV, AV1,
 // AC3 audio, …) gets routed through ffmpeg → HLS.
+//
+// External subtitles next to the source file are auto-discovered and
+// attached as <track> elements.
 export function PlayerPage() {
   const { id = '' } = useParams()
   const [params, setParams] = useSearchParams()
@@ -30,6 +34,7 @@ export function PlayerPage() {
 
   const [media, setMedia] = useState<Media | null>(null)
   const [mode, setMode] = useState<Mode>('direct')
+  const [subs, setSubs] = useState<SubtitleTrack[]>([])
 
   // Load metadata and pick a default mode.
   useEffect(() => {
@@ -40,6 +45,10 @@ export function PlayerPage() {
       const auto = pickMode(m)
       setMode(forced ?? auto)
     })
+    subtitlesAPI
+      .list(id)
+      .then(setSubs)
+      .catch(() => setSubs([]))
   }, [id, params])
 
   // Wire up the actual <video> element when we know the mode.
@@ -48,14 +57,9 @@ export function PlayerPage() {
     teardownHls()
 
     const video = ref.current
-    let cancelled = false
-
     if (mode === 'hls') {
       const url = hlsURL(media.id)
-      // Lazy import keeps the main bundle ~530 KB smaller until the user
-      // actually hits HLS playback.
       void import('hls.js').then(({ default: HlsCtor }) => {
-        if (cancelled) return
         if (HlsCtor.isSupported()) {
           const hls = new HlsCtor({ enableWorker: true, lowLatencyMode: false })
           hls.loadSource(url)
@@ -81,10 +85,7 @@ export function PlayerPage() {
       video.src = streamURL(media.id)
       void video.play().catch(() => undefined)
     }
-    return () => {
-      cancelled = true
-      teardownHls()
-    }
+    return teardownHls
   }, [media, mode, params, setParams])
 
   // Persist resume position every 10 seconds while playing.
@@ -161,8 +162,20 @@ export function PlayerPage() {
             ref={ref}
             controls
             autoPlay
+            crossOrigin="use-credentials"
             className="max-h-screen w-full max-w-[1600px] bg-black"
-          />
+          >
+            {subs.map((t, i) => (
+              <track
+                key={t.path}
+                kind="subtitles"
+                src={subtitlesAPI.url(media.id, t.path)}
+                srcLang={t.lang}
+                label={t.label || t.lang}
+                default={i === 0}
+              />
+            ))}
+          </video>
         ) : (
           <p className="text-slate-500">加载中…</p>
         )}
@@ -175,8 +188,6 @@ const directContainers = ['mp4', 'webm', 'm4v']
 const directVideoCodecs = ['h264', 'avc', 'avc1']
 const directAudioCodecs = ['aac', 'mp3', 'opus']
 
-// pickMode picks 'direct' when the source is browser-friendly, otherwise
-// 'hls' so the user gets a working stream out of the box.
 function pickMode(m: Media): Mode {
   const c = (m.container ?? '').toLowerCase()
   const v = (m.video_codec ?? '').toLowerCase()

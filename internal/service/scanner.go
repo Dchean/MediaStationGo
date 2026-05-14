@@ -2,11 +2,13 @@
 //
 // ScannerService walks the configured library roots looking for video
 // files, then upserts a model.Media row per file. Each upsert also runs
-// ffprobe (when available) and queues a TMDb lookup for newly added rows.
+// ffprobe (when available) and queues a metadata lookup for newly added
+// rows.
 //
-// The scan is synchronous from the HTTP layer's point of view, but it
-// publishes WebSocket progress events on the "scan" topic so the React
-// UI can render a live counter / spinner.
+// For TV / anime libraries we extract season + episode numbers from the
+// filename via ParseEpisode and store them on the Media row. A future
+// pass groups episodes into Series rows; the current scaffold lets the
+// frontend group by `series_id`.
 package service
 
 import (
@@ -73,15 +75,6 @@ type ScanResult struct {
 }
 
 // ScanLibrary walks the library root and persists discovered media files.
-//
-// Workflow per file:
-//   1. fast filename-based title cleanup.
-//   2. ffprobe → duration / resolution / codecs (best effort).
-//   3. upsert into the media table.
-//   4. publish progress over the WS hub.
-//
-// After the walk we kick off the TMDb scraper for every still-pending
-// row in the same library. The scraper has its own throttle.
 func (s *ScannerService) ScanLibrary(ctx context.Context, libraryID string) (*ScanResult, error) {
 	lib, err := s.repo.Library.FindByID(ctx, libraryID)
 	if err != nil || lib == nil {
@@ -111,6 +104,13 @@ func (s *ScannerService) ScanLibrary(ctx context.Context, libraryID string) (*Sc
 			Path:      path,
 			SizeBytes: info.size,
 			Container: strings.TrimPrefix(ext, "."),
+		}
+
+		// Detect season/episode for TV / anime libraries.
+		if lib.Type == "tv" || lib.Type == "anime" {
+			s, e := ParseEpisode(path)
+			m.SeasonNum = s
+			m.EpisodeNum = e
 		}
 
 		// Best-effort ffprobe; failure does not abort the file.
@@ -157,8 +157,9 @@ func (s *ScannerService) ScanLibrary(ctx context.Context, libraryID string) (*Sc
 		"probed":     res.Probed,
 	})
 
-	// Fire-and-forget metadata enrichment when a TMDb key is configured.
-	if s.scraper != nil && s.scraper.tmdb != nil && s.scraper.tmdb.Enabled() {
+	// Fire-and-forget metadata enrichment when at least one provider is
+	// configured.
+	if s.scraper != nil && s.scraper.AnyEnabled() {
 		go func(libID string) {
 			if _, err := s.scraper.EnrichLibrary(context.Background(), libID); err != nil {
 				s.log.Warn("scraper enrich failed", zap.Error(err))

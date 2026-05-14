@@ -32,8 +32,10 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 		authed.Use(middleware.AuthRequired(cfg.Secrets.JWTSecret))
 		{
 			authed.GET("/me", meHandler(svc))
+			authed.PATCH("/me", updateProfileHandler(svc))
 			authed.POST("/me/password", changePasswordHandler(svc))
 
+			// Libraries.
 			authed.GET("/libraries", listLibrariesHandler(svc))
 			authed.POST("/libraries", middleware.AdminRequired(), createLibraryHandler(svc))
 			authed.DELETE("/libraries/:id", middleware.AdminRequired(), deleteLibraryHandler(svc))
@@ -41,10 +43,15 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 			authed.POST("/libraries/:id/scrape", middleware.AdminRequired(), scrapeLibraryHandler(svc))
 
 			authed.GET("/libraries/:id/media", listMediaHandler(svc))
+			authed.GET("/libraries/:id/seasons", listSeasonsHandler(svc))
+
+			// Media.
 			authed.GET("/media/:id", getMediaHandler(svc))
 			authed.GET("/media", searchMediaHandler(svc))
 			authed.POST("/media/:id/scrape", middleware.AdminRequired(), scrapeOneHandler(svc))
 			authed.POST("/media/:id/probe", middleware.AdminRequired(), reprobeHandler(svc))
+			authed.GET("/media/:id/subtitles", listSubtitlesHandler(svc))
+			authed.GET("/subtitles/:id", serveSubtitleHandler(svc))
 
 			// Streaming.
 			authed.GET("/stream/:id", streamHandler(svc))
@@ -69,6 +76,21 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 			authed.DELETE("/playlists/:id/items/:media_id", removePlaylistItemHandler(svc))
 			authed.DELETE("/playlists/:id", deletePlaylistHandler(svc))
 
+			// Downloads.
+			authed.GET("/downloads", listDownloadsHandler(svc))
+			authed.POST("/downloads", addDownloadHandler(svc))
+			authed.DELETE("/downloads/:hash", middleware.AdminRequired(), deleteDownloadHandler(svc))
+			authed.POST("/downloads/reload", middleware.AdminRequired(), reloadDownloadConfigHandler(svc))
+
+			// Subscriptions.
+			authed.GET("/subscriptions", listSubscriptionsHandler(svc))
+			authed.POST("/subscriptions", createSubscriptionHandler(svc))
+			authed.DELETE("/subscriptions/:id", deleteSubscriptionHandler(svc))
+			authed.POST("/subscriptions/:id/run", runSubscriptionHandler(svc))
+
+			// Stats / dashboard.
+			authed.GET("/stats", statsHandler(svc))
+
 			authed.GET("/ws", wsHandler(svc))
 		}
 
@@ -77,6 +99,7 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 		admin.Use(middleware.AuthRequired(cfg.Secrets.JWTSecret), middleware.AdminRequired())
 		{
 			admin.GET("/users", listUsersHandler(svc))
+			admin.PATCH("/users/:id/role", adminUpdateRoleHandler(svc))
 			admin.DELETE("/users/:id", deleteUserHandler(svc))
 			admin.GET("/settings", listSettingsHandler(svc))
 			admin.PUT("/settings", updateSettingHandler(svc))

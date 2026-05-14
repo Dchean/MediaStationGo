@@ -24,35 +24,59 @@ deployment model used by [`cropflre/nowen-video`](https://github.com/cropflre/no
   multi-arch Alpine Docker image.
 
 The goal is to keep the user-facing feature surface familiar (libraries,
-scanning, scraping, direct play/HLS, multi-user, downloads) while making
-deployment painless on NAS hardware.
+scanning, scraping, direct play/HLS, multi-user, downloads, RSS) while
+making deployment painless on NAS hardware.
 
 ---
 
-## Features (current scaffold)
+## Features
 
-- ✅ JWT authentication with admin/user roles
-- ✅ First-run admin seeding (`admin / admin123`)
+### Authentication & users
+- ✅ JWT auth with admin/user roles
+- ✅ First-run admin seeding (`admin / admin123`, override via `ADMIN_INITIAL_PASSWORD`)
+- ✅ Profile page (email / avatar / change password)
+- ✅ Admin user table with role promotion / demotion
+- ✅ Audit log written for sensitive actions (login, library CRUD, downloads, …)
+
+### Library management
 - ✅ Library CRUD + recursive filesystem scan
-- ✅ ffprobe metadata extraction (duration / resolution / codecs)
-- ✅ TMDb scraper with image proxy (poster / backdrop / overview / rating)
+- ✅ ffprobe metadata extraction (duration / resolution / codecs / container)
+- ✅ Scene-noise filename cleaner with year + season/episode parsing
+- ✅ TMDb scraper (movies) + Bangumi scraper (anime), provider chain by library type
+- ✅ Image proxy with disk cache for TMDb / Bangumi / Douban / Fanart / TheTVDB
+- ✅ TV / anime libraries grouped by season with episode listing
+- ✅ fsnotify-based filesystem watcher with 5 s coalescing debouncer
+
+### Playback
 - ✅ Direct-play streaming with HTTP `Range` support
 - ✅ HLS on-demand transcoding (single ffmpeg job per media)
-- ✅ Playback history (resume) + Continue Watching row
-- ✅ Favourites + Playlists (CRUD + ordered items)
-- ✅ Real-time scan / scrape / transcode progress via WebSocket
-- ✅ React SPA with code-splitting: Login / Home / Library / Search /
-  Favourites / Playlists / Media detail / Player (HLS + direct) / Admin
-- ✅ Single-binary build, multi-arch Docker image, GitHub Actions CI
+- ✅ External subtitle discovery (.srt / .vtt / .ass / .ssa) with on-the-fly WebVTT conversion
+- ✅ Resume position written every 10 s + Continue Watching row on home
+- ✅ Favourites (toggle) + ordered Playlists (CRUD)
+
+### Automation
+- ✅ qBittorrent download integration (add / list / delete via Web UI API)
+- ✅ RSS subscriptions with regex filters, GUID dedup and 10-minute polling
+
+### Operations
+- ✅ Real-time scan / scrape / transcode / download / subscription events over WebSocket
+- ✅ Operator dashboard at `/stats` (CPU / memory / disk / library counts / Goroutines)
+- ✅ Single-binary build, multi-arch Docker image, GitHub Actions CI + GHCR publish
+
+### Frontend
+- ✅ React SPA with code-splitting: Login / Home / Library / Search / Favourites /
+  Playlists / Media detail / Player (HLS + direct + subtitles) / Profile /
+  Downloads / Subscriptions / Stats / Admin
+- ✅ Global toast notifications driven by the WebSocket hub
+- ✅ Initial bundle ~250 KB / 83 KB gzipped (hls.js loaded only on first HLS playback)
 
 ### Roadmap
 
 | Area | Status |
 |------|--------|
-| Bangumi / Douban / Fanart scraper providers | ⏳ |
-| Hardware-accelerated transcoding (NVENC / QSV / VAAPI) | ⏳ |
-| qBittorrent / Transmission / RSS automation | ⏳ |
-| Subtitles (extract / search / sync) | ⏳ |
+| Hardware-accelerated transcoding (NVENC / QSV / VAAPI) profiles | ⏳ |
+| Douban / Fanart / TheTVDB providers | ⏳ |
+| Subtitle search (online providers) | ⏳ |
 | Emby/Jellyfin compatibility layer | ⏳ |
 | DLNA / Chromecast | ⏳ |
 | AI metadata enhancement & smart search | ⏳ |
@@ -95,7 +119,7 @@ make dev-web     # vite dev server on :3000, proxies /api -> :8080
 Configuration is layered — defaults < `config.yaml` < `config/*.yaml` <
 environment variables prefixed with `MEDIASTATION_`.
 
-The most common keys:
+### Most-used keys
 
 | Key | Default | Purpose |
 |------|---------|---------|
@@ -104,8 +128,24 @@ The most common keys:
 | `MEDIASTATION_APP_WEB_DIR` | `./web/dist` | SPA bundle to serve |
 | `MEDIASTATION_DATABASE_DB_PATH` | `./data/mediastation.db` | SQLite file |
 | `MEDIASTATION_SECRETS_JWT_SECRET` | *(auto)* | JWT signing key |
+| `MEDIASTATION_SECRETS_TMDB_API_KEY` | *(empty)* | Enables movie scraping |
+| `MEDIASTATION_SECRETS_BANGUMI_ACCESS_TOKEN` | *(empty)* | Optional, raises Bangumi rate limit |
 | `MEDIASTATION_APP_CORS_ORIGINS` | *(empty)* | Allow-list, JSON array |
 | `ADMIN_INITIAL_PASSWORD` | `admin123` | Bootstrap admin password |
+
+### Runtime settings (admin → 设置)
+
+These live in the `settings` table and can be edited from the admin UI:
+
+| Key | Purpose |
+|-----|---------|
+| `qbittorrent.url` | qBittorrent Web UI base URL |
+| `qbittorrent.username` | qBittorrent user |
+| `qbittorrent.password` | qBittorrent password |
+| `qbittorrent.savepath` | Optional default save path for new torrents |
+
+After editing, hit **下载 → 重新加载配置** (or `POST /api/downloads/reload`) so
+the qBittorrent client picks up the new credentials.
 
 See [`config.example.yaml`](config.example.yaml) for the full surface.
 
@@ -121,13 +161,35 @@ MediaStationGo/
 │   ├── database/               GORM + SQLite (WAL) bootstrap
 │   ├── model/                  GORM data models + AutoMigrate registry
 │   ├── repository/             Thin data-access layer
-│   ├── service/                Business logic (auth/media/scan/stream/ws)
+│   ├── service/                Business logic
+│   │   ├── auth.go             login / register / JWT / seed admin
+│   │   ├── media.go            library + media CRUD
+│   │   ├── scanner.go          fs walker + ffprobe + scrape kick
+│   │   ├── ffprobe.go          ffprobe wrapper
+│   │   ├── tmdb.go             TMDb provider
+│   │   ├── bangumi.go          Bangumi provider
+│   │   ├── scraper.go          orchestrator + filename cleaner
+│   │   ├── stream.go           direct play + HLS playlist / segment
+│   │   ├── transcoder.go       per-media ffmpeg HLS job manager
+│   │   ├── subtitle.go         external subtitle discovery + .vtt conversion
+│   │   ├── image_proxy.go      cached, allow-listed image proxy
+│   │   ├── playback.go         history / favourites / playlists
+│   │   ├── watcher.go          fsnotify debouncer
+│   │   ├── qbittorrent.go      qBittorrent v2 API client
+│   │   ├── downloads.go        download orchestrator + WS poller
+│   │   ├── subscription.go     RSS poller
+│   │   ├── stats.go            dashboard snapshot
+│   │   ├── profile.go          non-credential user mutations
+│   │   ├── audit.go            audit log writer
+│   │   ├── ws_hub.go           pub/sub broker for the WS
+│   │   └── walk.go / episode_parser.go  helpers
 │   ├── middleware/             Gin middleware (CORS / JWT / admin)
-│   └── handler/                HTTP route definitions
+│   └── handler/                HTTP route definitions (one file per concern)
 ├── web/                        React 18 + Vite SPA
-│   ├── src/api/                axios helpers
-│   ├── src/components/         Layout, MediaCard, RequireAuth, …
-│   ├── src/pages/              Home / Library / Search / Player / Admin
+│   ├── src/api/                axios helpers (one per service)
+│   ├── src/components/         Layout, MediaCard, GlobalEvents, RequireAuth
+│   ├── src/hooks/              useWebSocket, …
+│   ├── src/pages/              Home / Library / Search / Player / Downloads / …
 │   ├── src/stores/             Zustand (auth)
 │   └── src/types/              Domain types mirrored from Go
 ├── Dockerfile                  Multi-stage, multi-arch build

@@ -30,6 +30,16 @@ const PlayerPage = lazy(() =>
   import('./pages/PlayerPage').then((m) => ({ default: m.PlayerPage })),
 )
 const AdminPage = lazy(() => import('./pages/AdminPage').then((m) => ({ default: m.AdminPage })))
+const DownloadsPage = lazy(() =>
+  import('./pages/DownloadsPage').then((m) => ({ default: m.DownloadsPage })),
+)
+const SubscriptionsPage = lazy(() =>
+  import('./pages/SubscriptionsPage').then((m) => ({ default: m.SubscriptionsPage })),
+)
+const ProfilePage = lazy(() =>
+  import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
+)
+const StatsPage = lazy(() => import('./pages/StatsPage').then((m) => ({ default: m.StatsPage })))
 
 // Fallback shown while a chunk is loading.
 const Loading = () => <p className="px-6 py-8 text-slate-500">加载中…</p>
@@ -55,6 +65,17 @@ export default function App() {
           <Route path="playlist/:id" element={<PlaylistDetailPage />} />
           <Route path="media/:id" element={<MediaDetailPage />} />
           <Route path="play/:id" element={<PlayerPage />} />
+          <Route path="downloads" element={<DownloadsPage />} />
+          <Route path="subscriptions" element={<SubscriptionsPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route
+            path="stats"
+            element={
+              <RequireAdmin>
+                <StatsPage />
+              </RequireAdmin>
+            }
+          />
           <Route
             path="admin"
             element={

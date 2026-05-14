@@ -1,12 +1,15 @@
 // Package service — scraper orchestrator.
 //
 // ScraperService takes a Media row and tries to enrich it with metadata
-// from one or more providers (currently TMDb only). It is invoked at the
-// end of every scan cycle for media items whose `scrape_status` is still
-// "pending"; it can also be re-triggered manually from the admin UI.
+// from one or more providers. Selection is driven by the library type:
 //
-// The orchestrator is deliberately stateless: it loops media → provider →
-// repository, publishing scrape progress events to the WS hub.
+//   library.type == "anime"   -> Bangumi  (fallback: TMDb)
+//   library.type == "tv"      -> TMDb (movies) — TV episodes inherit
+//                                series metadata; episode-level scraping
+//                                is left as a future step
+//   default                   -> TMDb
+//
+// The orchestrator publishes scrape progress events on the WS hub.
 package service
 
 import (
@@ -26,23 +29,33 @@ import (
 
 // ScraperService coordinates metadata enrichment across providers.
 type ScraperService struct {
-	cfg  *config.Config
-	log  *zap.Logger
-	repo *repository.Container
-	tmdb *TMDbProvider
-	hub  *Hub
+	cfg     *config.Config
+	log     *zap.Logger
+	repo    *repository.Container
+	tmdb    *TMDbProvider
+	bangumi *BangumiProvider
+	hub     *Hub
 }
 
 // NewScraperService is the constructor.
-func NewScraperService(cfg *config.Config, log *zap.Logger, repo *repository.Container, tmdb *TMDbProvider, hub *Hub) *ScraperService {
-	return &ScraperService{cfg: cfg, log: log, repo: repo, tmdb: tmdb, hub: hub}
+func NewScraperService(
+	cfg *config.Config,
+	log *zap.Logger,
+	repo *repository.Container,
+	tmdb *TMDbProvider,
+	bangumi *BangumiProvider,
+	hub *Hub,
+) *ScraperService {
+	return &ScraperService{
+		cfg: cfg, log: log, repo: repo,
+		tmdb: tmdb, bangumi: bangumi, hub: hub,
+	}
 }
 
-// yearPattern extracts a 4-digit year from a filename (1900-2099).
+// yearPattern extracts a 4-digit year (1900-2099).
 var yearPattern = regexp.MustCompile(`(?:^|[^\d])(19\d{2}|20\d{2})(?:[^\d]|$)`)
 
-// noiseTokens are aggressively stripped from filenames before search.
-// Keep in sync with nowen-video's filename_parser.go intent.
+// noiseTokens are stripped before search.
 var noiseTokens = []string{
 	"1080p", "2160p", "4k", "720p", "480p",
 	"hdrip", "bluray", "blu-ray", "webrip", "web-dl", "web",
@@ -52,8 +65,7 @@ var noiseTokens = []string{
 	"hkfree", "yify", "rarbg", "ettv", "fgt",
 }
 
-// bracketedTag matches "[anything]" or "(anything)" segments, which are
-// almost always release-group / encoder tags in scene filenames.
+// bracketedTag matches "[anything]" or "(anything)" segments.
 var bracketedTag = regexp.MustCompile(`[\[\(][^\]\)]*[\]\)]`)
 
 // CleanQuery converts a filename like "Inception.2010.1080p.BluRay.x264.mkv"
@@ -70,13 +82,18 @@ func CleanQuery(raw string) (title string, year int) {
 		}
 	}
 
-	// 2. Drop everything inside square / round brackets — those are tags.
+	// 2. Drop everything inside brackets.
 	lower = bracketedTag.ReplaceAllString(lower, " ")
+
+	// 3. Drop episode markers (S01E02 / 1x02 / EP05 / 第03集).
+	lower = patSEnE.ReplaceAllString(lower, " ")
+	lower = patNxE.ReplaceAllString(lower, " ")
+	lower = patEP.ReplaceAllString(lower, " ")
+	lower = patCN.ReplaceAllString(lower, " ")
 
 	for _, t := range noiseTokens {
 		lower = strings.ReplaceAll(lower, t, " ")
 	}
-	// collapse separators / spaces
 	for _, sep := range []string{".", "_", "-", "[", "]", "(", ")"} {
 		lower = strings.ReplaceAll(lower, sep, " ")
 	}
@@ -85,11 +102,15 @@ func CleanQuery(raw string) (title string, year int) {
 	return strings.TrimSpace(title), year
 }
 
-// EnrichOne runs the provider chain for a single media row.
+// EnrichOne runs the provider chain for a single media row. The library's
+// type decides which provider goes first; a fallback runs when the primary
+// returns nothing.
 func (s *ScraperService) EnrichOne(ctx context.Context, m *model.Media) error {
-	if s.tmdb == nil || !s.tmdb.Enabled() {
-		return nil
+	lib, err := s.repo.Library.FindByID(ctx, m.LibraryID)
+	if err != nil {
+		return err
 	}
+
 	query := m.Title
 	if query == "" {
 		query, _ = CleanQuery(m.Path)
@@ -100,10 +121,15 @@ func (s *ScraperService) EnrichOne(ctx context.Context, m *model.Media) error {
 	if year == 0 {
 		_, year = CleanQuery(filepath.Base(m.Path))
 	}
-	match, err := s.tmdb.SearchMovie(ctx, query, year)
-	if err != nil || match == nil {
-		return err
+
+	match := s.lookup(ctx, lib, query, year)
+	if match == nil {
+		// Mark explicitly so we don't retry forever.
+		_ = s.repo.DB.Model(&model.Media{}).Where("id = ?", m.ID).
+			Update("scrape_status", "no_match").Error
+		return nil
 	}
+
 	updates := map[string]any{
 		"title":         match.Title,
 		"overview":      match.Overview,
@@ -111,28 +137,51 @@ func (s *ScraperService) EnrichOne(ctx context.Context, m *model.Media) error {
 		"backdrop_url":  match.BackdropURL,
 		"rating":        match.Rating,
 		"year":          match.Year,
-		"tmdb_id":       match.TMDbID,
 		"scrape_status": "matched",
+	}
+	if match.TMDbID > 0 {
+		updates["tmdb_id"] = match.TMDbID
+	}
+	if match.BangumiID > 0 {
+		updates["bangumi_id"] = match.BangumiID
 	}
 	if err := s.repo.DB.Model(&model.Media{}).Where("id = ?", m.ID).
 		Updates(updates).Error; err != nil {
 		return err
 	}
 	s.hub.Publish("scrape", map[string]any{
-		"media_id": m.ID,
-		"title":    match.Title,
-		"tmdb_id":  match.TMDbID,
+		"media_id":   m.ID,
+		"title":      match.Title,
+		"tmdb_id":    match.TMDbID,
+		"bangumi_id": match.BangumiID,
 	})
 	return nil
 }
 
-// EnrichLibrary runs the provider chain for every "pending" media in a
-// library. It throttles to 4 RPS to stay below TMDb's rate limit and
-// publishes a summary event when done.
-func (s *ScraperService) EnrichLibrary(ctx context.Context, libraryID string) (int, error) {
-	if s.tmdb == nil || !s.tmdb.Enabled() {
-		return 0, nil
+// lookup runs the provider chain. When the library is missing we fall
+// back to TMDb only.
+func (s *ScraperService) lookup(ctx context.Context, lib *model.Library, query string, year int) *Match {
+	kind := ""
+	if lib != nil {
+		kind = lib.Type
 	}
+	if kind == "anime" && s.bangumi != nil {
+		if m, err := s.bangumi.Search(ctx, query); err == nil && m != nil {
+			return m
+		}
+		s.log.Debug("bangumi miss, falling back to tmdb", zap.String("query", query))
+	}
+	if s.tmdb != nil && s.tmdb.Enabled() {
+		if m, err := s.tmdb.SearchMovie(ctx, query, year); err == nil && m != nil {
+			return m
+		}
+	}
+	return nil
+}
+
+// EnrichLibrary runs the provider chain for every "pending" media in a
+// library. It throttles to 4 RPS and publishes a summary event when done.
+func (s *ScraperService) EnrichLibrary(ctx context.Context, libraryID string) (int, error) {
 	var rows []model.Media
 	q := s.repo.DB.Where("scrape_status = ?", "pending")
 	if libraryID != "" {
@@ -161,4 +210,15 @@ func (s *ScraperService) EnrichLibrary(ctx context.Context, libraryID string) (i
 		"matched":    matched,
 	})
 	return matched, nil
+}
+
+// AnyEnabled reports whether at least one provider can run.
+func (s *ScraperService) AnyEnabled() bool {
+	if s.tmdb != nil && s.tmdb.Enabled() {
+		return true
+	}
+	if s.bangumi != nil && s.bangumi.Enabled() {
+		return true
+	}
+	return false
 }

@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
+  Activity,
+  CloudDownload,
   Film,
   Heart,
   Home,
   ListMusic,
   LogOut,
+  Rss,
   Search,
   Settings,
   Library as LibraryIcon,
+  User as UserIcon,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -42,7 +46,7 @@ export function Layout() {
           </span>
         </Link>
 
-        <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
           <SidebarLink to="/" icon={<Home size={18} />} label="首页" end />
           <SidebarLink to="/search" icon={<Search size={18} />} label="搜索" />
           <SidebarLink to="/favourites" icon={<Heart size={18} />} label="收藏" />
@@ -63,11 +67,23 @@ export function Layout() {
             />
           ))}
 
+          <div className="mt-6 px-2 text-xs uppercase tracking-wider text-slate-500">
+            自动化
+          </div>
+          <SidebarLink to="/downloads" icon={<CloudDownload size={18} />} label="下载" />
+          <SidebarLink to="/subscriptions" icon={<Rss size={18} />} label="RSS 订阅" />
+
+          <div className="mt-6 px-2 text-xs uppercase tracking-wider text-slate-500">
+            账号
+          </div>
+          <SidebarLink to="/profile" icon={<UserIcon size={18} />} label="个人资料" />
+
           {user?.role === 'admin' && (
             <>
               <div className="mt-6 px-2 text-xs uppercase tracking-wider text-slate-500">
                 管理
               </div>
+              <SidebarLink to="/stats" icon={<Activity size={18} />} label="运行状态" />
               <SidebarLink to="/admin" icon={<Settings size={18} />} label="管理后台" />
             </>
           )}

@@ -82,3 +82,61 @@ export interface AccessLog {
   detail: string
   created_at: string
 }
+
+export interface Subscription {
+  id: string
+  user_id: string
+  name: string
+  feed_url: string
+  filter: string
+  enabled: boolean
+  last_run_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DownloadTask {
+  id: string
+  user_id: string
+  source: string
+  url: string
+  save_path: string
+  status: string
+  progress: number
+  created_at: string
+  updated_at: string
+}
+
+export interface QBitTorrent {
+  hash: string
+  name: string
+  state: string
+  progress: number
+  dlspeed: number
+  upspeed: number
+  num_seeds: number
+  num_leechs: number
+  size: number
+  save_path: string
+}
+
+export interface Hardware {
+  cpu_percent: number
+  memory_used: number
+  memory_total: number
+  disk_used: number
+  disk_total: number
+  go_version: string
+  goroutines: number
+}
+
+export interface StatsSnapshot {
+  libraries: number
+  media_count: number
+  users_count: number
+  total_size_bytes: number
+  total_seconds: number
+  recently_added: Media[]
+  hardware: Hardware
+  generated_at: string
+}

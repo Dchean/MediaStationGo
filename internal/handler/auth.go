@@ -41,6 +41,7 @@ func loginHandler(svc *service.Container) gin.HandlerFunc {
 			"token": token,
 			"user":  u,
 		})
+		svc.Audit.Record(c.Request.Context(), u.ID, "auth.login", u.Username, c.ClientIP(), "")
 	}
 }
 

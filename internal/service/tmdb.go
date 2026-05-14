@@ -61,9 +61,12 @@ func NewTMDbProvider(cfg *config.Config, log *zap.Logger) *TMDbProvider {
 // Enabled reports whether the operator has supplied an API key.
 func (t *TMDbProvider) Enabled() bool { return t.cfg.Secrets.TMDbAPIKey != "" }
 
-// Match describes a successful metadata match.
+// Match describes a successful metadata match. The same struct is reused
+// across providers; provider-specific IDs sit side-by-side so the scraper
+// orchestrator can write them all into a single update.
 type Match struct {
 	TMDbID      int     `json:"tmdb_id"`
+	BangumiID   int     `json:"bangumi_id"`
 	Title       string  `json:"title"`
 	Overview    string  `json:"overview"`
 	PosterURL   string  `json:"poster_url"`

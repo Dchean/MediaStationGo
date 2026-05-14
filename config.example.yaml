@@ -37,6 +37,8 @@ secrets:
   # persisted to {data_dir}/.jwt_secret so existing sessions survive restarts.
   jwt_secret: ""
   tmdb_api_key: ""
+  tmdb_api_proxy: ""        # e.g. https://api.tmdb-mirror.example
+  tmdb_image_proxy: ""      # e.g. https://image.tmdb-mirror.example/t/p
   bangumi_access_token: ""
   thetvdb_api_key: ""
   fanart_tv_api_key: ""

@@ -4,12 +4,14 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 
 import App from './App'
+import { GlobalEvents } from './components/GlobalEvents'
 import './index.css'
 
 // Application root: BrowserRouter + global toast container.
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <BrowserRouter>
+      <GlobalEvents />
       <App />
       <Toaster
         position="top-right"

@@ -1,0 +1,24 @@
+import { api } from './client'
+import { useAuthStore } from '../stores/auth'
+
+export interface SubtitleTrack {
+  lang: string
+  label: string
+  path: string
+  url: string
+  codec: string
+}
+
+export const subtitlesAPI = {
+  list: (mediaId: string) =>
+    api
+      .get<{ tracks: SubtitleTrack[] }>(`/media/${mediaId}/subtitles`)
+      .then((r) => r.data.tracks),
+
+  url: (mediaId: string, path: string) => {
+    const token = useAuthStore.getState().token ?? ''
+    return `/api/subtitles/${encodeURIComponent(mediaId)}?path=${encodeURIComponent(
+      path,
+    )}&token=${encodeURIComponent(token)}`
+  },
+}
