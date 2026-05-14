@@ -1,4 +1,4 @@
-.PHONY: all build build-server build-web dev dev-web run docker docker-stop clean install-web tidy test vet
+.PHONY: all build build-server build-web dev dev-web run docker docker-stop clean install-web tidy test vet smoke
 
 # ---- 默认目标 ----
 all: build
@@ -45,6 +45,12 @@ test:
 
 vet:
 	go vet ./...
+
+# ---- 端到端冒烟测试 ----
+# Spins up the binary against a temp dir, exercises every REST surface,
+# tears it back down. Fails the build on any regression.
+smoke: build
+	./scripts/smoke-test.sh
 
 clean:
 	rm -rf bin/ web/dist/ web/node_modules/
