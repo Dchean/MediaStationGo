@@ -38,12 +38,36 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 			authed.POST("/libraries", middleware.AdminRequired(), createLibraryHandler(svc))
 			authed.DELETE("/libraries/:id", middleware.AdminRequired(), deleteLibraryHandler(svc))
 			authed.POST("/libraries/:id/scan", middleware.AdminRequired(), scanLibraryHandler(svc))
+			authed.POST("/libraries/:id/scrape", middleware.AdminRequired(), scrapeLibraryHandler(svc))
 
 			authed.GET("/libraries/:id/media", listMediaHandler(svc))
 			authed.GET("/media/:id", getMediaHandler(svc))
 			authed.GET("/media", searchMediaHandler(svc))
+			authed.POST("/media/:id/scrape", middleware.AdminRequired(), scrapeOneHandler(svc))
+			authed.POST("/media/:id/probe", middleware.AdminRequired(), reprobeHandler(svc))
 
+			// Streaming.
 			authed.GET("/stream/:id", streamHandler(svc))
+			authed.GET("/hls/:id/index.m3u8", hlsPlaylistHandler(svc))
+			authed.GET("/hls/:id/:seg", hlsSegmentHandler(svc))
+			authed.DELETE("/hls/:id", stopTranscodeHandler(svc))
+
+			// Image proxy (URL passed as ?url=...).
+			authed.GET("/img", imageProxyHandler(svc))
+
+			// History / favourites / playlists.
+			authed.GET("/history", recentHistoryHandler(svc))
+			authed.POST("/history", recordProgressHandler(svc))
+
+			authed.GET("/favourites", listFavouritesHandler(svc))
+			authed.POST("/favourites/:id", toggleFavouriteHandler(svc))
+
+			authed.GET("/playlists", listPlaylistsHandler(svc))
+			authed.POST("/playlists", createPlaylistHandler(svc))
+			authed.GET("/playlists/:id", getPlaylistHandler(svc))
+			authed.POST("/playlists/:id/items", addPlaylistItemHandler(svc))
+			authed.DELETE("/playlists/:id/items/:media_id", removePlaylistItemHandler(svc))
+			authed.DELETE("/playlists/:id", deletePlaylistHandler(svc))
 
 			authed.GET("/ws", wsHandler(svc))
 		}

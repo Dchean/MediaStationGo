@@ -51,10 +51,20 @@ export interface Media {
   updated_at: string
 }
 
+export interface Playlist {
+  id: string
+  user_id: string
+  name: string
+  is_public: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface ScanResult {
   library_id: string
   visited: number
   added: number
+  probed: number
 }
 
 export interface Setting {

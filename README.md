@@ -34,20 +34,25 @@ deployment painless on NAS hardware.
 - ✅ JWT authentication with admin/user roles
 - ✅ First-run admin seeding (`admin / admin123`)
 - ✅ Library CRUD + recursive filesystem scan
+- ✅ ffprobe metadata extraction (duration / resolution / codecs)
+- ✅ TMDb scraper with image proxy (poster / backdrop / overview / rating)
 - ✅ Direct-play streaming with HTTP `Range` support
-- ✅ Real-time scan progress via WebSocket
-- ✅ React SPA: Login / Home / Library / Search / Media detail / Player / Admin
+- ✅ HLS on-demand transcoding (single ffmpeg job per media)
+- ✅ Playback history (resume) + Continue Watching row
+- ✅ Favourites + Playlists (CRUD + ordered items)
+- ✅ Real-time scan / scrape / transcode progress via WebSocket
+- ✅ React SPA with code-splitting: Login / Home / Library / Search /
+  Favourites / Playlists / Media detail / Player (HLS + direct) / Admin
 - ✅ Single-binary build, multi-arch Docker image, GitHub Actions CI
 
 ### Roadmap
 
 | Area | Status |
 |------|--------|
-| ffprobe-driven metadata extraction | ⏳ |
-| TMDb / Bangumi / Douban scraper chain | ⏳ |
-| HLS on-demand transcoding (NVENC / QSV / VAAPI) | ⏳ |
+| Bangumi / Douban / Fanart scraper providers | ⏳ |
+| Hardware-accelerated transcoding (NVENC / QSV / VAAPI) | ⏳ |
 | qBittorrent / Transmission / RSS automation | ⏳ |
-| Playlists, favourites, watch history UI | ⏳ |
+| Subtitles (extract / search / sync) | ⏳ |
 | Emby/Jellyfin compatibility layer | ⏳ |
 | DLNA / Chromecast | ⏳ |
 | AI metadata enhancement & smart search | ⏳ |

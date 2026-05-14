@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   Film,
+  Heart,
   Home,
+  ListMusic,
   LogOut,
   Search,
   Settings,
@@ -43,6 +45,8 @@ export function Layout() {
         <nav className="flex-1 space-y-1">
           <SidebarLink to="/" icon={<Home size={18} />} label="首页" end />
           <SidebarLink to="/search" icon={<Search size={18} />} label="搜索" />
+          <SidebarLink to="/favourites" icon={<Heart size={18} />} label="收藏" />
+          <SidebarLink to="/playlists" icon={<ListMusic size={18} />} label="播放列表" />
 
           <div className="mt-6 px-2 text-xs uppercase tracking-wider text-slate-500">
             媒体库

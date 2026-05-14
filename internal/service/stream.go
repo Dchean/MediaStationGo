@@ -1,10 +1,29 @@
-// Package service — direct-play / range request streaming.
+// Package service — direct-play / HLS streaming.
+//
+// StreamService exposes two flavours of playback:
+//
+//   - Direct play: the original file is served with HTTP Range support.
+//     Works for browser-friendly containers (mp4 / webm / m4v), no ffmpeg
+//     involved, zero CPU overhead.
+//   - HLS: when the client opts in (or the source codec / container is
+//     not browser-friendly), the TranscoderService runs ffmpeg in the
+//     background and we serve the resulting .m3u8 + .ts files directly.
+//
+// The HTTP layer decides which mode to use based on the request path:
+//
+//   GET /api/stream/:id              → direct play
+//   GET /api/hls/:id/index.m3u8      → HLS playlist
+//   GET /api/hls/:id/seg_NNNNN.ts    → HLS segment
 package service
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -14,20 +33,21 @@ import (
 
 // StreamService serves media files with proper Range support so browsers can
 // seek into the stream.
-//
-// HLS / on-demand transcoding is intentionally omitted from this initial
-// scaffold. The HTTP handler returns 501 (NotImplemented) for that path,
-// while direct-play already works for browser-friendly containers (mp4 /
-// webm / m4v).
 type StreamService struct {
-	cfg  *config.Config
-	log  *zap.Logger
-	repo *repository.Container
+	cfg        *config.Config
+	log        *zap.Logger
+	repo       *repository.Container
+	transcoder *TranscoderService
 }
 
 // NewStreamService is the constructor.
-func NewStreamService(cfg *config.Config, log *zap.Logger, repo *repository.Container) *StreamService {
-	return &StreamService{cfg: cfg, log: log, repo: repo}
+func NewStreamService(cfg *config.Config, log *zap.Logger, repo *repository.Container, transcoder *TranscoderService) *StreamService {
+	return &StreamService{
+		cfg:        cfg,
+		log:        log,
+		repo:       repo,
+		transcoder: transcoder,
+	}
 }
 
 // ErrMediaNotFound is returned when the media row or its file is missing.
@@ -55,4 +75,78 @@ func (s *StreamService) ServeFile(w http.ResponseWriter, r *http.Request, mediaI
 	w.Header().Set("Accept-Ranges", "bytes")
 	http.ServeContent(w, r, stat.Name(), stat.ModTime(), f)
 	return nil
+}
+
+// ServeHLSPlaylist makes sure a transcode is running and writes the m3u8.
+// We block (with a 30s timeout) until the playlist file shows up.
+func (s *StreamService) ServeHLSPlaylist(w http.ResponseWriter, r *http.Request, mediaID string) error {
+	if _, err := s.transcoder.EnsureJob(r.Context(), mediaID); err != nil {
+		return err
+	}
+	if !s.transcoder.WaitReady(r.Context(), mediaID, 30*time.Second) {
+		return errors.New("hls playlist not ready")
+	}
+	playlist := s.transcoder.PlaylistPath(mediaID)
+	f, err := os.Open(playlist)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	stat, _ := f.Stat()
+	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, stat.Name(), stat.ModTime(), f)
+	return nil
+}
+
+// ServeHLSSegment writes a single .ts segment from the on-disk cache.
+func (s *StreamService) ServeHLSSegment(w http.ResponseWriter, r *http.Request, mediaID, segment string) error {
+	// Only allow segments that look like seg_NNNNN.ts so we cannot be tricked
+	// into reading arbitrary files via path traversal.
+	if !strings.HasPrefix(segment, "seg_") || !strings.HasSuffix(segment, ".ts") {
+		return errors.New("bad segment")
+	}
+	full := filepath.Join(s.transcoder.HLSDir(mediaID), segment)
+	abs, err := filepath.Abs(full)
+	if err != nil {
+		return err
+	}
+	dir, _ := filepath.Abs(s.transcoder.HLSDir(mediaID))
+	if !strings.HasPrefix(abs, dir) {
+		return errors.New("path escape")
+	}
+	f, err := os.Open(abs)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	stat, _ := f.Stat()
+	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	http.ServeContent(w, r, stat.Name(), stat.ModTime(), f)
+	return nil
+}
+
+// Probe re-runs ffprobe against an existing media row and refreshes the
+// extracted metadata. Used by the admin UI's "rescan" button.
+func (s *StreamService) Probe(ctx context.Context, mediaID string, probe *FFprobeService) error {
+	m, err := s.repo.Media.FindByID(ctx, mediaID)
+	if err != nil || m == nil {
+		return ErrMediaNotFound
+	}
+	res, err := probe.Probe(ctx, m.Path)
+	if err != nil {
+		return err
+	}
+	updates := map[string]any{
+		"duration_sec": res.DurationSec,
+		"width":        res.Width,
+		"height":       res.Height,
+		"video_codec":  res.VideoCodec,
+		"audio_codec":  res.AudioCodec,
+	}
+	if res.Container != "" {
+		updates["container"] = res.Container
+	}
+	return s.repo.DB.Model(m).Updates(updates).Error
 }
