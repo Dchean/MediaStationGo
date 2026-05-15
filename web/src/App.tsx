@@ -63,6 +63,12 @@ const DuplicatesPage = lazy(() =>
 const SchedulerPage = lazy(() =>
   import('./pages/SchedulerPage').then((m) => ({ default: m.SchedulerPage })),
 )
+const WatchHistoryPage = lazy(() =>
+  import('./pages/WatchHistoryPage').then((m) => ({ default: m.WatchHistoryPage })),
+)
+const PosterWallPage = lazy(() =>
+  import('./pages/PosterWallPage').then((m) => ({ default: m.PosterWallPage })),
+)
 
 const Loading = () => <p className="px-6 py-8 text-slate-500">加载中…</p>
 
@@ -92,6 +98,8 @@ export default function App() {
           <Route path="subscriptions" element={<SubscriptionsPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="dlna" element={<DlnaPage />} />
+          <Route path="history" element={<WatchHistoryPage />} />
+          <Route path="poster-wall" element={<PosterWallPage />} />
           <Route
             path="files"
             element={

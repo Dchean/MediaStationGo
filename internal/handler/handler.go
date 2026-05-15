@@ -142,6 +142,19 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 			admin.PUT("/settings", updateSettingHandler(svc))
 			admin.GET("/logs", recentLogsHandler(svc))
 
+			// Database backup.
+			admin.GET("/backups", listBackupsHandler(svc))
+			admin.POST("/backups", createBackupHandler(svc))
+			admin.DELETE("/backups", deleteBackupHandler(svc))
+			admin.POST("/backups/restore", restoreBackupHandler(svc))
+
+			// Notifications (test endpoint).
+			admin.POST("/notify/test", notifyTestHandler(svc))
+
+			// File organizer.
+			admin.POST("/media/:id/organize", organizeMediaHandler(svc))
+			admin.POST("/libraries/:id/organize", organizeLibraryHandler(svc))
+
 			// API key management (encrypted at rest).
 			admin.GET("/api-configs", listAPIConfigsHandler(svc))
 			admin.GET("/api-configs/:provider", getAPIConfigHandler(svc))

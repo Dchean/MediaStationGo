@@ -12,6 +12,7 @@ import {
   HardDrive,
   Heart,
   Home,
+  GalleryHorizontalEnd,
   KeyRound,
   ListChecks,
   ListMusic,
@@ -61,6 +62,8 @@ export function Layout() {
           <SidebarLink to="/search" icon={<Search size={18} />} label="搜索" />
           <SidebarLink to="/favourites" icon={<Heart size={18} />} label="收藏" />
           <SidebarLink to="/playlists" icon={<ListMusic size={18} />} label="播放列表" />
+          <SidebarLink to="/history" icon={<Clock size={18} />} label="观看历史" />
+          <SidebarLink to="/poster-wall" icon={<GalleryHorizontalEnd size={18} />} label="海报墙" />
 
           <div className="mt-6 px-2 text-xs uppercase tracking-wider text-slate-500">
             媒体库

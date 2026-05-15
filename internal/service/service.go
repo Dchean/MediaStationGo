@@ -51,6 +51,10 @@ type Container struct {
 	Scheduler    *SchedulerService
 	Storage      *StorageService
 	Emby         *EmbyService
+	Backup       *BackupService
+	Notifier     *NotifierService
+	Organizer    *OrganizerService
+	Douban       *DoubanProvider
 
 	stopCtx    context.Context
 	stopCancel context.CancelFunc
@@ -82,6 +86,10 @@ func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Cont
 	dlna := NewDLNAService(log)
 	storage := NewStorageService(log, repos)
 	emby := NewEmbyService(cfg, log, repos)
+	backup := NewBackupService(cfg, log, repos.DB)
+	notifier := NewNotifierService(log, repos)
+	organizer := NewOrganizerService(cfg, log, repos)
+	douban := NewDoubanProvider(cfg, log)
 	scheduler := NewSchedulerService(log, repos, scanner, transcoder, hub, cfg.Cache.CacheDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,6 +130,10 @@ func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Cont
 		Scheduler:    scheduler,
 		Storage:      storage,
 		Emby:         emby,
+		Backup:       backup,
+		Notifier:     notifier,
+		Organizer:    organizer,
+		Douban:       douban,
 		stopCtx:      ctx,
 		stopCancel:   cancel,
 	}
