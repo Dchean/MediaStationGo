@@ -130,46 +130,156 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 			authed.POST("/duplicates/scan", middleware.AdminRequired(), detectDuplicatesHandler(svc))
 			authed.POST("/duplicates/unmark", middleware.AdminRequired(), unmarkDuplicatesHandler(svc))
 
-			// Recycle bin.
-			authed.GET("/recycle", middleware.AdminRequired(), listRecycleHandler(svc))
+		// Site management + cross-site torrent search (via SiteHandler).
+		siteHandler := NewSiteHandler(svc)
+		authed.GET("/sites", siteHandler.ListSites)
+		authed.GET("/sites/types", siteHandler.GetSiteTypes)
+		authed.GET("/sites/auth-types", siteHandler.GetAuthTypes)
+		authed.POST("/sites", middleware.AdminRequired(), siteHandler.CreateSite)
+		authed.GET("/sites/:id", siteHandler.GetSite)
+		authed.PUT("/sites/:id", middleware.AdminRequired(), siteHandler.UpdateSite)
+		authed.DELETE("/sites/:id", middleware.AdminRequired(), siteHandler.DeleteSite)
+		authed.POST("/sites/:id/test", middleware.AdminRequired(), siteHandler.TestSite)
+		authed.GET("/sites/search", siteSearchHandler(svc))
 
-			authed.GET("/ws", wsHandler(svc))
+		// Recycle bin.
+		authed.GET("/recycle", middleware.AdminRequired(), listRecycleHandler(svc))
 
-			// SSE event stream.
-			authed.GET("/events", sseHandler(svc))
+		authed.GET("/ws", wsHandler(svc))
 
-			// Download clients.
-			authed.GET("/download-clients", listDownloadClientsHandler(svc))
-			authed.POST("/download-clients", middleware.AdminRequired(), createDownloadClientHandler(svc))
-			authed.GET("/download-clients/:id", getDownloadClientHandler(svc))
-			authed.PUT("/download-clients/:id", middleware.AdminRequired(), updateDownloadClientHandler(svc))
-			authed.DELETE("/download-clients/:id", middleware.AdminRequired(), deleteDownloadClientHandler(svc))
-			authed.POST("/download-clients/:id/test", middleware.AdminRequired(), testDownloadClientHandler(svc))
+		// SSE event stream.
+		authed.GET("/events", sseHandler(svc))
 
-			// Notify channels.
-			authed.GET("/notify-channels", listNotifyChannelsHandler(svc))
-			authed.GET("/notify-channels/types", getNotifyChannelTypesHandler(svc))
-			authed.POST("/notify-channels", middleware.AdminRequired(), createNotifyChannelHandler(svc))
-			authed.GET("/notify-channels/:id", getNotifyChannelHandler(svc))
-			authed.PUT("/notify-channels/:id", middleware.AdminRequired(), updateNotifyChannelHandler(svc))
-			authed.DELETE("/notify-channels/:id", middleware.AdminRequired(), deleteNotifyChannelHandler(svc))
-			authed.POST("/notify-channels/:id/test", middleware.AdminRequired(), testNotifyChannelHandler(svc))
+		// Download clients.
+		authed.GET("/download-clients", listDownloadClientsHandler(svc))
+		authed.POST("/download-clients", middleware.AdminRequired(), createDownloadClientHandler(svc))
+		authed.GET("/download-clients/:id", getDownloadClientHandler(svc))
+		authed.PUT("/download-clients/:id", middleware.AdminRequired(), updateDownloadClientHandler(svc))
+		authed.DELETE("/download-clients/:id", middleware.AdminRequired(), deleteDownloadClientHandler(svc))
+		authed.POST("/download-clients/:id/test", middleware.AdminRequired(), testDownloadClientHandler(svc))
 
-			// Scheduler.
-			authed.GET("/scheduler/tasks", schedulerListTasksHandler(svc))
-			authed.POST("/scheduler/tasks/:id/run", middleware.AdminRequired(), schedulerRunTaskHandler(svc))
-			authed.GET("/scheduler/status", schedulerGetStatusHandler(svc))
+		// Notify channels.
+		authed.GET("/notify-channels", listNotifyChannelsHandler(svc))
+		authed.GET("/notify-channels/types", getNotifyChannelTypesHandler(svc))
+		authed.POST("/notify-channels", middleware.AdminRequired(), createNotifyChannelHandler(svc))
+		authed.GET("/notify-channels/:id", getNotifyChannelHandler(svc))
+		authed.PUT("/notify-channels/:id", middleware.AdminRequired(), updateNotifyChannelHandler(svc))
+		authed.DELETE("/notify-channels/:id", middleware.AdminRequired(), deleteNotifyChannelHandler(svc))
+		authed.POST("/notify-channels/:id/test", middleware.AdminRequired(), testNotifyChannelHandler(svc))
 
-			// Sites (PT 站点管理).
-			siteHandler := NewSiteHandler(svc)
-			authed.GET("/sites", siteHandler.ListSites)
-			authed.GET("/sites/types", siteHandler.GetSiteTypes)
-			authed.GET("/sites/auth-types", siteHandler.GetAuthTypes)
-			authed.POST("/sites", middleware.AdminRequired(), siteHandler.CreateSite)
-			authed.GET("/sites/:id", siteHandler.GetSite)
-			authed.PUT("/sites/:id", middleware.AdminRequired(), siteHandler.UpdateSite)
-			authed.DELETE("/sites/:id", middleware.AdminRequired(), siteHandler.DeleteSite)
-			authed.POST("/sites/:id/test", middleware.AdminRequired(), siteHandler.TestSite)
+		// Scheduler.
+		authed.GET("/scheduler/tasks", schedulerListTasksHandler(svc))
+		authed.POST("/scheduler/tasks/:id/run", middleware.AdminRequired(), schedulerRunTaskHandler(svc))
+		authed.GET("/scheduler/status", schedulerGetStatusHandler(svc))
+
+		// ── Auxiliary endpoints used by the React UI rails ──
+		authed.GET("/media/recent", recentMediaHandler(svc))
+		authed.GET("/media/stats", mediaStatsHandler(svc))
+
+		// Watch history (extra surface beyond /history).
+		authed.GET("/watch-history", historyListHandler(svc))
+		authed.GET("/watch-history/stats", historyStatsHandler(svc))
+		authed.GET("/watch-history/continue", historyContinueHandler(svc))
+		authed.DELETE("/watch-history", historyDeleteHandler(svc))
+		authed.DELETE("/watch-history/:id", historyDeleteOneHandler(svc))
+
+		// Multi-section TMDb feed used by DiscoverPage.
+		authed.GET("/discover/sections", discoverSectionsHandler(svc))
+		authed.GET("/discover/feed", discoverFeedHandler(svc))
+
+		// System metadata + read-only scheduler view.
+		authed.GET("/system/info", systemInfoHandler(svc))
+		authed.GET("/system/status", systemStatusHandler(svc))
+		authed.GET("/system/scheduler", systemSchedulerHandler(svc))
+
+		// Richer dashboard rails.
+		authed.GET("/stats/overview", statsOverviewHandler(svc))
+		authed.GET("/stats/trend", statsTrendHandler(svc))
+		authed.GET("/stats/top-content", statsTopContentHandler(svc))
+		authed.GET("/stats/libraries", statsLibrariesHandler(svc))
+		authed.GET("/stats/monitor", statsMonitorHandler(svc))
+
+		// Multi-persona play profiles (caller-scoped, admins via ?all=true).
+		authed.GET("/play-profiles", listPlayProfilesHandler(svc))
+		authed.POST("/play-profiles", createPlayProfileHandler(svc))
+		authed.PUT("/play-profiles/:id", updatePlayProfileHandler(svc))
+		authed.DELETE("/play-profiles/:id", deletePlayProfileHandler(svc))
+
+		// ── Search aliases ──
+		authed.GET("/search", searchUnifiedHandler(svc))
+		authed.GET("/search/advanced", searchAdvancedHandler(svc))
+		authed.GET("/search/tmdb", searchTMDbHandler(svc))
+		authed.GET("/search/sites", searchSitesHandler(svc))
+
+		// ── System extras ──
+		authed.GET("/system/config", listSystemConfigHandler(svc))
+		authed.GET("/settings/schema", schemaHandler(svc))
+		authed.GET("/system/events/ticket", systemEventsTicketHandler(svc))
+
+		// ── Per-user stats ──
+		authed.GET("/stats/user/:id", statsUserHandler(svc))
+		authed.GET("/stats/top-users", statsTopUsersHandler(svc))
+		authed.POST("/stats/play", statsPlayHandler(svc))
+
+		// ── Sites extras ──
+		authed.GET("/sites/:id/resource", siteResourceHandler(svc))
+		authed.GET("/sites/:id/userdata", siteUserdataHandler(svc))
+
+		// ── Subscription extras ──
+		authed.PUT("/subscriptions/:id", updateSubscriptionHandler(svc))
+		authed.POST("/subscriptions/:id/search", searchSubscriptionHandler(svc))
+
+		// ── Playlist extras ──
+		authed.POST("/playlists/:id/reorder", reorderPlaylistHandler(svc))
+		authed.DELETE("/playlists/:id/items/by-id/:item_id", deletePlaylistItemByIDHandler(svc))
+
+		// ── DLNA per-renderer control ──
+		authed.POST("/dlna/:uuid/play", dlnaPlayHandler(svc))
+		authed.POST("/dlna/:uuid/pause", dlnaPauseHandler(svc))
+		authed.POST("/dlna/:uuid/stop", dlnaStopHandler(svc))
+		authed.GET("/dlna/:uuid/status", dlnaStatusHandler(svc))
+
+		// ── Media favourite alias surface ──
+		authed.GET("/favorites", listFavoritesAliasHandler(svc))
+		authed.POST("/media/:id/favorite", addMediaFavoriteHandler(svc))
+		authed.DELETE("/media/:id/favorite", removeMediaFavoriteHandler(svc))
+		authed.GET("/media/:id/favorite/status", getMediaFavoriteStatusHandler(svc))
+		authed.POST("/media/:id/ai-scrape", aiScrapeMediaHandler(svc))
+		authed.POST("/media/scrape/test", scrapeTestHandler(svc))
+		authed.POST("/media/organize", middleware.AdminRequired(), organizeBulkHandler(svc))
+
+		// ── Playback metadata + external player handoff ──
+		authed.GET("/playback/:id/info", playbackInfoHandler(svc))
+		authed.POST("/playback/:id/progress", playbackProgressHandler(svc))
+		authed.GET("/playback/:id/external-players", externalPlayersHandler(svc))
+		authed.GET("/playback/:id/external-url", externalURLHandler(svc))
+		authed.GET("/playback/transcode/:job_id/status", transcodeStatusHandler(svc))
+
+		// ── Download task ops + sync triggers ──
+		authed.POST("/download/:id/pause", downloadPauseHandler(svc))
+		authed.POST("/download/:id/resume", downloadResumeHandler(svc))
+		authed.POST("/download/:id/organize", middleware.AdminRequired(), downloadOrganizeOneHandler(svc))
+		authed.POST("/download/organize", middleware.AdminRequired(), downloadOrganizeAllHandler(svc))
+		authed.POST("/download/sync", middleware.AdminRequired(), downloadSyncHandler(svc))
+		authed.POST("/download/start-auto-sync", middleware.AdminRequired(), downloadAutoSyncHandler(svc))
+		authed.GET("/download/tasks", downloadTasksAliasHandler(svc))
+		authed.POST("/download/add", addDownloadHandler(svc))
+
+		// ── License (anyone authenticated can activate / heartbeat) ──
+		authed.POST("/license/activate", licenseActivateHandler(svc))
+		authed.POST("/license/heartbeat", licenseHeartbeatHandler(svc))
+		authed.GET("/license/status", licenseStatusHandler(svc))
+		authed.GET("/license/heartbeat-status", licenseStatusHandler(svc))
+
+		// ── Assistant (multi-turn AI chat) ──
+		authed.GET("/admin/assistant/sessions", listAssistantSessionsHandler(svc))
+		authed.POST("/admin/assistant/sessions", createAssistantSessionHandler(svc))
+		authed.GET("/admin/assistant/session/:id", getAssistantSessionHandler(svc))
+		authed.DELETE("/admin/assistant/session/:id", deleteAssistantSessionHandler(svc))
+		authed.POST("/admin/assistant/chat", assistantChatHandler(svc))
+		authed.POST("/admin/assistant/execute", assistantExecuteHandler(svc))
+		authed.POST("/admin/assistant/undo/:op_id", assistantUndoHandler(svc))
+		authed.GET("/admin/assistant/history", assistantHistoryHandler(svc))
 		}
 
 		// Admin-only endpoints.
@@ -183,6 +293,35 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 			admin.PUT("/settings", updateSettingHandler(svc))
 			admin.GET("/logs", recentLogsHandler(svc))
 
+			// Permissions admin.
+			admin.GET("/users/:id/permissions", getUserPermissionsHandler(svc))
+			admin.PUT("/users/:id/permissions", updateUserPermissionsHandler(svc))
+			admin.POST("/users/:id/permissions/reset", resetUserPermissionsHandler(svc))
+
+			// Storage configs (Alist / S3 / WebDAV).
+			admin.GET("/storage/status", listStorageConfigsHandler(svc))
+			admin.GET("/storage/:type", getStorageConfigHandler(svc))
+			admin.PUT("/storage/:type", saveStorageConfigHandler(svc))
+			admin.POST("/storage/:type/test", testStorageConfigHandler(svc))
+
+			// Download client CRUD.
+			admin.GET("/download/clients", listDownloadClientsHandler(svc))
+			admin.POST("/download/clients", createDownloadClientHandler(svc))
+			admin.PUT("/download/clients/:id", updateDownloadClientHandler(svc))
+			admin.DELETE("/download/clients/:id", deleteDownloadClientHandler(svc))
+			admin.POST("/download/clients/:id/test", testDownloadClientHandler(svc))
+			admin.GET("/download/aria2/stats", aria2StatsHandler(svc))
+
+			// License generation / revocation.
+			admin.POST("/license/generate", licenseGenerateHandler(svc))
+			admin.GET("/license/list", licenseListHandler(svc))
+			admin.GET("/license/:id/activations", licenseListActivationsHandler(svc))
+			admin.POST("/license/activation/:id/unbind", licenseUnbindHandler(svc))
+			admin.POST("/license/:id/revoke", licenseRevokeHandler(svc))
+
+			// System scheduler trigger alias.
+			admin.POST("/system/scheduler/:name/trigger", schedulerTriggerHandler(svc))
+
 			// Database backup.
 			admin.GET("/backups", listBackupsHandler(svc))
 			admin.POST("/backups", createBackupHandler(svc))
@@ -191,6 +330,13 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 
 			// Notifications (test endpoint).
 			admin.POST("/notify/test", notifyTestHandler(svc))
+
+			// Notify channels CRUD + per-channel test.
+			admin.GET("/notify/channels", listNotifyChannelsHandler(svc))
+			admin.POST("/notify/channels", createNotifyChannelHandler(svc))
+			admin.PUT("/notify/channels/:id", updateNotifyChannelHandler(svc))
+			admin.DELETE("/notify/channels/:id", deleteNotifyChannelHandler(svc))
+			admin.POST("/notify/channels/:id/test", testNotifyChannelHandler(svc))
 
 			// File organizer.
 			admin.POST("/media/:id/organize", organizeMediaHandler(svc))

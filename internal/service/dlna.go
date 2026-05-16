@@ -249,6 +249,13 @@ func (d *DLNAService) Cast(ctx context.Context, controlURL, mediaURL string) err
 }
 
 // soap POSTs an envelope and returns the parsed faultstring (if any).
+// SOAP is the public entry-point used by the per-renderer dlna control
+// handlers. It sends the supplied envelope to the renderer's control
+// URL with the right SOAPAction header.
+func (d *DLNAService) SOAP(ctx context.Context, controlURL, action, envelope string) error {
+	return d.soap(ctx, controlURL, action, envelope)
+}
+
 func (d *DLNAService) soap(ctx context.Context, controlURL, action, envelope string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, controlURL,
 		bytes.NewReader([]byte(envelope)))

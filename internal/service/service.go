@@ -53,9 +53,15 @@ type Container struct {
 	Emby         *EmbyService
 	Backup       *BackupService
 	Notifier     *NotifierService
+	NotifyChannels *NotifyChannelService
+	PlayProfiles *PlayProfileService
+	Permissions  *PermissionService
+	StorageCfg   *StorageConfigService
+	License      *LicenseService
+	DownloadClients *DownloadClientService
+	Assistant    *AssistantService
 	Organizer    *OrganizerService
 	Douban       *DoubanProvider
-	Permission   *PermissionService
 	Token        *TokenService
 	ApiConfig    *ApiConfigService
 	DownloadMgr  *DownloadManager
@@ -98,8 +104,16 @@ func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Cont
 	emby := NewEmbyService(cfg, log, repos)
 	backup := NewBackupService(cfg, log, repos.DB)
 	notifier := NewNotifierService(log, repos)
+	notifyChannels := NewNotifyChannelService(log, repos)
+	playProfiles := NewPlayProfileService(log, repos)
+	permissions := NewPermissionService(log, repos)
+	storageCfg := NewStorageConfigService(log, repos, crypto)
+	licenseSvc := NewLicenseService(log, repos)
+	downloadClients := NewDownloadClientService(log, repos)
+	assistant := NewAssistantService(log, repos, ai)
 	organizer := NewOrganizerService(cfg, log, repos)
 	douban := NewDoubanProvider(cfg, log)
+	siteService := NewSiteService(log, repos)
 	scheduler := NewSchedulerService(log, repos, scanner, transcoder, hub, cfg.Cache.CacheDir)
 
 	// 初始化认证相关服务
@@ -151,9 +165,15 @@ func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Cont
 		Emby:         emby,
 		Backup:       backup,
 		Notifier:     notifier,
+		NotifyChannels: notifyChannels,
+		PlayProfiles: playProfiles,
+		Permissions:  permissions,
+		StorageCfg:   storageCfg,
+		License:      licenseSvc,
+		DownloadClients: downloadClients,
+		Assistant:    assistant,
 		Organizer:    organizer,
 		Douban:       douban,
-		Permission:   permissionSvc,
 		Token:        tokenSvc,
 		ApiConfig:    apiConfigSvc,
 		DownloadMgr:  downloadMgr,

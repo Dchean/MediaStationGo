@@ -1,6 +1,59 @@
 import { api } from './client'
 
-// Site management API - matches Go backend /api/sites endpoints
+// ─── TypeScript interfaces ──────────────────────────────────────────────
+
+export interface Site {
+  id: string
+  name: string
+  base_url: string
+  site_type: string
+  auth_type: string
+  cookie?: string
+  api_key?: string
+  auth_header?: string
+  user_agent?: string
+  rss_url?: string
+  timeout: number
+  priority: number
+  use_proxy: boolean
+  enabled: boolean
+  login_status: string
+  downloader?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SiteSearchResult {
+  site_name: string
+  site_id: string
+  title: string
+  torrent_url: string
+  download_url: string
+  size: number
+  seeders: number
+  leechers: number
+  free: boolean
+}
+
+export interface CreateSiteInput {
+  name: string
+  base_url: string
+  site_type?: string
+  auth_type?: string
+  cookie?: string
+  api_key?: string
+  auth_header?: string
+  user_agent?: string
+  rss_url?: string
+  timeout?: number
+  priority?: number
+  use_proxy?: boolean
+  enabled?: boolean
+  downloader?: string
+}
+
+// ─── API client ─────────────────────────────────────────────────────────
+
 export const sitesAPI = {
   // List all sites
   list: () => api.get('/sites').then((r) => r.data),
@@ -29,4 +82,10 @@ export const sitesAPI = {
 
   // Get supported auth types
   authTypes: () => api.get('/sites/auth-types').then((r) => r.data),
+
+  // Search across all sites
+  search: (keyword: string) =>
+    api
+      .get('/sites/search', { params: { keyword } })
+      .then((r) => r.data),
 }

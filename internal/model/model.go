@@ -204,7 +204,175 @@ type AccessLog struct {
 	Detail string `gorm:"type:text" json:"detail"`
 }
 
-// AllModels 返回 gorm.AutoMigrate 使用的切片。
+// Site stores a PT/BT tracker site configuration used by the subscription
+// and cross-site search system. Mirrors the original MediaStation sites table.
+//
+// Supported site types: nexusphp / gazelle / unit3d / mteam / custom_rss
+// Supported auth types: cookie / api_key / authorization
+type Site struct {
+	Base
+	Name       string `gorm:"size:128;not null" json:"name"`
+	BaseURL    string `gorm:"size:512;not null" json:"base_url"`
+	SiteType   string `gorm:"size:32;default:nexusphp" json:"site_type"`
+	AuthType   string `gorm:"size:32;default:cookie" json:"auth_type"`
+	Cookie     string `gorm:"type:text" json:"cookie,omitempty"`
+	APIKey     string `gorm:"size:512" json:"api_key,omitempty"`
+	AuthHeader string `gorm:"size:512" json:"auth_header,omitempty"`
+	UserAgent  string `gorm:"size:512" json:"user_agent,omitempty"`
+	RSSURL     string `gorm:"size:1024" json:"rss_url,omitempty"`
+	Timeout    int    `gorm:"default:15" json:"timeout"`
+	Priority   int    `gorm:"default:50" json:"priority"`
+	UseProxy   bool   `gorm:"default:false" json:"use_proxy"`
+	Enabled    bool   `gorm:"default:true" json:"enabled"`
+	LoginStatus string `gorm:"size:20;default:unknown" json:"login_status"`
+	Downloader  string `gorm:"size:50" json:"downloader,omitempty"`
+}
+
+// NotifyChannel is one named outbound notification destination.
+//
+// The Config column holds a JSON blob whose schema depends on the
+// ChannelType (telegram/wechat/bark/webhook):
+//
+//	telegram → {bot_token, chat_id}
+//	wechat   → {sendkey}
+//	bark     → {device_key, server?}
+//	webhook  → {url, method, headers (JSON string), body_template}
+//
+// The Events column is a JSON array of event-type strings the channel
+// subscribes to; an empty array means "all events".
+type NotifyChannel struct {
+	Base
+	Name        string `gorm:"size:128;not null" json:"name"`
+	ChannelType string `gorm:"size:32;not null" json:"channel_type"`
+	Config      string `gorm:"type:text;not null" json:"config"`
+	Enabled     bool   `gorm:"default:true" json:"enabled"`
+	Events      string `gorm:"type:text;default:'[]'" json:"events"`
+}
+
+// PlayProfile lets one user define multiple "viewing personas" with
+// different content-rating limits, library access, and player defaults.
+// The original Vue project sketched this out as a forward-looking
+// feature; we materialise it server-side so the React port can fully
+// function without dropping the screen.
+//
+// AllowedLibraryIDs is a JSON array of library UUIDs (empty = all).
+type PlayProfile struct {
+	Base
+	UserID                string `gorm:"index;size:36;not null" json:"user_id"`
+	Name                  string `gorm:"size:64;not null" json:"name"`
+	IsDefault             bool   `gorm:"default:false" json:"is_default"`
+	ContentRatingLimit    string `gorm:"size:16" json:"content_rating_limit,omitempty"`
+	AllowAdult            bool   `gorm:"default:false" json:"allow_adult"`
+	RequirePIN            bool   `gorm:"default:false" json:"require_pin"`
+	PINHash               string `gorm:"size:128" json:"-"`
+	PreferredSubtitleLang string `gorm:"size:16" json:"preferred_subtitle_lang,omitempty"`
+	PreferredAudioLang    string `gorm:"size:16" json:"preferred_audio_lang,omitempty"`
+	AutoplayNext          bool   `gorm:"default:true" json:"autoplay_next"`
+	SkipIntro             bool   `gorm:"default:false" json:"skip_intro"`
+	AllowedLibraryIDs     string `gorm:"type:text;default:'[]'" json:"allowed_library_ids"`
+	TotalWatchTime        int64  `gorm:"default:0" json:"total_watch_time"`
+	LastActiveAt          *time.Time `json:"last_active_at,omitempty"`
+}
+
+// UserPermission stores per-user feature toggles for the React UI's
+// menu visibility + route guards. The original Python project surfaces
+// 11 boolean flags; we mirror the same set so the existing frontend
+// can swap to the Go API without code changes.
+type UserPermission struct {
+	UserID                 string    `gorm:"primaryKey;size:36" json:"user_id"`
+	CanPlayMedia           bool      `gorm:"default:true" json:"can_play_media"`
+	CanFavorite            bool      `gorm:"default:true" json:"can_favorite"`
+	CanViewHistory         bool      `gorm:"default:true" json:"can_view_history"`
+	CanViewDashboard       bool      `gorm:"default:true" json:"can_view_dashboard"`
+	CanViewDiscover        bool      `gorm:"default:true" json:"can_view_discover"`
+	CanManageDownloads     bool      `gorm:"default:false" json:"can_manage_downloads"`
+	CanManageSubscriptions bool      `gorm:"default:false" json:"can_manage_subscriptions"`
+	CanManageSites         bool      `gorm:"default:false" json:"can_manage_sites"`
+	CanManageFiles         bool      `gorm:"default:false" json:"can_manage_files"`
+	CanManageSTRM          bool      `gorm:"default:false" json:"can_manage_strm"`
+	CanCast                bool      `gorm:"default:true" json:"can_cast"`
+	CanUseAIAssistant      bool      `gorm:"default:false" json:"can_use_ai_assistant"`
+	CanAccessSettings      bool      `gorm:"default:false" json:"can_access_settings"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+// StorageConfig holds the connection settings for one external storage
+// backend (Alist / S3 / WebDAV). Type column makes the row poly-typed
+// — Config is a JSON blob whose shape is determined by Type.
+//
+//	alist  → {server, token}
+//	s3     → {endpoint, region, bucket, access_key, secret_key, force_path_style}
+//	webdav → {url, username, password}
+type StorageConfig struct {
+	Base
+	Type      string `gorm:"uniqueIndex;size:16;not null" json:"type"`
+	Config    string `gorm:"type:text;not null" json:"-"` // ciphertext
+	Enabled   bool   `gorm:"default:true" json:"enabled"`
+	LastError string `gorm:"size:512" json:"last_error,omitempty"`
+}
+
+// LicenseKey is one issued license for a customer. Activations live in
+// a child table so a single key can bind to multiple devices when its
+// MaxActivations > 1.
+type LicenseKey struct {
+	Base
+	Key            string     `gorm:"uniqueIndex;size:64;not null" json:"key"`
+	Customer       string     `gorm:"size:128" json:"customer,omitempty"`
+	Plan           string     `gorm:"size:32;default:basic" json:"plan"`
+	MaxActivations int        `gorm:"default:1" json:"max_activations"`
+	IssuedAt       time.Time  `json:"issued_at"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	Revoked        bool       `gorm:"default:false" json:"revoked"`
+	Notes          string     `gorm:"type:text" json:"notes,omitempty"`
+}
+
+// LicenseActivation is one (key, device) binding.
+type LicenseActivation struct {
+	Base
+	KeyID      string     `gorm:"index;size:36;not null" json:"key_id"`
+	DeviceID   string     `gorm:"size:128;not null" json:"device_id"`
+	DeviceName string     `gorm:"size:128" json:"device_name,omitempty"`
+	IP         string     `gorm:"size:64" json:"ip,omitempty"`
+	UnboundAt  *time.Time `json:"unbound_at,omitempty"`
+	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"`
+}
+
+// DownloadClient is one configured downloader (qBittorrent / Aria2 /
+// Transmission). We keep the password column out of JSON so list calls
+// don't leak secrets to the React UI.
+type DownloadClient struct {
+	Base
+	Name     string `gorm:"size:128;not null" json:"name"`
+	Type     string `gorm:"size:16;not null" json:"type"` // qbittorrent / transmission / aria2
+	URL      string `gorm:"size:512;not null" json:"url"`
+	Username string `gorm:"size:128" json:"username,omitempty"`
+	Password string `gorm:"size:512" json:"-"`
+	SavePath string `gorm:"size:1024" json:"save_path,omitempty"`
+	IsDefault bool  `gorm:"default:false" json:"is_default"`
+	Enabled  bool   `gorm:"default:true" json:"enabled"`
+}
+
+// AssistantSession groups a multi-turn chat with the AI assistant.
+type AssistantSession struct {
+	Base
+	UserID string `gorm:"index;size:36;not null" json:"user_id"`
+	Title  string `gorm:"size:255" json:"title,omitempty"`
+}
+
+// AssistantMessage is one entry in an AssistantSession transcript.
+//
+// Role is "user" | "assistant" | "system".  The optional OperationID
+// links a message to an action the assistant proposed (so the UI can
+// offer Undo).
+type AssistantMessage struct {
+	Base
+	SessionID   string `gorm:"index;size:36;not null" json:"session_id"`
+	Role        string `gorm:"size:16;not null" json:"role"`
+	Content     string `gorm:"type:text;not null" json:"content"`
+	OperationID string `gorm:"size:36" json:"operation_id,omitempty"`
+}
+
+// AllModels returns the slice consumed by gorm.AutoMigrate.
 func AllModels() []interface{} {
 	return []interface{}{
 		&User{},
@@ -218,6 +386,7 @@ func AllModels() []interface{} {
 		&DownloadTask{},
 		&Subscription{},
 		&Setting{},
+		&Site{},
 		&AccessLog{},
 		&APIConfig{},
 		&UserPermission{},
@@ -225,7 +394,12 @@ func AllModels() []interface{} {
 		&ApiConfig{},
 		&DownloadClient{},
 		&NotifyChannel{},
-		&Site{},
 		&STRMRecord{},
+		&PlayProfile{},
+		&StorageConfig{},
+		&LicenseKey{},
+		&LicenseActivation{},
+		&AssistantSession{},
+		&AssistantMessage{},
 	}
 }

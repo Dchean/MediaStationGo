@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   Activity,
+  Bell,
   Cast,
   Clock,
   CloudDownload,
@@ -14,13 +15,23 @@ import {
   Heart,
   Home,
   GalleryHorizontalEnd,
+  KeyRound,
+  KeySquare,
+  Link2,
   ListChecks,
   ListMusic,
   LogOut,
+  MessageSquare,
   Rss,
   Search,
+  Server,
   Settings,
+  Sliders,
+  Sparkles,
+  Cloud,
   Trash2,
+  UserCog,
+  Wrench,
   Library as LibraryIcon,
   User as UserIcon,
 } from 'lucide-react'
@@ -60,6 +71,7 @@ export function Layout() {
           <SidebarLink to="/" icon={<Home size={18} />} label="首页" end />
           <SidebarLink to="/discover" icon={<Compass size={18} />} label="发现" />
           <SidebarLink to="/search" icon={<Search size={18} />} label="搜索" />
+          <SidebarLink to="/ai" icon={<Sparkles size={18} />} label="AI 助手" />
           <SidebarLink to="/favourites" icon={<Heart size={18} />} label="收藏" />
           <SidebarLink to="/playlists" icon={<ListMusic size={18} />} label="播放列表" />
           <SidebarLink to="/history" icon={<Clock size={18} />} label="观看历史" />
@@ -86,11 +98,14 @@ export function Layout() {
           <SidebarLink to="/downloads" icon={<CloudDownload size={18} />} label="下载" />
           <SidebarLink to="/subscriptions" icon={<Rss size={18} />} label="RSS 订阅" />
           <SidebarLink to="/dlna" icon={<Cast size={18} />} label="DLNA 投屏" />
+          <SidebarLink to="/sites" icon={<Globe size={18} />} label="站点管理" />
+          <SidebarLink to="/site-search" icon={<Search size={18} />} label="站点搜索" />
 
           <div className="mt-6 px-2 text-xs uppercase tracking-wider text-slate-500">
             账号
           </div>
           <SidebarLink to="/profile" icon={<UserIcon size={18} />} label="个人资料" />
+          <SidebarLink to="/play-profiles" icon={<UserCog size={18} />} label="观影 Profile" />
 
           {user?.role === 'admin' && (
             <>
@@ -104,6 +119,14 @@ export function Layout() {
           <SidebarLink to="/duplicates" icon={<Copy size={18} />} label="重复文件" />
           <SidebarLink to="/scheduler" icon={<Clock size={18} />} label="定时任务" />
           <SidebarLink to="/sites" icon={<Globe size={18} />} label="站点管理" />
+          <SidebarLink to="/strm" icon={<Link2 size={18} />} label="STRM 管理" />
+          <SidebarLink to="/tools" icon={<Wrench size={18} />} label="运维工具" />
+          <SidebarLink to="/notify-channels" icon={<Bell size={18} />} label="通知渠道" />
+          <SidebarLink to="/download-clients" icon={<Server size={18} />} label="下载器" />
+          <SidebarLink to="/storage-config" icon={<Cloud size={18} />} label="外部存储" />
+          <SidebarLink to="/license" icon={<KeySquare size={18} />} label="许可证" />
+          <SidebarLink to="/assistant" icon={<MessageSquare size={18} />} label="AI 对话" />
+          <SidebarLink to="/settings" icon={<Sliders size={18} />} label="系统设置" />
           <SidebarLink to="/recycle" icon={<Trash2 size={18} />} label="回收站" />
           <SidebarLink to="/admin" icon={<Settings size={18} />} label="管理后台" />
             </>
