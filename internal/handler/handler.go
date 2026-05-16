@@ -125,6 +125,15 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 			authed.POST("/duplicates/scan", middleware.AdminRequired(), detectDuplicatesHandler(svc))
 			authed.POST("/duplicates/unmark", middleware.AdminRequired(), unmarkDuplicatesHandler(svc))
 
+			// Site management + cross-site torrent search.
+			authed.GET("/sites", listSitesHandler(svc))
+			authed.GET("/sites/:id", getSiteHandler(svc))
+			authed.POST("/sites", middleware.AdminRequired(), createSiteHandler(svc))
+			authed.PUT("/sites/:id", middleware.AdminRequired(), updateSiteHandler(svc))
+			authed.DELETE("/sites/:id", middleware.AdminRequired(), deleteSiteHandler(svc))
+			authed.POST("/sites/:id/test", middleware.AdminRequired(), testSiteHandler(svc))
+			authed.GET("/sites/search", siteSearchHandler(svc))
+
 			// Recycle bin.
 			authed.GET("/recycle", middleware.AdminRequired(), listRecycleHandler(svc))
 

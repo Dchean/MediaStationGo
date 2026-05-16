@@ -9,10 +9,11 @@ import {
   Copy,
   Film,
   FolderTree,
+  GalleryHorizontalEnd,
+  Globe,
   HardDrive,
   Heart,
   Home,
-  GalleryHorizontalEnd,
   KeyRound,
   ListChecks,
   ListMusic,
@@ -86,6 +87,8 @@ export function Layout() {
           <SidebarLink to="/downloads" icon={<CloudDownload size={18} />} label="下载" />
           <SidebarLink to="/subscriptions" icon={<Rss size={18} />} label="RSS 订阅" />
           <SidebarLink to="/dlna" icon={<Cast size={18} />} label="DLNA 投屏" />
+          <SidebarLink to="/sites" icon={<Globe size={18} />} label="站点管理" />
+          <SidebarLink to="/site-search" icon={<Search size={18} />} label="站点搜索" />
 
           <div className="mt-6 px-2 text-xs uppercase tracking-wider text-slate-500">
             账号

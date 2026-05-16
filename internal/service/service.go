@@ -55,6 +55,7 @@ type Container struct {
 	Notifier     *NotifierService
 	Organizer    *OrganizerService
 	Douban       *DoubanProvider
+	Site         *SiteService
 
 	stopCtx    context.Context
 	stopCancel context.CancelFunc
@@ -90,6 +91,7 @@ func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Cont
 	notifier := NewNotifierService(log, repos)
 	organizer := NewOrganizerService(cfg, log, repos)
 	douban := NewDoubanProvider(cfg, log)
+	siteService := NewSiteService(log, repos)
 	scheduler := NewSchedulerService(log, repos, scanner, transcoder, hub, cfg.Cache.CacheDir)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -134,6 +136,7 @@ func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Cont
 		Notifier:     notifier,
 		Organizer:    organizer,
 		Douban:       douban,
+		Site:         siteService,
 		stopCtx:      ctx,
 		stopCancel:   cancel,
 	}

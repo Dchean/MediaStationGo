@@ -69,6 +69,12 @@ const WatchHistoryPage = lazy(() =>
 const PosterWallPage = lazy(() =>
   import('./pages/PosterWallPage').then((m) => ({ default: m.PosterWallPage })),
 )
+const SitesPage = lazy(() =>
+  import('./pages/SitesPage').then((m) => ({ default: m.SitesPage })),
+)
+const SiteSearchPage = lazy(() =>
+  import('./pages/SiteSearchPage').then((m) => ({ default: m.SiteSearchPage })),
+)
 
 const Loading = () => <p className="px-6 py-8 text-slate-500">加载中…</p>
 
@@ -100,6 +106,8 @@ export default function App() {
           <Route path="dlna" element={<DlnaPage />} />
           <Route path="history" element={<WatchHistoryPage />} />
           <Route path="poster-wall" element={<PosterWallPage />} />
+          <Route path="sites" element={<SitesPage />} />
+          <Route path="site-search" element={<SiteSearchPage />} />
           <Route
             path="files"
             element={

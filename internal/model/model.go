@@ -205,6 +205,30 @@ type AccessLog struct {
 	Detail string `gorm:"type:text" json:"detail"`
 }
 
+// Site stores a PT/BT tracker site configuration used by the subscription
+// and cross-site search system. Mirrors the original MediaStation sites table.
+//
+// Supported site types: nexusphp / gazelle / unit3d / mteam / custom_rss
+// Supported auth types: cookie / api_key / authorization
+type Site struct {
+	Base
+	Name       string `gorm:"size:128;not null" json:"name"`
+	BaseURL    string `gorm:"size:512;not null" json:"base_url"`
+	SiteType   string `gorm:"size:32;default:nexusphp" json:"site_type"`
+	AuthType   string `gorm:"size:32;default:cookie" json:"auth_type"`
+	Cookie     string `gorm:"type:text" json:"cookie,omitempty"`
+	APIKey     string `gorm:"size:512" json:"api_key,omitempty"`
+	AuthHeader string `gorm:"size:512" json:"auth_header,omitempty"`
+	UserAgent  string `gorm:"size:512" json:"user_agent,omitempty"`
+	RSSURL     string `gorm:"size:1024" json:"rss_url,omitempty"`
+	Timeout    int    `gorm:"default:15" json:"timeout"`
+	Priority   int    `gorm:"default:50" json:"priority"`
+	UseProxy   bool   `gorm:"default:false" json:"use_proxy"`
+	Enabled    bool   `gorm:"default:true" json:"enabled"`
+	LoginStatus string `gorm:"size:20;default:unknown" json:"login_status"`
+	Downloader  string `gorm:"size:50" json:"downloader,omitempty"`
+}
+
 // AllModels returns the slice consumed by gorm.AutoMigrate.
 func AllModels() []interface{} {
 	return []interface{}{
@@ -219,6 +243,7 @@ func AllModels() []interface{} {
 		&DownloadTask{},
 		&Subscription{},
 		&Setting{},
+		&Site{},
 		&AccessLog{},
 		&APIConfig{},
 	}
