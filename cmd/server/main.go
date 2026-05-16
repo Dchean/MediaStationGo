@@ -89,10 +89,19 @@ func main() {
 
 	go func() {
 		localIP := getLocalIP()
-		logger.Info("server is ready",
-			zap.String("local", fmt.Sprintf("http://%s:%d", localIP, cfg.App.Port)),
-			zap.String("listen", srv.Addr),
-		)
+		publicIP := getPublicIP(3 * time.Second)
+		if publicIP != "" {
+			logger.Info("server is ready",
+				zap.String("local", fmt.Sprintf("http://%s:%d", localIP, cfg.App.Port)),
+				zap.String("public", fmt.Sprintf("http://%s:%d", publicIP, cfg.App.Port)),
+				zap.String("listen", srv.Addr),
+			)
+		} else {
+			logger.Info("server is ready",
+				zap.String("local", fmt.Sprintf("http://%s:%d", localIP, cfg.App.Port)),
+				zap.String("listen", srv.Addr),
+			)
+		}
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("listen failed", zap.Error(err))
 		}
@@ -179,4 +188,21 @@ func getLocalIP() string {
 		}
 	}
 	return "localhost"
+}
+
+// getPublicIP tries to detect the public-facing IP by querying ipify.org.
+// Returns empty string if detection fails (e.g. no internet, timeout).
+func getPublicIP(timeout time.Duration) string {
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get("https://api.ipify.org")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	buf := make([]byte, 64)
+	n, err := resp.Body.Read(buf)
+	if err != nil || n == 0 || resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	return string(buf[:n])
 }

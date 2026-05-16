@@ -192,7 +192,11 @@ cd MediaStationGo
 docker compose up -d
 ```
 
-> 🌐 服务启动后会自动识别本机 IP，日志中显示访问地址（如 `http://192.168.x.x:8080`），使用 `admin` / `admin123` 登录。
+> 🌐 服务启动后自动识别 **局域网 IP** 和 **公网 IP**（NAS / 服务器均可），日志示例：
+> ```json
+> {"msg":"server is ready","local":"http://192.168.1.4:8080","public":"http://1.2.3.4:8080"}
+> ```
+> 使用 `admin` / `admin123` 登录。
 
 ### 💻 裸机部署
 

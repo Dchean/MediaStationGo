@@ -192,7 +192,11 @@ cd MediaStationGo
 docker compose up -d
 ```
 
-> 🌐 The server auto-detects your local IP on startup and logs the access URL (e.g. `http://192.168.x.x:8080`). Log in with `admin` / `admin123`.
+> 🌐 The server auto-detects both your **local network IP** and **public IP** on startup (NAS / VPS supported):
+> ```json
+> {"msg":"server is ready","local":"http://192.168.1.4:8080","public":"http://1.2.3.4:8080"}
+> ```
+> Log in with `admin` / `admin123`.
 
 ### 💻 Bare Metal
 
