@@ -75,6 +75,36 @@ const SitesPage = lazy(() =>
 const SiteSearchPage = lazy(() =>
   import('./pages/SiteSearchPage').then((m) => ({ default: m.SiteSearchPage })),
 )
+const AIAssistantPage = lazy(() =>
+  import('./pages/AIAssistantPage').then((m) => ({ default: m.AIAssistantPage })),
+)
+const StrmPage = lazy(() =>
+  import('./pages/StrmPage').then((m) => ({ default: m.StrmPage })),
+)
+const ToolsPage = lazy(() =>
+  import('./pages/ToolsPage').then((m) => ({ default: m.ToolsPage })),
+)
+const ProfileManagementPage = lazy(() =>
+  import('./pages/ProfileManagementPage').then((m) => ({ default: m.ProfileManagementPage })),
+)
+const NotifyChannelsPage = lazy(() =>
+  import('./pages/NotifyChannelsPage').then((m) => ({ default: m.NotifyChannelsPage })),
+)
+const SettingsPage = lazy(() =>
+  import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+)
+const AssistantChatPage = lazy(() =>
+  import('./pages/AssistantChatPage').then((m) => ({ default: m.AssistantChatPage })),
+)
+const DownloadClientsPage = lazy(() =>
+  import('./pages/DownloadClientsPage').then((m) => ({ default: m.DownloadClientsPage })),
+)
+const LicensePage = lazy(() =>
+  import('./pages/LicensePage').then((m) => ({ default: m.LicensePage })),
+)
+const StorageConfigPage = lazy(() =>
+  import('./pages/StorageConfigPage').then((m) => ({ default: m.StorageConfigPage })),
+)
 
 const Loading = () => <p className="px-6 py-8 text-slate-500">加载中…</p>
 
@@ -108,6 +138,8 @@ export default function App() {
           <Route path="poster-wall" element={<PosterWallPage />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="site-search" element={<SiteSearchPage />} />
+          <Route path="ai" element={<AIAssistantPage />} />
+          <Route path="play-profiles" element={<ProfileManagementPage />} />
           <Route
             path="files"
             element={
@@ -161,6 +193,70 @@ export default function App() {
             element={
               <RequireAdmin>
                 <RecycleBinPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="strm"
+            element={
+              <RequireAdmin>
+                <StrmPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="tools"
+            element={
+              <RequireAdmin>
+                <ToolsPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="notify-channels"
+            element={
+              <RequireAdmin>
+                <NotifyChannelsPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <RequireAdmin>
+                <SettingsPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="assistant"
+            element={
+              <RequireAdmin>
+                <AssistantChatPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="download-clients"
+            element={
+              <RequireAdmin>
+                <DownloadClientsPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="license"
+            element={
+              <RequireAdmin>
+                <LicensePage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="storage-config"
+            element={
+              <RequireAdmin>
+                <StorageConfigPage />
               </RequireAdmin>
             }
           />

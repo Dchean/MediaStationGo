@@ -30,23 +30,37 @@ type Container struct {
 	Subscription    *SubscriptionRepository
 	Setting         *SettingRepository
 	Log             *AccessLogRepository
+	NotifyChannel   *NotifyChannelRepository
+	PlayProfile     *PlayProfileRepository
+	Permission      *PermissionRepository
+	StorageConfig   *StorageConfigRepository
+	License         *LicenseRepository
+	DownloadClient  *DownloadClientRepository
+	Assistant       *AssistantRepository
 }
 
 // New wires every repository to a single *gorm.DB.
 func New(db *gorm.DB) *Container {
 	return &Container{
-		DB:           db,
-		User:         &UserRepository{db: db},
-		Library:      &LibraryRepository{db: db},
-		Media:        &MediaRepository{db: db},
-		Series:       &SeriesRepository{db: db},
-		History:      &HistoryRepository{db: db},
-		Favorite:     &FavoriteRepository{db: db},
-		Playlist:     &PlaylistRepository{db: db},
-		Download:     &DownloadRepository{db: db},
-		Subscription: &SubscriptionRepository{db: db},
-		Setting:      &SettingRepository{db: db},
-		Log:          &AccessLogRepository{db: db},
+		DB:             db,
+		User:           &UserRepository{db: db},
+		Library:        &LibraryRepository{db: db},
+		Media:          &MediaRepository{db: db},
+		Series:         &SeriesRepository{db: db},
+		History:        &HistoryRepository{db: db},
+		Favorite:       &FavoriteRepository{db: db},
+		Playlist:       &PlaylistRepository{db: db},
+		Download:       &DownloadRepository{db: db},
+		Subscription:   &SubscriptionRepository{db: db},
+		Setting:        &SettingRepository{db: db},
+		Log:            &AccessLogRepository{db: db},
+		NotifyChannel:  &NotifyChannelRepository{db: db},
+		PlayProfile:    &PlayProfileRepository{db: db},
+		Permission:     &PermissionRepository{db: db},
+		StorageConfig:  &StorageConfigRepository{db: db},
+		License:        &LicenseRepository{db: db},
+		DownloadClient: &DownloadClientRepository{db: db},
+		Assistant:      &AssistantRepository{db: db},
 	}
 }
 
@@ -387,5 +401,363 @@ func (r *AccessLogRepository) Create(ctx context.Context, l *model.AccessLog) er
 func (r *AccessLogRepository) Recent(ctx context.Context, limit int) ([]model.AccessLog, error) {
 	var rows []model.AccessLog
 	err := r.db.WithContext(ctx).Order("created_at desc").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+
+// ─── Notify Channel ──────────────────────────────────────────────────────────
+
+// NotifyChannelRepository persists model.NotifyChannel records.
+type NotifyChannelRepository struct{ db *gorm.DB }
+
+// Create inserts a new notify channel.
+func (r *NotifyChannelRepository) Create(ctx context.Context, n *model.NotifyChannel) error {
+	return r.db.WithContext(ctx).Create(n).Error
+}
+
+// FindByID returns the channel or (nil, nil).
+func (r *NotifyChannelRepository) FindByID(ctx context.Context, id string) (*model.NotifyChannel, error) {
+	var n model.NotifyChannel
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&n).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+// List returns every channel ordered by creation time desc.
+func (r *NotifyChannelRepository) List(ctx context.Context) ([]model.NotifyChannel, error) {
+	var rows []model.NotifyChannel
+	err := r.db.WithContext(ctx).Order("created_at desc").Find(&rows).Error
+	return rows, err
+}
+
+// ListEnabled is the variant the dispatcher uses; honours Enabled flag.
+func (r *NotifyChannelRepository) ListEnabled(ctx context.Context) ([]model.NotifyChannel, error) {
+	var rows []model.NotifyChannel
+	err := r.db.WithContext(ctx).Where("enabled = ?", true).
+		Order("created_at desc").Find(&rows).Error
+	return rows, err
+}
+
+// Update applies a partial patch addressed by ID. The map keys must use
+// snake_case GORM column names.
+func (r *NotifyChannelRepository) Update(ctx context.Context, id string, patch map[string]any) error {
+	return r.db.WithContext(ctx).Model(&model.NotifyChannel{}).
+		Where("id = ?", id).Updates(patch).Error
+}
+
+// Delete soft-deletes a channel.
+func (r *NotifyChannelRepository) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Delete(&model.NotifyChannel{}, "id = ?", id).Error
+}
+
+// ─── Play Profile ────────────────────────────────────────────────────────────
+
+// PlayProfileRepository persists model.PlayProfile records.
+type PlayProfileRepository struct{ db *gorm.DB }
+
+// Create inserts a new play profile.
+func (r *PlayProfileRepository) Create(ctx context.Context, p *model.PlayProfile) error {
+	return r.db.WithContext(ctx).Create(p).Error
+}
+
+// FindByID returns the profile or (nil, nil).
+func (r *PlayProfileRepository) FindByID(ctx context.Context, id string) (*model.PlayProfile, error) {
+	var p model.PlayProfile
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&p).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// ListByUser returns every profile owned by a user.
+func (r *PlayProfileRepository) ListByUser(ctx context.Context, userID string) ([]model.PlayProfile, error) {
+	var rows []model.PlayProfile
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).
+		Order("is_default desc, created_at asc").Find(&rows).Error
+	return rows, err
+}
+
+// List returns every profile across users (admin view).
+func (r *PlayProfileRepository) List(ctx context.Context) ([]model.PlayProfile, error) {
+	var rows []model.PlayProfile
+	err := r.db.WithContext(ctx).
+		Order("user_id asc, is_default desc, created_at asc").Find(&rows).Error
+	return rows, err
+}
+
+// ClearDefaultsFor flips all is_default flags to false for the given
+// user; called inside the same transaction that promotes a new default.
+func (r *PlayProfileRepository) ClearDefaultsFor(ctx context.Context, userID string) error {
+	return r.db.WithContext(ctx).Model(&model.PlayProfile{}).
+		Where("user_id = ?", userID).Update("is_default", false).Error
+}
+
+// Update applies a partial patch addressed by ID.
+func (r *PlayProfileRepository) Update(ctx context.Context, id string, patch map[string]any) error {
+	return r.db.WithContext(ctx).Model(&model.PlayProfile{}).
+		Where("id = ?", id).Updates(patch).Error
+}
+
+// Delete soft-deletes a profile.
+func (r *PlayProfileRepository) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Delete(&model.PlayProfile{}, "id = ?", id).Error
+}
+
+
+// ─── Permissions ─────────────────────────────────────────────────────────────
+
+// PermissionRepository persists model.UserPermission.
+type PermissionRepository struct{ db *gorm.DB }
+
+// Get returns the row, or (nil, nil) when not yet seeded.
+func (r *PermissionRepository) Get(ctx context.Context, userID string) (*model.UserPermission, error) {
+	var p model.UserPermission
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&p).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// Save upserts the row keyed by UserID.
+func (r *PermissionRepository) Save(ctx context.Context, p *model.UserPermission) error {
+	return r.db.WithContext(ctx).Save(p).Error
+}
+
+// Delete removes the row (used when a user is deleted).
+func (r *PermissionRepository) Delete(ctx context.Context, userID string) error {
+	return r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&model.UserPermission{}).Error
+}
+
+// ─── Storage Config ──────────────────────────────────────────────────────────
+
+// StorageConfigRepository persists model.StorageConfig records (Alist / S3 / WebDAV).
+type StorageConfigRepository struct{ db *gorm.DB }
+
+// Get returns the config for the given type, or (nil, nil).
+func (r *StorageConfigRepository) Get(ctx context.Context, kind string) (*model.StorageConfig, error) {
+	var s model.StorageConfig
+	err := r.db.WithContext(ctx).Where("type = ?", kind).First(&s).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// Upsert inserts or updates the row keyed by Type.
+func (r *StorageConfigRepository) Upsert(ctx context.Context, s *model.StorageConfig) error {
+	return r.db.WithContext(ctx).Where("type = ?", s.Type).
+		Assign(map[string]any{
+			"config":     s.Config,
+			"enabled":    s.Enabled,
+			"last_error": s.LastError,
+		}).
+		FirstOrCreate(s).Error
+}
+
+// List returns every storage config (admin overview).
+func (r *StorageConfigRepository) List(ctx context.Context) ([]model.StorageConfig, error) {
+	var rows []model.StorageConfig
+	err := r.db.WithContext(ctx).Order("type asc").Find(&rows).Error
+	return rows, err
+}
+
+// ─── License ─────────────────────────────────────────────────────────────────
+
+// LicenseRepository persists model.LicenseKey and model.LicenseActivation.
+type LicenseRepository struct{ db *gorm.DB }
+
+// Create inserts a new license key.
+func (r *LicenseRepository) Create(ctx context.Context, k *model.LicenseKey) error {
+	return r.db.WithContext(ctx).Create(k).Error
+}
+
+// FindByKey returns the license key matching the value, or (nil, nil).
+func (r *LicenseRepository) FindByKey(ctx context.Context, key string) (*model.LicenseKey, error) {
+	var k model.LicenseKey
+	err := r.db.WithContext(ctx).Where("key = ?", key).First(&k).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &k, nil
+}
+
+// FindByID returns the license key by primary key.
+func (r *LicenseRepository) FindByID(ctx context.Context, id string) (*model.LicenseKey, error) {
+	var k model.LicenseKey
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&k).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &k, nil
+}
+
+// List returns every license key (admin view).
+func (r *LicenseRepository) List(ctx context.Context) ([]model.LicenseKey, error) {
+	var rows []model.LicenseKey
+	err := r.db.WithContext(ctx).Order("issued_at desc").Find(&rows).Error
+	return rows, err
+}
+
+// Update applies a partial patch (revoke / extend expiry, etc.).
+func (r *LicenseRepository) Update(ctx context.Context, id string, patch map[string]any) error {
+	return r.db.WithContext(ctx).Model(&model.LicenseKey{}).
+		Where("id = ?", id).Updates(patch).Error
+}
+
+// AddActivation creates an activation entry for a key.
+func (r *LicenseRepository) AddActivation(ctx context.Context, a *model.LicenseActivation) error {
+	return r.db.WithContext(ctx).Create(a).Error
+}
+
+// CountActiveActivations counts non-unbound activations for a key.
+func (r *LicenseRepository) CountActiveActivations(ctx context.Context, keyID string) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.LicenseActivation{}).
+		Where("key_id = ? AND unbound_at IS NULL", keyID).
+		Count(&n).Error
+	return n, err
+}
+
+// ListActivations returns all activations for a key.
+func (r *LicenseRepository) ListActivations(ctx context.Context, keyID string) ([]model.LicenseActivation, error) {
+	var rows []model.LicenseActivation
+	err := r.db.WithContext(ctx).Where("key_id = ?", keyID).Find(&rows).Error
+	return rows, err
+}
+
+// UnbindActivation marks an activation as unbound (soft).
+func (r *LicenseRepository) UnbindActivation(ctx context.Context, id string) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&model.LicenseActivation{}).
+		Where("id = ?", id).Update("unbound_at", &now).Error
+}
+
+// TouchHeartbeat bumps the heartbeat_at column.
+func (r *LicenseRepository) TouchHeartbeat(ctx context.Context, id string) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&model.LicenseActivation{}).
+		Where("id = ?", id).Update("heartbeat_at", &now).Error
+}
+
+// ─── Download Clients ────────────────────────────────────────────────────────
+
+// DownloadClientRepository persists model.DownloadClient records.
+type DownloadClientRepository struct{ db *gorm.DB }
+
+// Create inserts a new client config.
+func (r *DownloadClientRepository) Create(ctx context.Context, c *model.DownloadClient) error {
+	return r.db.WithContext(ctx).Create(c).Error
+}
+
+// FindByID returns one client by ID.
+func (r *DownloadClientRepository) FindByID(ctx context.Context, id string) (*model.DownloadClient, error) {
+	var c model.DownloadClient
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&c).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// List returns every configured client.
+func (r *DownloadClientRepository) List(ctx context.Context) ([]model.DownloadClient, error) {
+	var rows []model.DownloadClient
+	err := r.db.WithContext(ctx).Order("created_at asc").Find(&rows).Error
+	return rows, err
+}
+
+// Update applies a partial patch.
+func (r *DownloadClientRepository) Update(ctx context.Context, id string, patch map[string]any) error {
+	return r.db.WithContext(ctx).Model(&model.DownloadClient{}).
+		Where("id = ?", id).Updates(patch).Error
+}
+
+// Delete soft-deletes one client.
+func (r *DownloadClientRepository) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Delete(&model.DownloadClient{}, "id = ?", id).Error
+}
+
+// ─── Assistant ───────────────────────────────────────────────────────────────
+
+// AssistantRepository persists AssistantSession + AssistantMessage rows.
+type AssistantRepository struct{ db *gorm.DB }
+
+// CreateSession inserts a new session.
+func (r *AssistantRepository) CreateSession(ctx context.Context, s *model.AssistantSession) error {
+	return r.db.WithContext(ctx).Create(s).Error
+}
+
+// FindSession returns the session row + ownership.
+func (r *AssistantRepository) FindSession(ctx context.Context, id string) (*model.AssistantSession, error) {
+	var s model.AssistantSession
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&s).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// ListSessions returns sessions for the user (or all for admins).
+func (r *AssistantRepository) ListSessions(ctx context.Context, userID string) ([]model.AssistantSession, error) {
+	var rows []model.AssistantSession
+	q := r.db.WithContext(ctx).Order("updated_at desc")
+	if userID != "" {
+		q = q.Where("user_id = ?", userID)
+	}
+	err := q.Find(&rows).Error
+	return rows, err
+}
+
+// DeleteSession removes one session and cascades to its messages.
+func (r *AssistantRepository) DeleteSession(ctx context.Context, id string) error {
+	if err := r.db.WithContext(ctx).Where("session_id = ?", id).Delete(&model.AssistantMessage{}).Error; err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Delete(&model.AssistantSession{}, "id = ?", id).Error
+}
+
+// AppendMessage inserts a message in the given session.
+func (r *AssistantRepository) AppendMessage(ctx context.Context, m *model.AssistantMessage) error {
+	if err := r.db.WithContext(ctx).Create(m).Error; err != nil {
+		return err
+	}
+	// Bump the parent session's updated_at so list ordering reflects activity.
+	return r.db.WithContext(ctx).Model(&model.AssistantSession{}).
+		Where("id = ?", m.SessionID).Update("updated_at", time.Now()).Error
+}
+
+// ListMessages returns the transcript ordered by creation time.
+func (r *AssistantRepository) ListMessages(ctx context.Context, sessionID string) ([]model.AssistantMessage, error) {
+	var rows []model.AssistantMessage
+	err := r.db.WithContext(ctx).Where("session_id = ?", sessionID).
+		Order("created_at asc").Find(&rows).Error
 	return rows, err
 }

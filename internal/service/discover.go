@@ -46,6 +46,13 @@ func (d *DiscoverService) Popular(ctx context.Context) ([]Match, error) {
 // fetch is the shared helper that paginates page=1 only — that's all the
 // home page needs and it keeps us under TMDb's 50 rps limit.
 func (d *DiscoverService) fetch(ctx context.Context, path string) ([]Match, error) {
+	return d.Fetch(ctx, path)
+}
+
+// Fetch is the public entry point used by the multi-section handler.
+// It paginates page=1 only — that's all the home page needs and it
+// keeps us under TMDb's 50 rps limit.
+func (d *DiscoverService) Fetch(ctx context.Context, path string) ([]Match, error) {
 	if d.tmdb == nil || !d.tmdb.Enabled() {
 		return nil, nil
 	}

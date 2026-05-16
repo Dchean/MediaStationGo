@@ -140,3 +140,85 @@ export interface StatsSnapshot {
   hardware: Hardware
   generated_at: string
 }
+
+
+// ─── Notify Channels ────────────────────────────────────────────────────────
+
+export interface NotifyChannel {
+  id: string
+  name: string
+  channel_type: 'telegram' | 'wechat' | 'bark' | 'webhook'
+  config: Record<string, string>
+  enabled: boolean
+  events: string[]
+  created_at: string
+  updated_at: string
+}
+
+// ─── Play Profiles ──────────────────────────────────────────────────────────
+
+export interface PlayProfile {
+  id: string
+  user_id: string
+  name: string
+  is_default: boolean
+  content_rating_limit?: string
+  allow_adult: boolean
+  require_pin: boolean
+  preferred_subtitle_lang?: string
+  preferred_audio_lang?: string
+  autoplay_next: boolean
+  skip_intro: boolean
+  allowed_library_ids: string[]
+  total_watch_time: number
+  last_active_at?: string
+  created_at: string
+  updated_at: string
+}
+
+// ─── History helpers ────────────────────────────────────────────────────────
+
+export interface HistoryItem {
+  id: string
+  user_id: string
+  media_id: string
+  position_ms: number
+  duration_ms: number
+  watched_at: string
+  completed: boolean
+  media?: Media
+}
+
+export interface HistoryStats {
+  total: number
+  completed: number
+  watched_ms: number
+  watched_hours: number
+  last_watched?: string
+}
+
+// ─── Discover ───────────────────────────────────────────────────────────────
+
+export interface DiscoverSection {
+  key: string
+  label: string
+}
+
+export interface DiscoverItem {
+  TMDbID?: number
+  Title?: string
+  Overview?: string
+  Rating?: number
+  Year?: number
+  PosterURL?: string
+  BackdropURL?: string
+  // Match struct (Go) is exported with capitalised JSON keys; the API
+  // returns lower-cased aliases below for convenience.
+  tmdb_id?: number
+  title?: string
+  overview?: string
+  rating?: number
+  year?: number
+  poster_url?: string
+  backdrop_url?: string
+}

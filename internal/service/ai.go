@@ -164,3 +164,80 @@ func (a *AIService) complete(ctx context.Context, system, user string) (string, 
 	}
 	return strings.TrimSpace(out.Choices[0].Message.Content), nil
 }
+
+
+// ChatTurn is one message in a multi-turn assistant transcript.
+type ChatTurn struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// Chat sends an entire transcript to the LLM. When the AI is disabled
+// we return a deterministic offline reply so the assistant UI still
+// has something to render.
+func (a *AIService) Chat(ctx context.Context, history []ChatTurn) (string, error) {
+	if !a.Enabled() || len(history) == 0 {
+		return offlineReply(history), nil
+	}
+	// Build a chat/completions payload preserving the history order.
+	msgs := make([]map[string]string, 0, len(history)+1)
+	msgs = append(msgs, map[string]string{
+		"role": "system",
+		"content": "You are MediaStationGo's helpful media-library assistant. " +
+			"Respond concisely in the user's language. " +
+			"Never invent file paths or media that don't exist.",
+	})
+	for _, t := range history {
+		msgs = append(msgs, map[string]string{"role": t.Role, "content": t.Content})
+	}
+	payload := map[string]any{
+		"model":       a.cfg.AI.Model,
+		"temperature": 0.4,
+		"messages":    msgs,
+	}
+	body, _ := json.Marshal(payload)
+	endpoint := strings.TrimRight(a.cfg.AI.APIBase, "/") + "/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+a.cfg.AI.APIKey)
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		raw, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("ai %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	type choice struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	}
+	var out struct {
+		Choices []choice `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", err
+	}
+	if len(out.Choices) == 0 {
+		return "", errors.New("ai: empty completion")
+	}
+	return strings.TrimSpace(out.Choices[0].Message.Content), nil
+}
+
+// offlineReply returns a deterministic stand-in response so the UI's
+// chat view stays functional when the AI provider is not configured.
+func offlineReply(history []ChatTurn) string {
+	if len(history) == 0 {
+		return "Hi — AI provider is not configured. Set up OpenAI/DeepSeek in API Configs to chat with me."
+	}
+	last := history[len(history)-1].Content
+	if len(last) > 80 {
+		last = last[:80] + "…"
+	}
+	return "(offline) Heard: " + last + "\n请在 API 配置中接入 LLM 后重试。"
+}
