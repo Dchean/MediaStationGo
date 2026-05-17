@@ -53,14 +53,22 @@ func (d *DiscoverService) fetch(ctx context.Context, path string) ([]Match, erro
 // It paginates page=1 only — that's all the home page needs and it
 // keeps us under TMDb's 50 rps limit.
 func (d *DiscoverService) Fetch(ctx context.Context, path string) ([]Match, error) {
-	if d.tmdb == nil || !d.tmdb.Enabled() {
+	if d.tmdb == nil {
 		return nil, nil
 	}
+
+	// Resolve API key from config or database
+	apiKey := d.tmdb.resolveAPIKey(ctx)
+	if apiKey == "" {
+		return nil, nil
+	}
+	base := d.tmdb.resolveBaseURL(ctx)
+
 	q := url.Values{}
-	q.Set("api_key", d.tmdb.cfg.Secrets.TMDbAPIKey)
+	q.Set("api_key", apiKey)
 	q.Set("language", "zh-CN")
 	q.Set("page", "1")
-	u := d.tmdb.base + path + "?" + q.Encode()
+	u := base + path + "?" + q.Encode()
 
 	type result struct {
 		ID           int     `json:"id"`

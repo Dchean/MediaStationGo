@@ -31,16 +31,19 @@ import (
 
 // TMDbProvider talks to https://api.themoviedb.org/3.
 type TMDbProvider struct {
-	cfg    *config.Config
-	log    *zap.Logger
-	client *http.Client
-	base   string
-	imgCDN string
+	cfg       *config.Config
+	log       *zap.Logger
+	client    *http.Client
+	base      string
+	imgCDN    string
+	apiConfig *APIConfigService
 }
 
 // NewTMDbProvider is the constructor. APIBase / image CDN can be overridden
 // via secrets.tmdb_api_proxy + tmdb_image_proxy for users behind GFW.
-func NewTMDbProvider(cfg *config.Config, log *zap.Logger) *TMDbProvider {
+// apiConfig is optional; when non-nil, the provider will also check the
+// api_configs table for TMDB API key.
+func NewTMDbProvider(cfg *config.Config, log *zap.Logger, apiConfig *APIConfigService) *TMDbProvider {
 	base := cfg.Secrets.TMDbAPIProxy
 	if base == "" {
 		base = "https://api.themoviedb.org/3"
@@ -50,16 +53,61 @@ func NewTMDbProvider(cfg *config.Config, log *zap.Logger) *TMDbProvider {
 		img = "https://image.tmdb.org/t/p"
 	}
 	return &TMDbProvider{
-		cfg:    cfg,
-		log:    log,
-		base:   base,
-		imgCDN: img,
-		client: &http.Client{Timeout: 15 * time.Second},
+		cfg:       cfg,
+		log:       log,
+		apiConfig: apiConfig,
+		base:      base,
+		imgCDN:    img,
+		client:    &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
 // Enabled reports whether the operator has supplied an API key.
-func (t *TMDbProvider) Enabled() bool { return t.cfg.Secrets.TMDbAPIKey != "" }
+// It checks both the config file and the database (via apiConfig).
+func (t *TMDbProvider) Enabled() bool {
+	// Fast path: check config
+	if t.cfg.Secrets.TMDbAPIKey != "" {
+		return true
+	}
+	// Secondary check: if we have apiConfig, the key might be in the database
+	// We can't query the database here (no ctx), so we rely on the caller
+	// to check properly before making API calls.
+	// The actual key resolution happens in resolveAPIKey(ctx).
+	return t.apiConfig != nil
+}
+
+// resolveAPIKey returns the TMDb API key, checking config first, then database.
+func (t *TMDbProvider) resolveAPIKey(ctx context.Context) string {
+	// Check config first (fast path)
+	if t.cfg.Secrets.TMDbAPIKey != "" {
+		return t.cfg.Secrets.TMDbAPIKey
+	}
+	// Fall back to database
+	if t.apiConfig != nil {
+		resolved, err := t.apiConfig.Resolve(ctx, "tmdb")
+		if err == nil && resolved.APIKey != "" {
+			return resolved.APIKey
+		}
+	}
+	return ""
+}
+
+// resolveBaseURL returns the TMDb base URL, checking config first, then database.
+func (t *TMDbProvider) resolveBaseURL(ctx context.Context) string {
+	// Check config first
+	base := t.cfg.Secrets.TMDbAPIProxy
+	if base == "" {
+		base = "https://api.themoviedb.org/3"
+	}
+	// Override from database if available
+	if t.apiConfig != nil {
+		resolved, err := t.apiConfig.Resolve(ctx, "tmdb")
+		if err == nil && resolved.BaseURL != "" {
+			base = resolved.BaseURL
+		}
+	}
+	return base
+}
 
 // Match describes a successful metadata match. The same struct is reused
 // across providers; provider-specific IDs sit side-by-side so the scraper
@@ -78,22 +126,26 @@ type Match struct {
 // SearchMovie issues `/search/movie` and returns the best match, or nil
 // when no result is found. The `year` argument is optional (0 = any).
 func (t *TMDbProvider) SearchMovie(ctx context.Context, query string, year int) (*Match, error) {
-	if !t.Enabled() {
-		return nil, nil
-	}
 	if query == "" {
 		return nil, errors.New("empty query")
 	}
 
+	// Resolve API key from config or database
+	apiKey := t.resolveAPIKey(ctx)
+	if apiKey == "" {
+		return nil, nil
+	}
+	base := t.resolveBaseURL(ctx)
+
 	q := url.Values{}
-	q.Set("api_key", t.cfg.Secrets.TMDbAPIKey)
+	q.Set("api_key", apiKey)
 	q.Set("query", query)
 	q.Set("language", "zh-CN")
 	q.Set("include_adult", "false")
 	if year > 0 {
 		q.Set("year", fmt.Sprintf("%d", year))
 	}
-	u := t.base + "/search/movie?" + q.Encode()
+	u := base + "/search/movie?" + q.Encode()
 
 	type result struct {
 		ID           int     `json:"id"`
