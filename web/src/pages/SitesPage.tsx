@@ -51,6 +51,15 @@ const defaultForm = () => ({
   enabled: true,
   is_default: false,
   extra: '',
+  // 高级设置
+  user_agent: '',
+  rss_url: '',
+  timeout: 15,
+  priority: 50,
+  use_proxy: false,
+  rate_limit: false,
+  browser_emulation: false,
+  downloader: '',
 })
 
 export function SitesPage() {
@@ -103,6 +112,15 @@ export function SitesPage() {
         enabled: s.enabled !== false,
         is_default: s.is_default || false,
         extra: s.extra || '',
+        // 高级设置
+        user_agent: s.user_agent || '',
+        rss_url: s.rss_url || '',
+        timeout: s.timeout ?? 15,
+        priority: s.priority ?? 50,
+        use_proxy: s.use_proxy || false,
+        rate_limit: s.rate_limit || false,
+        browser_emulation: s.browser_emulation || false,
+        downloader: s.downloader || '',
       })
       setAdvancedOpen(false)
       setShowModal(true)
@@ -116,49 +134,69 @@ export function SitesPage() {
     setEditingId(null)
   }
 
-  // ── 保存 ──
-  const handleSave = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!form.name.trim() || !form.url.trim()) {
-      toast.error('站点名称和地址不能为空')
-      return
+  // ── 保存（支持静默模式）──
+  const silentSave = async (): Promise<boolean> => {
+    if (!form.name.trim() || !form.url.trim()) return false
+    const payload: Record<string, unknown> = {
+      name: form.name.trim(),
+      url: form.url.trim(),
+      type: form.type,
+      auth_type: form.auth_type,
+      cookie: form.cookie || '',
+      api_key: form.api_key || '',
+      auth_header: form.auth_header || '',
+      enabled: form.enabled,
+      is_default: form.is_default,
+      extra: form.extra || '',
+      user_agent: form.user_agent || '',
+      rss_url: form.rss_url || '',
+      timeout: Number(form.timeout) || 15,
+      priority: Number(form.priority) || 50,
+      use_proxy: !!form.use_proxy,
+      rate_limit: !!form.rate_limit,
+      browser_emulation: !!form.browser_emulation,
+      downloader: form.downloader || '',
     }
-    setSaving(true)
     try {
-      const payload: Record<string, unknown> = {
-        name: form.name.trim(),
-        url: form.url.trim(),
-        type: form.type,
-        auth_type: form.auth_type,
-        cookie: form.cookie || '',
-        api_key: form.api_key || '',
-        auth_header: form.auth_header || '',
-        enabled: form.enabled,
-        is_default: form.is_default,
-        extra: form.extra || '',
-      }
-
       if (editingId) {
         await sitesAPI.update(editingId, payload)
-        toast.success('站点已更新')
       } else {
-        await sitesAPI.create(payload)
-        toast.success('站点已添加')
+        const res = await sitesAPI.create(payload)
+        setEditingId((res.data as Site)?.id ?? null)
       }
-      closeModal()
-      await loadSites()
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        '保存失败'
-      toast.error(msg)
-    } finally {
-      setSaving(false)
+      return true
+    } catch {
+      return false
     }
   }
 
-  // ── 测试 ──
+  const handleSave = async (e: FormEvent) => {
+    e.preventDefault()
+    setSaving(true)
+    const ok = await silentSave()
+    if (ok) {
+      toast.success(editingId ? '站点已更新' : '站点已添加')
+      closeModal()
+      await loadSites()
+    } else {
+      const msg = '保存失败'
+      toast.error(msg)
+    }
+    setSaving(false)
+  }
+
+  // 测试（先自动保存）
   const handleTest = async (id: string) => {
+    // 如果正在编辑当前站点，先保存
+    if (editingId === id) {
+      setSaving(true)
+      const ok = await silentSave()
+      setSaving(false)
+      if (!ok) {
+        toast.error('保存失败，无法测试')
+        return
+      }
+    }
     setTestingId(id)
     try {
       const res = await sitesAPI.test(id)
@@ -246,6 +284,33 @@ export function SitesPage() {
               </span>
               {site.is_default && (
                 <span className="text-xs px-1.5 py-0.5 rounded bg-primary-400/15 text-primary-400">默认</span>
+              )}
+              {site.use_proxy && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">代理</span>
+              )}
+              {site.rate_limit && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400">限流</span>
+              )}
+              {site.browser_emulation && (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400">浏览器</span>
+              )}
+            </div>
+
+            {/* 状态与统计（只读） */}
+            <div className="text-xs text-slate-500 space-y-0.5">
+              <div>状态：
+                <span className={
+                  site.login_status === 'ok' ? 'text-green-400' :
+                  site.login_status === 'failed' ? 'text-red-400' : 'text-slate-400'
+                }>
+                  {site.login_status || 'unknown'}
+                </span>
+              </div>
+              {(site.upload_bytes || 0) > 0 && (
+                <div>↑ {Math.round((site.upload_bytes ?? 0) / 1073741824 * 100) / 100} GB / ↓ {Math.round((site.download_bytes ?? 0) / 1073741824 * 100) / 100} GB</div>
+              )}
+              {site.priority !== 50 && (
+                <div>优先级：{site.priority}</div>
               )}
             </div>
 
@@ -466,6 +531,18 @@ export function SitesPage() {
                     />
                   </div>
                 )}
+
+                {/* RSS 地址（主表单） */}
+                <div className="mt-4">
+                  <label className="block text-xs text-slate-400 mb-1">RSS 地址</label>
+                  <input
+                    className="input-base w-full text-xs font-mono"
+                    placeholder="https://.../torrents/rss?..."
+                    value={form.rss_url}
+                    onChange={(e) => setForm((f) => ({ ...f, rss_url: e.target.value }))}
+                  />
+                  <p className="text-xs text-slate-500 mt-1">站点 RSS 订阅地址，用于获取最新资源</p>
+                </div>
               </div>
 
               {/* 高级选项 */}
@@ -479,6 +556,82 @@ export function SitesPage() {
                 </button>
                 {advancedOpen && (
                   <div className="mt-3 pl-4 space-y-3 border-l border-white/10">
+                    {/* 新增高级字段 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">User-Agent</label>
+                        <input
+                          className="input-base w-full text-xs"
+                          placeholder="自定义 UA，留空使用默认"
+                          value={form.user_agent}
+                          onChange={(e) => setForm((f) => ({ ...f, user_agent: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">请求超时 (秒)</label>
+                        <input
+                          type="number"
+                          className="input-base w-full"
+                          min={1}
+                          max={300}
+                          value={form.timeout}
+                          onChange={(e) => setForm((f) => ({ ...f, timeout: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">优先级 (数字越大越优先)</label>
+                        <input
+                          type="number"
+                          className="input-base w-full"
+                          min={1}
+                          max={100}
+                          value={form.priority}
+                          onChange={(e) => setForm((f) => ({ ...f, priority: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">关联下载器</label>
+                        <input
+                          className="input-base w-full text-xs"
+                          placeholder="下载器 ID 或名称"
+                          value={form.downloader}
+                          onChange={(e) => setForm((f) => ({ ...f, downloader: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 开关类字段 */}
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary-400"
+                          checked={form.use_proxy}
+                          onChange={(e) => setForm((f) => ({ ...f, use_proxy: e.target.checked }))}
+                        />
+                        <span className="text-xs text-slate-300">使用代理</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary-400"
+                          checked={form.rate_limit}
+                          onChange={(e) => setForm((f) => ({ ...f, rate_limit: e.target.checked }))}
+                        />
+                        <span className="text-xs text-slate-300">启用限流</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary-400"
+                          checked={form.browser_emulation}
+                          onChange={(e) => setForm((f) => ({ ...f, browser_emulation: e.target.checked }))}
+                        />
+                        <span className="text-xs text-slate-300">浏览器模拟</span>
+                      </label>
+                    </div>
+
+                    {/* Extra JSON */}
                     <div>
                       <label className="block text-xs text-slate-400 mb-1">Extra 扩展配置 (JSON)</label>
                       <textarea

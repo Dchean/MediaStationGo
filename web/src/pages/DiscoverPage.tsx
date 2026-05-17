@@ -29,8 +29,8 @@ export function DiscoverPage() {
         <Sparkles className="h-6 w-6 text-primary-400" />
         <div>
           <h1 className="font-display text-3xl font-bold text-white">发现</h1>
-          <p className="text-sm text-slate-400">
-            来自 TMDb 的当日热门与流行榜单(需在 secrets.tmdb_api_key 配置 API Key)。
+            <p className="text-sm text-slate-400">
+            来自 TMDb 的当日热门与流行榜单（需在外部 API 中配置 TMDb API Key）。
           </p>
         </div>
       </header>
@@ -41,9 +41,9 @@ export function DiscoverPage() {
       {popular.length > 0 && <Row title="热门电影" items={popular} />}
       {!loading && trending.length === 0 && popular.length === 0 && (
         <div className="glass-panel">
-          <p className="text-slate-300">
-            还没有可用的发现数据。前往 <span className="text-primary-400">管理后台 → 设置</span>
-            ,在 secrets.tmdb_api_key 中填写一个有效的 TMDb API Key。
+            <p className="text-slate-300">
+            还没有可用的发现数据。请前往 <span className="text-primary-400">管理后台 → 外部API</span>
+            ，配置 TMDb API Key 后刷新页面。
           </p>
         </div>
       )}

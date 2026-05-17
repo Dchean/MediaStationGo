@@ -35,53 +35,57 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full items-center justify-center px-4 py-10">
-      <form onSubmit={handleSubmit} className="glass-panel w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center gap-2">
-          <Film className="h-10 w-10 text-primary-400" />
-          <h1 className="font-display text-2xl font-bold tracking-wide text-white">
-            MediaStationGo
-          </h1>
-          <p className="text-sm text-slate-400">登录到你的家庭媒体中心</p>
-        </div>
+    <div className="flex min-h-screen flex-col items-center px-4">
+      {/* 表单居中区域：flex-grow + flex center 使表单在剩余空间内垂直居中 */}
+      <div className="flex flex-1 flex-col items-center justify-center">
+        <form onSubmit={handleSubmit} className="glass-panel w-full max-w-md">
+          <div className="mb-8 flex flex-col items-center gap-2">
+            <Film className="h-10 w-10 text-primary-400" />
+            <h1 className="font-display text-2xl font-bold tracking-wide text-white">
+              MediaStationGo
+            </h1>
+            <p className="text-sm text-slate-400">登录到你的家庭媒体中心</p>
+          </div>
 
-        <label className="mb-4 block">
-          <span className="mb-1 block text-sm text-slate-300">用户名</span>
-          <input
-            className="input-base"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            required
-          />
-        </label>
+          <label className="mb-4 block">
+            <span className="mb-1 block text-sm text-slate-300">用户名</span>
+            <input
+              className="input-base"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              required
+            />
+          </label>
 
-        <label className="mb-6 block">
-          <span className="mb-1 block text-sm text-slate-300">密码</span>
-          <input
-            type="password"
-            className="input-base"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-        </label>
+          <label className="mb-6 block">
+            <span className="mb-1 block text-sm text-slate-300">密码</span>
+            <input
+              type="password"
+              className="input-base"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="neon-button w-full justify-center"
-        >
-          {loading ? '登录中…' : '登录'}
-        </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="neon-button w-full justify-center"
+          >
+            {loading ? '登录中…' : '登录'}
+          </button>
 
-        <p className="mt-6 text-center text-xs text-slate-500">
-          首次部署默认账号:<code className="text-primary-400">admin / admin123</code>
-        </p>
-      </form>
+          <p className="mt-6 text-center text-xs text-slate-500">
+            首次部署默认账号:<code className="text-primary-400">admin / admin123</code>
+          </p>
+        </form>
+      </div>
 
-      <AppFooter className="mt-8" />
+      {/* 页脚始终在底部 */}
+      <AppFooter className="mb-4 mt-auto" />
     </div>
   )
 }

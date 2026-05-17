@@ -49,11 +49,70 @@ func (h *SiteHandler) GetSite(c *gin.Context) {
 
 // CreateSite 创建站点。
 func (h *SiteHandler) CreateSite(c *gin.Context) {
-	var site model.Site
-	if err := c.ShouldBindJSON(&site); err != nil {
+	var body map[string]any
+	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "message": err.Error()})
 		return
 	}
+
+	var site model.Site
+	// 手动映射字段（因为敏感字段有 json:"-" 标签，不会自动反序列化）
+	if v, ok := body["name"].(string); ok {
+		site.Name = v
+	}
+	if v, ok := body["url"].(string); ok {
+		site.URL = v
+	}
+	if v, ok := body["type"].(string); ok {
+		site.Type = v
+	}
+	if v, ok := body["auth_type"].(string); ok {
+		site.AuthType = v
+	}
+	if v, ok := body["api_key"].(string); ok {
+		site.APIKey = v
+	}
+	if v, ok := body["cookie"].(string); ok {
+		site.Cookie = v
+	}
+	if v, ok := body["auth_header"].(string); ok {
+		site.AuthHeader = v
+	}
+	if v, ok := body["enabled"].(bool); ok {
+		site.Enabled = v
+	}
+	if v, ok := body["is_default"].(bool); ok {
+		site.IsDefault = v
+	}
+	if v, ok := body["extra"].(string); ok {
+		site.Extra = v
+	}
+	// 高级设置字段
+	if v, ok := body["user_agent"].(string); ok {
+		site.UserAgent = v
+	}
+	if v, ok := body["rss_url"].(string); ok {
+		site.RSSURL = v
+	}
+	if v, ok := body["timeout"].(float64); ok {
+		site.Timeout = int(v)
+	}
+	if v, ok := body["priority"].(float64); ok {
+		site.Priority = int(v)
+	}
+	if v, ok := body["use_proxy"].(bool); ok {
+		site.UseProxy = v
+	}
+	if v, ok := body["rate_limit"].(bool); ok {
+		site.RateLimit = v
+	}
+	if v, ok := body["browser_emulation"].(bool); ok {
+		site.BrowserEmulation = v
+	}
+	if v, ok := body["downloader"].(string); ok {
+		site.Downloader = v
+	}
+
 	if err := h.svc.Site.Create(c.Request.Context(), &site); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "message": err.Error()})
 		return
@@ -68,6 +127,8 @@ func (h *SiteHandler) UpdateSite(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "message": err.Error()})
 		return
 	}
+	// 字段名映射：前端使用蛇形命名，GORM 会正确映射到列名
+	// 无需额外处理，Updates 直接使用 patch 中的 key-value
 	if err := h.svc.Site.Update(c.Request.Context(), c.Param("id"), patch); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 1, "message": err.Error()})
 		return

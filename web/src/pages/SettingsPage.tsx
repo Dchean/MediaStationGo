@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useState } from 'react'
 import { FolderOpen, Loader2, Save, SettingsIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-import { AppFooter } from '../components/AppFooter'
 import { adminAPI } from '../api/admin'
 import { libraryAPI } from '../api/library'
 import type { Library, Setting } from '../types'
@@ -340,8 +339,6 @@ export function SettingsPage() {
           </table>
         </div>
       )}
-
-      <AppFooter className="mt-6" />
     </div>
   )
 }
