@@ -133,8 +133,9 @@ type AIConfig struct {
 
 // OrganizerConfig 配置媒体文件智能分类整理。
 type OrganizerConfig struct {
-	SmartClassify bool              `mapstructure:"smart_classify"`
-	Categories   map[string]string `mapstructure:"categories"`
+	SmartClassify      bool              `mapstructure:"smart_classify"`
+	AutoAfterDownload bool              `mapstructure:"auto_after_download"`
+	Categories        map[string]string `mapstructure:"categories"`
 }
 
 // FlareSolverrConfig 配置 FlareSolverr 服务（用于绕过 Cloudflare/WAF）。
@@ -234,6 +235,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("flaresolverr.timeout", 60)
 
 	v.SetDefault("organizer.smart_classify", false)
+	v.SetDefault("organizer.auto_after_download", false)
 	v.SetDefault("organizer.categories.chinese_movie", "华语电影")
 	v.SetDefault("organizer.categories.foreign_movie", "外语电影")
 	v.SetDefault("organizer.categories.euus_movie", "欧美电影")
