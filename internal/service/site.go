@@ -8,13 +8,13 @@ package service
 import (
 	"context"
 	"errors"
-	"net/http"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/ShukeBta/MediaStationGo/internal/helper"
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 	"github.com/ShukeBta/MediaStationGo/internal/repository"
 )
@@ -74,66 +74,30 @@ func (s *SiteService) Delete(ctx context.Context, id string) error {
 
 // TestConnection tries to reach the site's base URL with the configured
 // credentials and reports success/failure.
+// Now uses helper.TestSiteConnectivity with browser-like headers
+// and optional FlareSolverr support.
 func (s *SiteService) TestConnection(ctx context.Context, id string) (bool, string, error) {
 	site, err := s.FindByID(ctx, id)
 	if err != nil || site == nil {
 		return false, "site not found", err
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, site.URL, nil)
-	if err != nil {
-		return false, err.Error(), nil
+	// Get timeout from site config (default 15 seconds)
+	timeout := site.Timeout
+	if timeout <= 0 {
+		timeout = 15
 	}
 
-	// Apply auth headers.
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-	switch site.AuthType {
-	case "cookie":
-		if site.Cookie != "" {
-			req.Header.Set("Cookie", site.Cookie)
-		}
-	case "api_key":
-		if site.APIKey != "" {
-			req.Header.Set("x-api-key", site.APIKey)
-		}
-	case "authorization":
-		if site.AuthHeader != "" {
-			req.Header.Set("Authorization", site.AuthHeader)
-		}
-	}
+	// TODO: Get flareSolverrURL from config (e.g. from config.yaml)
+	// For now, pass empty string to skip FlareSolverr
+	flareSolverrURL := "" // TODO: load from config
 
-	resp, err := client.Do(req)
+	ok, msg, err := helper.TestSiteConnectivity(site, flareSolverrURL, timeout, s.log)
 	if err != nil {
 		now := time.Now()
 		_ = s.repo.DB.WithContext(ctx).Model(&model.Site{}).Where("id = ?", id).
 			Updates(map[string]any{"last_error": err.Error(), "last_check_at": &now}).Error
 		return false, err.Error(), nil
-	}
-	defer resp.Body.Close()
-
-	var ok bool
-	var msg string
-	switch {
-	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		ok, msg = true, "连接成功 ("+resp.Status+")"
-	case resp.StatusCode == 301 || resp.StatusCode == 302 || resp.StatusCode == 307 || resp.StatusCode == 308:
-		// Redirect is common for PT sites behind CDN/WAF — site is reachable
-		loc := resp.Header.Get("Location")
-		if loc == "" {
-			loc = "(unknown)"
-		}
-		ok, msg = true, "站点可达，但返回重定向至 "+loc
-	case resp.StatusCode == 401:
-		ok, msg = true, "站点可达，需要认证 (HTTP 401)"
-	case resp.StatusCode == 403:
-		ok, msg = true, "站点可达，但访问被拒绝 — 可能被 Cloudflare/WAF 拦截 (HTTP 403)"
-	case resp.StatusCode == 429:
-		ok, msg = true, "站点可达，但被限流 (HTTP 429)"
-	case resp.StatusCode == 503:
-		ok, msg = true, "站点可达，服务暂时不可用 (HTTP 503)"
-	default:
-		ok, msg = resp.StatusCode >= 400 && resp.StatusCode < 500, resp.Status
 	}
 
 	loginStatus := "ok"

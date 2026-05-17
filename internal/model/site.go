@@ -49,3 +49,9 @@ func SiteTypes() []string {
 func AuthTypes() []string {
 	return []string{"cookie", "api_key", "auth_header"}
 }
+
+// DefaultUserAgent 是默认浏览器 User-Agent（用于 HTTP 请求头）。
+const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+
+// SiteTypes 返回支持的站点类型列表（用于前端下拉）。
+// 注意：此函数供 API 返回类型列表使用，不在此处添加新类型。
