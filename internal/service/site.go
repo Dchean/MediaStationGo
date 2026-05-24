@@ -7,8 +7,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -46,10 +49,13 @@ func (s *SiteService) Create(ctx context.Context, site *model.Site) error {
 	return s.repo.DB.WithContext(ctx).Create(site).Error
 }
 
-// List returns every site ordered by priority (lower = higher priority).
+// List returns every site ordered by created_at.
 func (s *SiteService) List(ctx context.Context) ([]model.Site, error) {
 	var sites []model.Site
 	err := s.repo.DB.WithContext(ctx).Order("created_at asc").Find(&sites).Error
+	if sites == nil {
+		sites = []model.Site{}
+	}
 	return sites, err
 }
 
@@ -125,66 +131,123 @@ type SearchResult struct {
 
 // Search fans out a keyword query to every enabled site and returns
 // merged results sorted by seeders descending.
+// Uses concurrent search with sync.WaitGroup for performance.
 func (s *SiteService) Search(ctx context.Context, keyword string) ([]SearchResult, error) {
 	if strings.TrimSpace(keyword) == "" {
-		return nil, errors.New("keyword required")
+		return []SearchResult{}, nil
 	}
 	sites, err := s.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	var results []SearchResult
+	var (
+		mu      sync.Mutex
+		wg      sync.WaitGroup
+		results []SearchResult
+	)
+
 	for i := range sites {
 		if !sites[i].Enabled {
 			continue
 		}
-		adapter := NewSiteAdapter(&sites[i])
-		if adapter == nil {
-			continue
-		}
-		cfg := siteModelToConfig(&sites[i])
-		result, err := adapter.Search(ctx, cfg, keyword, 1)
-		if err != nil {
-			s.log.Debug("site search failed",
-				zap.String("site", sites[i].Name), zap.Error(err))
-			continue
-		}
-		for _, item := range result.Items {
-			results = append(results, SearchResult{
-				SiteName:    sites[i].Name,
-				SiteID:      sites[i].ID,
-				Title:       item.Title,
-				TorrentURL:  item.DetailURL,
-				DownloadURL: item.DownloadURL,
-				Size:        item.Size,
-				Seeders:     item.Seeders,
-				Leechers:    item.Leechers,
-				Free:        item.Free,
-			})
-		}
+		wg.Add(1)
+		go func(site model.Site) {
+			defer wg.Done()
+
+			adapter := NewSiteAdapter(&site)
+			if adapter == nil {
+				return
+			}
+
+			cfg := s.siteModelToConfig(&site)
+
+			// Use site timeout or default 30s
+			timeout := time.Duration(site.Timeout) * time.Second
+			if timeout <= 0 {
+				timeout = 30 * time.Second
+			}
+			ctxWithTimeout, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+
+			result, err := adapter.Search(ctxWithTimeout, cfg, keyword, 1)
+			if err != nil {
+				s.log.Debug("site search failed",
+					zap.String("site", site.Name), zap.Error(err))
+				return
+			}
+			if result == nil {
+				return
+			}
+			items := result.Items
+			if items == nil {
+				items = []TorrentItem{}
+			}
+			for _, item := range items {
+				mu.Lock()
+				results = append(results, SearchResult{
+					SiteName:    site.Name,
+					SiteID:      site.ID,
+					Title:       item.Title,
+					TorrentURL:  item.DetailURL,
+					DownloadURL: item.DownloadURL,
+					Size:        item.Size,
+					Seeders:     item.Seeders,
+					Leechers:    item.Leechers,
+					Free:        item.Free,
+				})
+				mu.Unlock()
+			}
+		}(sites[i])
+	}
+	wg.Wait()
+
+	// Ensure results is never nil (return [] instead of null in JSON)
+	if results == nil {
+		results = []SearchResult{}
 	}
 
 	// Sort by seeders desc.
-	for i := 0; i < len(results); i++ {
-		for j := i + 1; j < len(results); j++ {
-			if results[j].Seeders > results[i].Seeders {
-				results[i], results[j] = results[j], results[i]
-			}
-		}
-	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Seeders > results[j].Seeders
+	})
 	return results, nil
 }
 
 // siteModelToConfig 将 model.Site 转换为适配器使用的 SiteConfig。
-func siteModelToConfig(s *model.Site) SiteConfig {
+// 当全局 FlareSolverr 已启用且此站点开启了 BrowserEmulation 时，填充 FlareSolverrURL。
+func (svc *SiteService) siteModelToConfig(s *model.Site) SiteConfig {
+	timeout := time.Duration(s.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	userAgent := s.UserAgent
+	if userAgent == "" {
+		userAgent = model.DefaultUserAgent
+	}
+	var extra map[string]string
+	if s.Extra != "" {
+		_ = json.Unmarshal([]byte(s.Extra), &extra)
+	}
+
+	// Per-site FlareSolverr opt-in: only when global FlareSolverr is enabled
+	// AND this site has BrowserEmulation turned on.
+	flareSolverrURL := ""
+	if svc.flareSolverrURL != "" && s.BrowserEmulation {
+		flareSolverrURL = svc.flareSolverrURL
+	}
+
 	return SiteConfig{
-		Name:       s.Name,
-		Type:       s.Type,
-		URL:        s.URL,
-		AuthType:   s.AuthType,
-		Cookie:     s.Cookie,
-		APIKey:     s.APIKey,
-		AuthHeader: s.AuthHeader,
+		Name:            s.Name,
+		Type:            s.Type,
+		URL:             s.URL,
+		AuthType:        s.AuthType,
+		Cookie:          s.Cookie,
+		APIKey:          s.APIKey,
+		AuthHeader:      s.AuthHeader,
+		UserAgent:       userAgent,
+		Timeout:         timeout,
+		Extra:           extra,
+		FlareSolverrURL: flareSolverrURL,
 	}
 }

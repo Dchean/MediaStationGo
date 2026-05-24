@@ -13,19 +13,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ShukeBta/MediaStationGo/internal/helper"
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 )
 
 // SiteConfig 站点配置（从 model.Site 解密后的纯文本）。
 type SiteConfig struct {
-	Name       string
-	Type       string
-	URL        string
-	AuthType   string
-	Cookie     string
-	APIKey     string
-	AuthHeader string
-	Extra      map[string]string // JSON 扩展配置
+	Name            string
+	Type            string
+	URL             string
+	AuthType        string
+	Cookie          string
+	APIKey          string
+	AuthHeader      string
+	UserAgent        string            // 自定义 User-Agent
+	Timeout          time.Duration     // 请求超时
+	Extra            map[string]string // JSON 扩展配置
+	FlareSolverrURL  string            // FlareSolverr 服务地址（用于浏览器模拟绕过 Cloudflare/WAF）
 }
 
 // SiteSearchResult 站点搜索结果（按站点分组的批量搜索结果）。
@@ -110,7 +114,12 @@ func buildRequest(ctx context.Context, method, rawURL string, cfg SiteConfig, bo
 			req.Header.Set("Cookie", cfg.Cookie)
 		}
 	case "api_key":
-		if cfg.APIKey != "" {
+		// MTeam 使用 Authorization: Bearer 格式
+		if cfg.Type == "mteam" {
+			if cfg.APIKey != "" {
+				req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+			}
+		} else if cfg.APIKey != "" {
 			req.Header.Set("X-API-Key", cfg.APIKey)
 		}
 	case "auth_header":
@@ -124,12 +133,34 @@ func buildRequest(ctx context.Context, method, rawURL string, cfg SiteConfig, bo
 		}
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	// 使用 SiteConfig 中的 UserAgent（如果提供），否则使用默认值
+	userAgent := cfg.UserAgent
+	if userAgent == "" {
+		userAgent = model.DefaultUserAgent
+	}
+	req.Header.Set("User-Agent", userAgent)
 	return req, nil
 }
 
 // doRequest 执行 HTTP 请求并返回响应体。
+// 当 cfg.FlareSolverrURL 已配置且方法为 GET 时，通过 FlareSolverr 代理请求
+// 以绕过 Cloudflare/WAF 挑战验证。
 func doRequest(ctx context.Context, client *http.Client, method, rawURL string, cfg SiteConfig, body io.Reader) ([]byte, int, error) {
+	// ── FlareSolverr 浏览器模拟路径（仅 GET） ──────────────────────────
+	if cfg.FlareSolverrURL != "" && method == "GET" {
+		timeout := int(cfg.Timeout.Seconds())
+		if timeout <= 0 {
+			timeout = 30
+		}
+		pageBody, err := helper.FetchURLWithFlareSolverr(
+			cfg.FlareSolverrURL, rawURL, cfg.Cookie, timeout, "", nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("flareSolverr: %w", err)
+		}
+		return []byte(pageBody), http.StatusOK, nil
+	}
+
+	// ── 直接 HTTP 请求路径 ─────────────────────────────────────────────
 	req, err := buildRequest(ctx, method, rawURL, cfg, body)
 	if err != nil {
 		return nil, 0, err
@@ -176,7 +207,7 @@ func (a *NexusPHPAdapter) Authenticate(ctx context.Context, cfg SiteConfig) erro
 	}
 	defer httpResp.Body.Close()
 
-	if httpResp.StatusCode == http.StatusFound || httpResp.StatusCode == http.StatusFound {
+	if httpResp.StatusCode == http.StatusFound {
 		return fmt.Errorf("authentication failed: redirected to login page")
 	}
 	if httpResp.StatusCode != http.StatusOK {
@@ -1022,7 +1053,7 @@ func (a *DiscuzAdapter) Authenticate(ctx context.Context, cfg SiteConfig) error 
 	if err != nil {
 		return fmt.Errorf("authenticate: %w", err)
 	}
-	if status == http.StatusFound || status == http.StatusFound {
+	if status == http.StatusFound {
 		return fmt.Errorf("authentication failed: redirected to login")
 	}
 	if status != http.StatusOK {
