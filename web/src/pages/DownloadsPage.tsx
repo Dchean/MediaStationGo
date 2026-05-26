@@ -60,7 +60,7 @@ export function DownloadsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold text-white">下载</h1>
+      <h1 className="font-display text-3xl font-bold text-ink-600">下载</h1>
 
       <form onSubmit={onAdd} className="glass-panel grid gap-3 md:grid-cols-[1fr_1fr_auto]">
         <input
@@ -82,20 +82,20 @@ export function DownloadsPage() {
       </form>
 
       <section className="glass-panel">
-        <h2 className="mb-3 font-display text-lg font-semibold text-white">实时状态</h2>
+        <h2 className="mb-3 font-display text-lg font-semibold text-ink-600">实时状态</h2>
         {torrents === null && (
-          <p className="text-slate-500">
+          <p className="text-sand-500">
             尚未连接到下载器 — 请到{' '}
-            <a href="/download-clients" className="text-primary-400 hover:underline">
+            <a href="/download-clients" className="text-brand-500 hover:underline">
               下载器
             </a>{' '}
             页面添加并测试连接（qBittorrent / Aria2 / Transmission）。
           </p>
         )}
-        {torrents && torrents.length === 0 && <p className="text-slate-500">暂无运行中任务。</p>}
+        {torrents && torrents.length === 0 && <p className="text-sand-500">暂无运行中任务。</p>}
         {torrents && torrents.length > 0 && (
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-sand-500">
               <tr>
                 <th className="py-2">名称</th>
                 <th>状态</th>
@@ -108,11 +108,11 @@ export function DownloadsPage() {
             <tbody>
               {torrents.map((t) => (
                 <tr key={t.hash} className="border-t border-white/5 align-top">
-                  <td className="max-w-md truncate py-2 text-white" title={t.name}>
+                  <td className="max-w-md truncate py-2 text-ink-600" title={t.name}>
                     {t.name}
                   </td>
-                  <td className="text-slate-300">{t.state}</td>
-                  <td className="text-slate-300">
+                  <td className="text-ink-100">{t.state}</td>
+                  <td className="text-ink-100">
                     <div className="flex items-center gap-2">
                       <div className="h-1 w-24 overflow-hidden rounded bg-white/10">
                         <div
@@ -123,10 +123,10 @@ export function DownloadsPage() {
                       {(t.progress * 100).toFixed(1)}%
                     </div>
                   </td>
-                  <td className="text-slate-300">
+                  <td className="text-ink-100">
                     ↓ {fmtSpeed(t.dlspeed)} / ↑ {fmtSpeed(t.upspeed)}
                   </td>
-                  <td className="text-slate-300">{fmtBytes(t.size)}</td>
+                  <td className="text-ink-100">{fmtBytes(t.size)}</td>
                   {role === 'admin' && (
                     <td className="py-2 text-right">
                       <button
@@ -151,9 +151,9 @@ export function DownloadsPage() {
 
       {tasks.length > 0 && (
         <section className="glass-panel">
-          <h2 className="mb-3 font-display text-lg font-semibold text-white">历史记录</h2>
+          <h2 className="mb-3 font-display text-lg font-semibold text-ink-600">历史记录</h2>
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-sand-500">
               <tr>
                 <th className="py-2">来源</th>
                 <th>URL</th>
@@ -164,12 +164,12 @@ export function DownloadsPage() {
             <tbody>
               {tasks.map((t) => (
                 <tr key={t.id} className="border-t border-white/5">
-                  <td className="py-2 text-slate-300">{t.source}</td>
-                  <td className="max-w-md truncate text-slate-300" title={t.url}>
+                  <td className="py-2 text-ink-100">{t.source}</td>
+                  <td className="max-w-md truncate text-ink-100" title={t.url}>
                     {t.url}
                   </td>
-                  <td className="text-slate-300">{t.save_path || '—'}</td>
-                  <td className="text-slate-500">
+                  <td className="text-ink-100">{t.save_path || '—'}</td>
+                  <td className="text-sand-500">
                     {new Date(t.created_at).toLocaleString()}
                   </td>
                 </tr>

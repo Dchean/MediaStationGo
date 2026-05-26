@@ -121,8 +121,8 @@ export function StrmPage() {
           <LinkIcon size={20} />
         </div>
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">STRM 管理</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-display text-3xl font-bold text-ink-600">STRM 管理</h1>
+          <p className="text-sm text-ink-50">
             将外部 HTTP / WebDAV / Alist 直链以"虚拟文件"形式纳入媒体库
           </p>
         </div>
@@ -130,7 +130,7 @@ export function StrmPage() {
 
       {/* Import a new STRM-only entry. */}
       <section className="glass-panel space-y-4">
-        <h2 className="font-display text-lg font-semibold text-white">导入 STRM 条目</h2>
+        <h2 className="font-display text-lg font-semibold text-ink-600">导入 STRM 条目</h2>
         <form onSubmit={onImport} className="grid gap-3 md:grid-cols-4">
           <select
             required
@@ -165,14 +165,14 @@ export function StrmPage() {
             <Plus size={16} /> {importing ? '导入中…' : '导入'}
           </button>
         </form>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-sand-500">
           导入后会创建一条 container=strm 的媒体记录,播放时会 302 重定向到该 URL。
         </p>
       </section>
 
       {/* Attach / detach STRM URL on existing media. */}
       <section className="glass-panel space-y-4">
-        <h2 className="font-display text-lg font-semibold text-white">附加 STRM URL 到已有媒体</h2>
+        <h2 className="font-display text-lg font-semibold text-ink-600">附加 STRM URL 到已有媒体</h2>
         <form onSubmit={doSearch} className="flex gap-2">
           <input
             className="input-base flex-1"
@@ -196,8 +196,8 @@ export function StrmPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-white">{m.title}</div>
-                      <div className="truncate text-xs text-slate-400">
+                      <div className="truncate font-medium text-ink-600">{m.title}</div>
+                      <div className="truncate text-xs text-ink-50">
                         {m.year > 0 && `${m.year} · `}
                         {m.container || '本地文件'}
                       </div>
@@ -240,7 +240,7 @@ export function StrmPage() {
         )}
 
         {!searching && query && results.length === 0 && (
-          <p className="text-sm text-slate-400">未找到匹配的媒体。</p>
+          <p className="text-sm text-ink-50">未找到匹配的媒体。</p>
         )}
       </section>
     </div>

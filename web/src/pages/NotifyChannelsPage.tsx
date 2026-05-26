@@ -62,8 +62,8 @@ export function NotifyChannelsPage() {
             <Bell size={20} />
           </div>
           <div>
-            <h1 className="font-display text-3xl font-bold text-white">通知渠道</h1>
-            <p className="text-sm text-slate-400">
+            <h1 className="font-display text-3xl font-bold text-ink-600">通知渠道</h1>
+            <p className="text-sm text-ink-50">
               配置 Telegram / Bark / 企业微信 / Webhook 多通道推送
             </p>
           </div>
@@ -80,13 +80,13 @@ export function NotifyChannelsPage() {
       </div>
 
       {loading && (
-        <div className="flex justify-center py-12 text-slate-400">
+        <div className="flex justify-center py-12 text-ink-50">
           <Loader2 className="animate-spin" />
         </div>
       )}
 
       {!loading && channels.length === 0 && (
-        <div className="glass-panel py-12 text-center text-slate-400">暂无通知渠道</div>
+        <div className="glass-panel py-12 text-center text-ink-50">暂无通知渠道</div>
       )}
 
       {!loading && channels.length > 0 && (
@@ -144,26 +144,26 @@ function ChannelCard({
     <div className="glass-panel flex items-center justify-between gap-3">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-white">{channel.name}</span>
-          <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-slate-400">
+          <span className="font-medium text-ink-600">{channel.name}</span>
+          <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-ink-50">
             {TYPE_LABELS[channel.channel_type] ?? channel.channel_type}
           </span>
           {!channel.enabled && (
-            <span className="rounded bg-slate-500/30 px-2 py-0.5 text-xs text-slate-300">已禁用</span>
+            <span className="rounded bg-sand-500/30 px-2 py-0.5 text-xs text-ink-100">已禁用</span>
           )}
         </div>
-        <div className="mt-1 truncate text-xs text-slate-400">{summary}</div>
+        <div className="mt-1 truncate text-xs text-ink-50">{summary}</div>
       </div>
       <div className="flex shrink-0 gap-2">
         <button
           onClick={onTest}
-          className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300 hover:border-primary-400/40 hover:text-primary-400"
+          className="rounded border border-white/10 px-2 py-1 text-xs text-ink-100 hover:border-primary-400/40 hover:text-brand-500"
         >
           <Send size={12} className="inline" /> 测试
         </button>
         <button
           onClick={onEdit}
-          className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300 hover:border-primary-400/40 hover:text-primary-400"
+          className="rounded border border-white/10 px-2 py-1 text-xs text-ink-100 hover:border-primary-400/40 hover:text-brand-500"
         >
           <Pencil size={12} className="inline" /> 编辑
         </button>
@@ -262,7 +262,7 @@ function ChannelFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="glass-panel w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="mb-4 font-display text-xl font-semibold text-white">
+        <h2 className="mb-4 font-display text-xl font-semibold text-ink-600">
           {editing ? '编辑通知渠道' : '添加通知渠道'}
         </h2>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -460,7 +460,7 @@ function ChannelFormModal({
             </>
           )}
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-100">
             <input
               type="checkbox"
               className="h-4 w-4 accent-primary-400"
@@ -474,7 +474,7 @@ function ChannelFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
+              className="rounded border border-white/10 px-4 py-2 text-sm text-ink-100 hover:bg-white/5"
             >
               取消
             </button>
@@ -491,7 +491,7 @@ function ChannelFormModal({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm text-slate-300">{label}</span>
+      <span className="mb-1 block text-sm text-ink-100">{label}</span>
       {children}
     </label>
   )

@@ -34,10 +34,10 @@ export function SchedulerPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <Clock className="h-6 w-6 text-primary-400" />
+        <Clock className="h-6 w-6 text-brand-500" />
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">定时任务</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-display text-3xl font-bold text-ink-600">定时任务</h1>
+          <p className="text-sm text-ink-50">
             后端周期性任务(媒体库扫描、转码缓存清理、回收站自动清理),每 5 秒刷新状态。
           </p>
         </div>
@@ -45,7 +45,7 @@ export function SchedulerPage() {
 
       <div className="glass-panel">
         <table className="w-full text-left text-sm">
-          <thead className="text-xs uppercase tracking-wider text-slate-500">
+          <thead className="text-xs uppercase tracking-wider text-sand-500">
             <tr>
               <th className="py-2">任务</th>
               <th>间隔</th>
@@ -57,9 +57,9 @@ export function SchedulerPage() {
           <tbody>
             {jobs.map((j) => (
               <tr key={j.name} className="border-t border-white/5">
-                <td className="py-2 font-mono text-white">{j.name}</td>
-                <td className="text-slate-300">{j.interval}</td>
-                <td className="text-slate-400">
+                <td className="py-2 font-mono text-ink-600">{j.name}</td>
+                <td className="text-ink-100">{j.interval}</td>
+                <td className="text-ink-50">
                   {j.last_run && new Date(j.last_run).getFullYear() > 2000
                     ? new Date(j.last_run).toLocaleString()
                     : '尚未运行'}
@@ -69,7 +69,7 @@ export function SchedulerPage() {
                   <button
                     onClick={() => runNow(j.name)}
                     disabled={running === j.name}
-                    className="rounded border border-primary-400/40 px-2 py-1 text-xs text-primary-400 hover:bg-primary-400/10"
+                    className="rounded border border-primary-400/40 px-2 py-1 text-xs text-brand-500 hover:bg-primary-400/10"
                   >
                     <Play size={12} className="inline" /> 立即运行
                   </button>

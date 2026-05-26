@@ -24,8 +24,8 @@ export function ToolsPage() {
           <Wrench size={20} />
         </div>
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">运维工具</h1>
-          <p className="text-sm text-slate-400">整理媒体文件 · 测试通知渠道</p>
+          <h1 className="font-display text-3xl font-bold text-ink-600">运维工具</h1>
+          <p className="text-sm text-ink-50">整理媒体文件 · 测试通知渠道</p>
         </div>
       </div>
 
@@ -118,22 +118,22 @@ function OrganizePanel() {
   return (
     <section className="glass-panel space-y-5">
       <div className="flex items-center gap-2">
-        <FolderCog size={18} className="text-primary-400" />
-        <h2 className="font-display text-lg font-semibold text-white">整理 &amp; 重命名</h2>
+        <FolderCog size={18} className="text-brand-500" />
+        <h2 className="font-display text-lg font-semibold text-ink-600">整理 &amp; 重命名</h2>
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-sand-500">
         将媒体文件按 <code className="rounded bg-white/5 px-1">媒体库/年份/标题 (年份)/标题.ext</code>{' '}
         的规范布局移动并重命名,确保已先完成刮削。
       </p>
 
       {!loadingSettings && (
         <div className="flex items-center gap-2 text-xs">
-          <Info size={14} className={smartClassify ? 'text-green-400' : 'text-slate-500'} />
-          <span className={smartClassify ? 'text-green-400' : 'text-slate-500'}>
+          <Info size={14} className={smartClassify ? 'text-green-400' : 'text-sand-500'} />
+          <span className={smartClassify ? 'text-green-400' : 'text-sand-500'}>
             智能分类：{smartClassify ? '已启用' : '未启用'}
           </span>
           {smartClassify && (
-            <span className="text-slate-500">（将根据元数据自动分类到子目录）</span>
+            <span className="text-sand-500">（将根据元数据自动分类到子目录）</span>
           )}
         </div>
       )}
@@ -181,8 +181,8 @@ function OrganizePanel() {
                 className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm text-white">{m.title}</div>
-                  <div className="truncate text-xs text-slate-400">{m.path}</div>
+                  <div className="truncate text-sm text-ink-600">{m.title}</div>
+                  <div className="truncate text-xs text-ink-50">{m.path}</div>
                 </div>
                 <button
                   onClick={() => onOrganizeOne(m)}
@@ -202,7 +202,7 @@ function OrganizePanel() {
         )}
 
         {!searching && query && results.length === 0 && (
-          <p className="mt-3 text-sm text-slate-400">未找到匹配的媒体。</p>
+          <p className="mt-3 text-sm text-ink-50">未找到匹配的媒体。</p>
         )}
       </div>
     </section>
@@ -235,9 +235,9 @@ function NotifyPanel() {
     <section className="glass-panel space-y-4">
       <div className="flex items-center gap-2">
         <Bell size={18} className="text-amber-300" />
-        <h2 className="font-display text-lg font-semibold text-white">通知渠道测试</h2>
+        <h2 className="font-display text-lg font-semibold text-ink-600">通知渠道测试</h2>
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-sand-500">
         会向所有已配置的通知渠道(Telegram / Bark / Webhook 等)发送一条测试消息。
       </p>
       <form onSubmit={onSend} className="space-y-3">
@@ -270,7 +270,7 @@ function NotifyPanel() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm text-slate-300">{label}</span>
+      <span className="mb-1 block text-sm text-ink-100">{label}</span>
       {children}
     </label>
   )

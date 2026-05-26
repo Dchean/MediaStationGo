@@ -115,13 +115,13 @@ export function AssistantChatPage() {
       {/* Sessions sidebar */}
       <aside className="glass-panel flex flex-col overflow-hidden">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-sm font-semibold text-white">会话</h2>
+          <h2 className="font-display text-sm font-semibold text-ink-600">会话</h2>
           <button onClick={onNew} className="neon-button !px-2 !py-1 text-xs">
             <Plus size={12} /> 新建
           </button>
         </div>
         {loading && (
-          <div className="flex justify-center py-6 text-slate-400">
+          <div className="flex justify-center py-6 text-ink-50">
             <Loader2 className="animate-spin" />
           </div>
         )}
@@ -132,8 +132,8 @@ export function AssistantChatPage() {
               className={
                 'group flex items-center gap-2 rounded px-2 py-2 text-sm cursor-pointer ' +
                 (active?.session.id === s.id
-                  ? 'bg-primary-400/10 text-primary-400'
-                  : 'text-slate-300 hover:bg-white/5 hover:text-white')
+                  ? 'bg-primary-400/10 text-brand-500'
+                  : 'text-ink-100 hover:bg-white/5 hover:text-white')
               }
               onClick={() => onSelect(s.id)}
             >
@@ -151,7 +151,7 @@ export function AssistantChatPage() {
             </li>
           ))}
           {!loading && sessions.length === 0 && (
-            <li className="px-2 py-2 text-xs text-slate-500">暂无会话</li>
+            <li className="px-2 py-2 text-xs text-sand-500">暂无会话</li>
           )}
         </ul>
       </aside>
@@ -159,7 +159,7 @@ export function AssistantChatPage() {
       {/* Conversation pane */}
       <section className="glass-panel flex flex-col overflow-hidden">
         {!active && (
-          <div className="m-auto text-center text-slate-400">
+          <div className="m-auto text-center text-ink-50">
             <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
             <p>选择或创建一个会话开始对话</p>
           </div>
@@ -167,13 +167,13 @@ export function AssistantChatPage() {
         {active && (
           <>
             <div className="mb-3 border-b border-white/5 pb-2">
-              <h2 className="font-display text-base font-semibold text-white">
+              <h2 className="font-display text-base font-semibold text-ink-600">
                 {active.session.title || '未命名'}
               </h2>
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto pr-2">
               {active.messages.length === 0 && (
-                <p className="text-sm text-slate-500">说点什么开始对话…</p>
+                <p className="text-sm text-sand-500">说点什么开始对话…</p>
               )}
               {active.messages.map((m) => (
                 <Bubble key={m.id} message={m} />
@@ -211,7 +211,7 @@ function Bubble({ message }: { message: AssistantMessage }) {
             ? 'bg-primary-400/20 text-primary-100'
             : message.role === 'system'
               ? 'border border-amber-400/30 bg-amber-400/5 text-amber-200'
-              : 'bg-white/5 text-slate-200')
+              : 'bg-white/5 text-ink-200')
         }
       >
         {message.content}

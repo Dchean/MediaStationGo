@@ -28,10 +28,10 @@ export function FavouritesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold text-white">我的收藏</h1>
+      <h1 className="font-display text-3xl font-bold text-ink-600">我的收藏</h1>
 
       {loading && (
-        <div className="flex items-center gap-2 py-8 text-slate-400">
+        <div className="flex items-center gap-2 py-8 text-ink-50">
           <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary-400 border-t-transparent" />
           加载中…
         </div>
@@ -64,8 +64,8 @@ export function FavouritesPage() {
 
       {isEmpty && (
         <div className="glass-panel flex flex-col items-center gap-3 p-10 text-center">
-          <p className="text-lg text-slate-300">还没有任何收藏</p>
-          <p className="text-sm text-slate-500">
+          <p className="text-lg text-ink-100">还没有任何收藏</p>
+          <p className="text-sm text-sand-500">
             点击媒体详情页的「收藏」按钮添加喜欢的内容
           </p>
         </div>

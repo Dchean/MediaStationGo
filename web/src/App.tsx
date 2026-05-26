@@ -100,7 +100,7 @@ const StorageConfigPage = lazy(() =>
   import('./pages/StorageConfigPage').then((m) => ({ default: m.StorageConfigPage })),
 )
 
-const Loading = () => <p className="px-6 py-8 text-slate-500">加载中…</p>
+const Loading = () => <p className="px-6 py-8 text-sand-500">加载中…</p>
 
 export default function App() {
   return (

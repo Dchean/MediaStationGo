@@ -16,7 +16,7 @@ export function AdminPage() {
   ]
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold text-white">管理后台</h1>
+      <h1 className="font-display text-3xl font-bold text-ink-600">管理后台</h1>
       <div className="flex flex-wrap gap-2 border-b border-white/10">
         {tabs.map((k) => (
           <button
@@ -25,8 +25,8 @@ export function AdminPage() {
             className={
               'border-b-2 px-4 py-2 text-sm transition ' +
               (tab === k.key
-                ? 'border-primary-400 text-primary-400'
-                : 'border-transparent text-slate-400 hover:text-white')
+                ? 'border-primary-400 text-brand-500'
+                : 'border-transparent text-ink-50 hover:text-white')
             }
           >
             {k.label}
@@ -98,7 +98,7 @@ function LibraryPanel() {
 
       <div className="glass-panel">
         <table className="w-full text-left text-sm">
-          <thead className="text-xs uppercase tracking-wider text-slate-500">
+          <thead className="text-xs uppercase tracking-wider text-sand-500">
             <tr>
               <th className="py-2">名称</th>
               <th>路径</th>
@@ -109,12 +109,12 @@ function LibraryPanel() {
           <tbody>
             {libs.map((l) => (
               <tr key={l.id} className="border-t border-white/5">
-                <td className="py-2 text-white">{l.name}</td>
-                <td className="text-slate-300">{l.path}</td>
-                <td className="text-slate-300">{l.type}</td>
+                <td className="py-2 text-ink-600">{l.name}</td>
+                <td className="text-ink-100">{l.path}</td>
+                <td className="text-ink-100">{l.type}</td>
                 <td className="space-x-2 py-2 text-right">
                   <button
-                    className="rounded border border-primary-400/40 px-2 py-1 text-xs text-primary-400 hover:bg-primary-400/10"
+                    className="rounded border border-primary-400/40 px-2 py-1 text-xs text-brand-500 hover:bg-primary-400/10"
                     onClick={async () => {
                       const r = await libraryAPI.scan(l.id)
                       toast.success(`扫描完成,新增 ${r.added}`)
@@ -153,7 +153,7 @@ function UsersPanel() {
   return (
     <div className="glass-panel">
       <table className="w-full text-left text-sm">
-        <thead className="text-xs uppercase tracking-wider text-slate-500">
+        <thead className="text-xs uppercase tracking-wider text-sand-500">
           <tr>
             <th className="py-2">用户名</th>
             <th>角色</th>
@@ -164,9 +164,9 @@ function UsersPanel() {
         <tbody>
           {users.map((u) => (
             <tr key={u.id} className="border-t border-white/5">
-              <td className="py-2 text-white">{u.username}</td>
-              <td className="text-slate-300">{u.role}</td>
-              <td className="text-slate-400">
+              <td className="py-2 text-ink-600">{u.username}</td>
+              <td className="text-ink-100">{u.role}</td>
+              <td className="text-ink-50">
                 {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '从未登录'}
               </td>
               <td className="py-2 text-right">

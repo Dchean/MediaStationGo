@@ -130,7 +130,7 @@ export function PlayerPage() {
     <div className="-m-6 flex min-h-screen flex-col bg-black md:-m-8">
       <button
         onClick={() => navigate(-1)}
-        className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-sm text-white backdrop-blur transition hover:bg-black/80"
+        className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-sm text-ink-600 backdrop-blur transition hover:bg-black/80"
       >
         <ArrowLeft size={16} /> 返回
       </button>
@@ -142,7 +142,7 @@ export function PlayerPage() {
           params.set('mode', next)
           setParams(params, { replace: true })
         }}
-        className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-sm text-white backdrop-blur transition hover:bg-black/80"
+        className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-sm text-ink-600 backdrop-blur transition hover:bg-black/80"
         title="切换播放模式"
       >
         {mode === 'hls' ? (
@@ -189,7 +189,7 @@ export function PlayerPage() {
             ))}
           </video>
         ) : (
-          <p className="text-slate-500">加载中…</p>
+          <p className="text-sand-500">加载中…</p>
         )}
       </div>
     </div>

@@ -43,10 +43,10 @@ export function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold text-white">个人资料</h1>
+      <h1 className="font-display text-3xl font-bold text-ink-600">个人资料</h1>
 
       <form onSubmit={onProfile} className="glass-panel space-y-4">
-        <h2 className="font-display text-lg font-semibold text-white">基本信息</h2>
+        <h2 className="font-display text-lg font-semibold text-ink-600">基本信息</h2>
         <Field label="用户名">
           <input className="input-base" value={user?.username ?? ''} disabled />
         </Field>
@@ -74,7 +74,7 @@ export function ProfilePage() {
       </form>
 
       <form onSubmit={onPwd} className="glass-panel space-y-4">
-        <h2 className="font-display text-lg font-semibold text-white">修改密码</h2>
+        <h2 className="font-display text-lg font-semibold text-ink-600">修改密码</h2>
         <Field label="当前密码">
           <input
             required
@@ -107,7 +107,7 @@ export function ProfilePage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm text-slate-300">{label}</span>
+      <span className="mb-1 block text-sm text-ink-100">{label}</span>
       {children}
     </label>
   )

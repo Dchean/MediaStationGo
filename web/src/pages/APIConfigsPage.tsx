@@ -25,17 +25,17 @@ export function APIConfigsPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <KeyRound className="h-6 w-6 text-primary-400" />
+        <KeyRound className="h-6 w-6 text-brand-500" />
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">外部 API 配置</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-display text-3xl font-bold text-ink-600">外部 API 配置</h1>
+          <p className="text-sm text-ink-50">
             管理 TMDb / Bangumi / TheTVDB / Fanart / OpenAI / Douban 的密钥。
             后端使用 AES-GCM 加密存储,数据库泄漏时密钥仍然安全。
           </p>
         </div>
       </header>
 
-      {loading && <p className="text-slate-500">加载中…</p>}
+      {loading && <p className="text-sand-500">加载中…</p>}
 
       <div className="space-y-3">
         {items.map((item) => (
@@ -87,19 +87,19 @@ function ProviderCard({ item, onUpdated }: { item: APIConfig; onUpdated: () => v
   return (
     <form onSubmit={submit} className="glass-panel grid gap-3 md:grid-cols-[1fr_2fr]">
       <div>
-        <p className="font-display text-lg font-semibold text-white">{item.provider}</p>
+        <p className="font-display text-lg font-semibold text-ink-600">{item.provider}</p>
         {item.description && (
-          <p className="text-xs text-slate-400">{item.description}</p>
+          <p className="text-xs text-ink-50">{item.description}</p>
         )}
-        <p className="mt-2 text-xs text-slate-500">
-          状态: {item.has_key ? <span className="text-emerald-400">已配置</span> : <span className="text-slate-500">未配置</span>}
+        <p className="mt-2 text-xs text-sand-500">
+          状态: {item.has_key ? <span className="text-emerald-400">已配置</span> : <span className="text-sand-500">未配置</span>}
           {item.has_key && (
-            <span className="ml-2 font-mono text-primary-400">{item.masked_key}</span>
+            <span className="ml-2 font-mono text-brand-500">{item.masked_key}</span>
           )}
         </p>
       </div>
       <div className="space-y-2">
-        <label className="block text-xs text-slate-400">
+        <label className="block text-xs text-ink-50">
           API Key (留空保留原值)
           <input
             className="input-base mt-1"
@@ -109,7 +109,7 @@ function ProviderCard({ item, onUpdated }: { item: APIConfig; onUpdated: () => v
             onChange={(e) => setAPIKey(e.target.value)}
           />
         </label>
-        <label className="block text-xs text-slate-400">
+        <label className="block text-xs text-ink-50">
           Base URL (可选)
           <input
             className="input-base mt-1"
@@ -118,7 +118,7 @@ function ProviderCard({ item, onUpdated }: { item: APIConfig; onUpdated: () => v
             onChange={(e) => setBaseURL(e.target.value)}
           />
         </label>
-        <label className="inline-flex items-center gap-2 text-xs text-slate-400">
+        <label className="inline-flex items-center gap-2 text-xs text-ink-50">
           <input
             type="checkbox"
             checked={enabled}
@@ -133,7 +133,7 @@ function ProviderCard({ item, onUpdated }: { item: APIConfig; onUpdated: () => v
           <button
             type="button"
             onClick={testKey}
-            className="neon-button !text-xs !border-slate-400/40 !text-slate-300"
+            className="neon-button !text-xs !border-sand-400/40 !text-ink-100"
           >
             <Eye size={12} /> 状态
           </button>

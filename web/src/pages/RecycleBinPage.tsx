@@ -21,18 +21,18 @@ export function RecycleBinPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold text-white">回收站</h1>
-      <p className="text-sm text-slate-400">
+      <h1 className="font-display text-3xl font-bold text-ink-600">回收站</h1>
+      <p className="text-sm text-ink-50">
         软删除的媒体保留在数据库中,可以恢复。彻底删除不会移除磁盘上的文件,只会从数据库清除条目。
       </p>
 
-      {loading && <p className="text-slate-500">加载中…</p>}
-      {!loading && items.length === 0 && <p className="text-slate-400">回收站为空。</p>}
+      {loading && <p className="text-sand-500">加载中…</p>}
+      {!loading && items.length === 0 && <p className="text-ink-50">回收站为空。</p>}
 
       {items.length > 0 && (
         <div className="glass-panel">
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-sand-500">
               <tr>
                 <th className="py-2">标题</th>
                 <th>路径</th>
@@ -42,13 +42,13 @@ export function RecycleBinPage() {
             <tbody>
               {items.map((m) => (
                 <tr key={m.id} className="border-t border-white/5">
-                  <td className="py-2 text-white">{m.title}</td>
-                  <td className="max-w-md truncate text-slate-400" title={m.path}>
+                  <td className="py-2 text-ink-600">{m.title}</td>
+                  <td className="max-w-md truncate text-ink-50" title={m.path}>
                     {m.path}
                   </td>
                   <td className="space-x-2 py-2 text-right">
                     <button
-                      className="rounded border border-primary-400/40 px-2 py-1 text-xs text-primary-400 hover:bg-primary-400/10"
+                      className="rounded border border-primary-400/40 px-2 py-1 text-xs text-brand-500 hover:bg-primary-400/10"
                       onClick={async () => {
                         await recycleAPI.restore(m.id)
                         toast.success('已恢复')

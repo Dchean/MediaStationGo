@@ -43,8 +43,8 @@ export function StatsPage() {
     }
   }, [])
 
-  if (loading) return <p className="text-slate-500">加载中…</p>
-  if (!snap) return <p className="text-slate-500">无法获取统计数据</p>
+  if (loading) return <p className="text-sand-500">加载中…</p>
+  if (!snap) return <p className="text-sand-500">无法获取统计数据</p>
 
   const memPct =
     snap.hardware.memory_total > 0
@@ -58,8 +58,8 @@ export function StatsPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="font-display text-3xl font-bold text-white">运行状态</h1>
-        <p className="text-sm text-slate-400">
+        <h1 className="font-display text-3xl font-bold text-ink-600">运行状态</h1>
+        <p className="text-sm text-ink-50">
           快照时间:{new Date(snap.generated_at).toLocaleString()}
         </p>
       </header>
@@ -76,7 +76,7 @@ export function StatsPage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="font-display text-xl font-semibold text-white">系统</h2>
+        <h2 className="font-display text-xl font-semibold text-ink-600">系统</h2>
         <div className="glass-panel grid gap-2 text-sm">
           <Row label="Go 运行时" value={snap.hardware.go_version} />
           <Row label="Goroutines" value={snap.hardware.goroutines.toLocaleString()} />
@@ -93,7 +93,7 @@ export function StatsPage() {
 
       {snap.recently_added.length > 0 && (
         <section className="space-y-3">
-          <h2 className="font-display text-xl font-semibold text-white">最近入库</h2>
+          <h2 className="font-display text-xl font-semibold text-ink-600">最近入库</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {snap.recently_added.map((m) => (
               <MediaCard key={m.id} media={m} />
@@ -116,12 +116,12 @@ function Tile({
 }) {
   return (
     <div className="glass-panel flex items-center gap-3 !p-4">
-      <div className="rounded-lg border border-primary-400/40 bg-primary-400/10 p-2 text-primary-400">
+      <div className="rounded-lg border border-primary-400/40 bg-primary-400/10 p-2 text-brand-500">
         {icon}
       </div>
       <div>
-        <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
-        <p className="font-display text-lg font-semibold text-white">{value}</p>
+        <p className="text-xs uppercase tracking-wider text-sand-500">{label}</p>
+        <p className="font-display text-lg font-semibold text-ink-600">{value}</p>
       </div>
     </div>
   )
@@ -130,8 +130,8 @@ function Tile({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between border-b border-white/5 pb-1 text-sm last:border-0">
-      <span className="text-slate-400">{label}</span>
-      <span className="font-mono text-white">{value}</span>
+      <span className="text-ink-50">{label}</span>
+      <span className="font-mono text-ink-600">{value}</span>
     </div>
   )
 }

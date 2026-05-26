@@ -16,8 +16,8 @@ export function StorageConfigPage() {
           <Cloud size={20} />
         </div>
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">外部存储</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-display text-3xl font-bold text-ink-600">外部存储</h1>
+          <p className="text-sm text-ink-50">
             配置 Alist / S3 / WebDAV 后端,支持密码加密存储 + 在线测试
           </p>
         </div>
@@ -31,8 +31,8 @@ export function StorageConfigPage() {
             className={
               'border-b-2 px-4 py-2 text-sm uppercase ' +
               (active === t
-                ? 'border-primary-400 text-primary-400'
-                : 'border-transparent text-slate-400 hover:text-white')
+                ? 'border-primary-400 text-brand-500'
+                : 'border-transparent text-ink-50 hover:text-white')
             }
           >
             {t}
@@ -135,7 +135,7 @@ function StorageForm({ type }: { type: StorageType }) {
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12 text-slate-400">
+      <div className="flex justify-center py-12 text-ink-50">
         <Loader2 className="animate-spin" />
       </div>
     )
@@ -145,9 +145,9 @@ function StorageForm({ type }: { type: StorageType }) {
     <form onSubmit={onSave} className="glass-panel space-y-4">
       {fields.map((f) => (
         <label key={f.key} className="block">
-          <span className="mb-1 block text-sm text-slate-300">
+          <span className="mb-1 block text-sm text-ink-100">
             {f.label}
-            <span className="ml-2 font-mono text-[10px] text-slate-600">{f.key}</span>
+            <span className="ml-2 font-mono text-[10px] text-sand-400">{f.key}</span>
           </span>
           <input
             type={f.secret ? 'password' : 'text'}
@@ -158,7 +158,7 @@ function StorageForm({ type }: { type: StorageType }) {
           />
         </label>
       ))}
-      <label className="flex items-center gap-2 text-sm text-slate-300">
+      <label className="flex items-center gap-2 text-sm text-ink-100">
         <input
           type="checkbox"
           className="h-4 w-4 accent-primary-400"
@@ -172,7 +172,7 @@ function StorageForm({ type }: { type: StorageType }) {
           type="button"
           onClick={onTest}
           disabled={testing}
-          className="rounded border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
+          className="rounded border border-white/10 px-4 py-2 text-sm text-ink-100 hover:bg-white/5"
         >
           {testing ? <Loader2 size={14} className="inline animate-spin" /> : <Send size={14} className="inline" />}
           {' '}测试

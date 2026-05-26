@@ -40,8 +40,8 @@ export function SubscriptionsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold text-white">RSS 订阅</h1>
-      <p className="text-sm text-slate-400">
+      <h1 className="font-display text-3xl font-bold text-ink-600">RSS 订阅</h1>
+      <p className="text-sm text-ink-50">
         定期轮询 RSS 源(每 10 分钟一次),将匹配过滤器的项目自动加入下载队列。
       </p>
 
@@ -71,13 +71,13 @@ export function SubscriptionsPage() {
         </button>
       </form>
 
-      {loading && <p className="text-slate-500">加载中…</p>}
-      {!loading && items.length === 0 && <p className="text-slate-400">暂无订阅。</p>}
+      {loading && <p className="text-sand-500">加载中…</p>}
+      {!loading && items.length === 0 && <p className="text-ink-50">暂无订阅。</p>}
 
       {items.length > 0 && (
         <div className="glass-panel">
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-sand-500">
               <tr>
                 <th className="py-2">名称</th>
                 <th>RSS</th>
@@ -89,17 +89,17 @@ export function SubscriptionsPage() {
             <tbody>
               {items.map((s) => (
                 <tr key={s.id} className="border-t border-white/5">
-                  <td className="py-2 text-white">{s.name}</td>
-                  <td className="max-w-md truncate text-slate-300" title={s.feed_url}>
+                  <td className="py-2 text-ink-600">{s.name}</td>
+                  <td className="max-w-md truncate text-ink-100" title={s.feed_url}>
                     {s.feed_url}
                   </td>
-                  <td className="text-slate-300">{s.filter || '—'}</td>
-                  <td className="text-slate-500">
+                  <td className="text-ink-100">{s.filter || '—'}</td>
+                  <td className="text-sand-500">
                     {s.last_run_at ? new Date(s.last_run_at).toLocaleString() : '—'}
                   </td>
                   <td className="space-x-2 py-2 text-right">
                     <button
-                      className="rounded border border-primary-400/40 px-2 py-1 text-xs text-primary-400 hover:bg-primary-400/10"
+                      className="rounded border border-primary-400/40 px-2 py-1 text-xs text-brand-500 hover:bg-primary-400/10"
                       onClick={async () => {
                         const r = await subscriptionsAPI.runNow(s.id)
                         toast.success(`已加入 ${r.queued} 项`)

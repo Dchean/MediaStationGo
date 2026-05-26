@@ -72,8 +72,8 @@ export function ProfileManagementPage() {
             <UserCog size={20} />
           </div>
           <div>
-            <h1 className="font-display text-3xl font-bold text-white">观影 Profile</h1>
-            <p className="text-sm text-slate-400">
+            <h1 className="font-display text-3xl font-bold text-ink-600">观影 Profile</h1>
+            <p className="text-sm text-ink-50">
               为不同场景(儿童 / 影院 / 成人)定义独立的内容分级和媒体库访问规则
             </p>
           </div>
@@ -84,7 +84,7 @@ export function ProfileManagementPage() {
       </div>
 
       {loading && (
-        <div className="flex justify-center py-12 text-slate-400">
+        <div className="flex justify-center py-12 text-ink-50">
           <Loader2 className="animate-spin" />
         </div>
       )}
@@ -92,8 +92,8 @@ export function ProfileManagementPage() {
       {!loading && profiles.length === 0 && (
         <div className="glass-panel py-12 text-center">
           <div className="mb-2 text-4xl">👤</div>
-          <p className="font-medium text-white">暂无 Profile</p>
-          <p className="text-sm text-slate-400">点击右上角"创建 Profile"开始</p>
+          <p className="font-medium text-ink-600">暂无 Profile</p>
+          <p className="text-sm text-ink-50">点击右上角"创建 Profile"开始</p>
         </div>
       )}
 
@@ -149,7 +149,7 @@ function ProfileCard({
     <div className="glass-panel flex items-start justify-between gap-4">
       <div className="flex min-w-0 items-start gap-3">
         <div
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold text-ink-600"
           style={{
             background: `hsl(${(profile.name.charCodeAt(0) * 47) % 360}, 60%, 35%)`,
           }}
@@ -158,9 +158,9 @@ function ProfileCard({
         </div>
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-white">{profile.name}</span>
+            <span className="font-semibold text-ink-600">{profile.name}</span>
             {profile.is_default && (
-              <span className="rounded bg-primary-400/20 px-2 py-0.5 text-xs text-primary-400">
+              <span className="rounded bg-primary-400/20 px-2 py-0.5 text-xs text-brand-500">
                 默认
               </span>
             )}
@@ -175,12 +175,12 @@ function ProfileCard({
               </span>
             )}
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-50">
             {profile.content_rating_limit && <span>分级: {profile.content_rating_limit}</span>}
             <span>媒体库: {libNames}</span>
             <span>用户: {profile.user_id.slice(0, 8)}…</span>
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-sand-500">
             观看时长 {Math.round(profile.total_watch_time / 3600)} 小时
             {profile.last_active_at && ` · 最近活跃 ${new Date(profile.last_active_at).toLocaleDateString()}`}
           </div>
@@ -189,7 +189,7 @@ function ProfileCard({
       <div className="flex shrink-0 gap-2">
         <button
           onClick={onEdit}
-          className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300 hover:border-primary-400/40 hover:text-primary-400"
+          className="rounded border border-white/10 px-2 py-1 text-xs text-ink-100 hover:border-primary-400/40 hover:text-brand-500"
         >
           <Pencil size={12} className="inline" /> 编辑
         </button>
@@ -267,7 +267,7 @@ function ProfileFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="glass-panel w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="mb-4 font-display text-xl font-semibold text-white">
+        <h2 className="mb-4 font-display text-xl font-semibold text-ink-600">
           {editing ? '编辑 Profile' : '创建 Profile'}
         </h2>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -388,15 +388,15 @@ function ProfileFormModal({
                   className={
                     'rounded-full border px-3 py-1 text-xs ' +
                     (form.allowed_library_ids.includes(l.id)
-                      ? 'border-primary-400/60 bg-primary-400/10 text-primary-400'
-                      : 'border-white/10 text-slate-400 hover:text-white')
+                      ? 'border-primary-400/60 bg-primary-400/10 text-brand-500'
+                      : 'border-white/10 text-ink-50 hover:text-white')
                   }
                 >
                   {l.name}
                 </button>
               ))}
               {libraries.length === 0 && (
-                <span className="text-xs text-slate-500">暂无媒体库</span>
+                <span className="text-xs text-sand-500">暂无媒体库</span>
               )}
             </div>
           </Field>
@@ -405,7 +405,7 @@ function ProfileFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
+              className="rounded border border-white/10 px-4 py-2 text-sm text-ink-100 hover:bg-white/5"
             >
               取消
             </button>
@@ -423,7 +423,7 @@ function ProfileFormModal({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm text-slate-300">{label}</span>
+      <span className="mb-1 block text-sm text-ink-100">{label}</span>
       {children}
     </label>
   )
@@ -443,8 +443,8 @@ function Toggle({
   return (
     <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2">
       <div>
-        <div className="text-sm text-white">{label}</div>
-        {hint && <div className="text-xs text-slate-400">{hint}</div>}
+        <div className="text-sm text-ink-600">{label}</div>
+        {hint && <div className="text-xs text-ink-50">{hint}</div>}
       </div>
       <input
         type="checkbox"

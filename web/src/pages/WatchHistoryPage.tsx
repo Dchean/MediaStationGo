@@ -29,13 +29,13 @@ export function WatchHistoryPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <Clock className="h-6 w-6 text-primary-400" />
-        <h1 className="font-display text-3xl font-bold text-white">观看历史</h1>
+        <Clock className="h-6 w-6 text-brand-500" />
+        <h1 className="font-display text-3xl font-bold text-ink-600">观看历史</h1>
       </header>
 
-      {loading && <p className="text-slate-500">加载中…</p>}
+      {loading && <p className="text-sand-500">加载中…</p>}
       {!loading && items.length === 0 && (
-        <p className="text-slate-400">暂无观看记录。</p>
+        <p className="text-ink-50">暂无观看记录。</p>
       )}
 
       <div className="space-y-3">
@@ -62,11 +62,11 @@ export function WatchHistoryPage() {
               <div className="flex-1 space-y-1">
                 <Link
                   to={`/media/${m.id}`}
-                  className="font-medium text-white transition hover:text-primary-400"
+                  className="font-medium text-ink-600 transition hover:text-brand-500"
                 >
                   {m.title}
                 </Link>
-                <div className="flex items-center gap-3 text-xs text-slate-400">
+                <div className="flex items-center gap-3 text-xs text-ink-50">
                   <span>{fmtDuration(h.position_ms)} / {fmtDuration(h.duration_ms)}</span>
                   <span>{new Date(h.watched_at).toLocaleString()}</span>
                   {h.completed && (

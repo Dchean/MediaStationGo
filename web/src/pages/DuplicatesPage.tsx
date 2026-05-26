@@ -54,10 +54,10 @@ export function DuplicatesPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <Copy className="h-6 w-6 text-primary-400" />
+        <Copy className="h-6 w-6 text-brand-500" />
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">重复文件</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-display text-3xl font-bold text-ink-600">重复文件</h1>
+          <p className="text-sm text-ink-50">
             通过稀疏采样 MD5(头部 / 中部 / 尾部各 1 MiB + 文件大小)检测重复媒体,
             同一组中保留刮削过的较大文件作为主条目,其余标记为重复。
           </p>
@@ -86,19 +86,19 @@ export function DuplicatesPage() {
       </div>
 
       {report && report.groups_found === 0 && (
-        <p className="text-slate-400">扫描了 {report.total_scanned} 项,未发现重复。</p>
+        <p className="text-ink-50">扫描了 {report.total_scanned} 项,未发现重复。</p>
       )}
 
       {report && report.groups.map((g) => (
         <section key={g.hash} className="glass-panel space-y-2">
           <div className="flex items-center justify-between">
-            <p className="font-mono text-xs text-slate-500">{g.hash}</p>
+            <p className="font-mono text-xs text-sand-500">{g.hash}</p>
             <span className="rounded border border-emerald-400/40 px-2 py-0.5 text-xs text-emerald-400">
               主条目
             </span>
           </div>
-          <p className="font-medium text-white">{g.primary.title}</p>
-          <p className="font-mono text-xs text-slate-400">
+          <p className="font-medium text-ink-600">{g.primary.title}</p>
+          <p className="font-mono text-xs text-ink-50">
             {g.primary.path} · {fmtBytes(g.primary.size_bytes)}
           </p>
           <div className="space-y-1 border-t border-white/5 pt-2">
@@ -106,8 +106,8 @@ export function DuplicatesPage() {
               重复 ({g.duplicates.length})
             </p>
             {g.duplicates.map((d) => (
-              <div key={d.id} className="text-xs text-slate-400">
-                <span className="text-white">{d.title}</span> · {d.path} · {fmtBytes(d.size_bytes)}
+              <div key={d.id} className="text-xs text-ink-50">
+                <span className="font-medium text-ink-600">{d.title}</span> · {d.path} · {fmtBytes(d.size_bytes)}
               </div>
             ))}
           </div>

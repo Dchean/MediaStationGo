@@ -49,8 +49,8 @@ export function FileManagerPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-display text-3xl font-bold text-white">文件浏览器</h1>
-        <p className="text-sm text-slate-400">
+        <h1 className="font-display text-3xl font-bold text-ink-600">文件浏览器</h1>
+        <p className="text-sm text-ink-50">
           只允许访问已配置的根目录(媒体库 + data + cache)。
         </p>
       </header>
@@ -72,13 +72,13 @@ export function FileManagerPage() {
           </button>
         )}
         {data?.path && (
-          <span className="rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-slate-300">
+          <span className="rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-xs text-ink-100">
             {data.path}
           </span>
         )}
       </div>
 
-      {loading && <p className="text-slate-500">加载中…</p>}
+      {loading && <p className="text-sand-500">加载中…</p>}
       {error && <div className="glass-panel !border-red-400/40 text-red-400">{error}</div>}
 
       {!loading && data && !data.entries && data.roots && (
@@ -89,10 +89,10 @@ export function FileManagerPage() {
               onClick={() => setPath(r.path)}
               className="glass-panel flex items-center gap-3 text-left transition hover:border-primary-400/40"
             >
-              <FolderOpen size={20} className="text-primary-400" />
+              <FolderOpen size={20} className="text-brand-500" />
               <div>
-                <p className="font-mono text-sm text-white">{r.label}</p>
-                <p className="font-mono text-xs text-slate-400">{r.path}</p>
+                <p className="font-mono text-sm text-ink-600">{r.label}</p>
+                <p className="font-mono text-xs text-ink-50">{r.path}</p>
               </div>
             </button>
           ))}
@@ -102,7 +102,7 @@ export function FileManagerPage() {
       {!loading && data?.entries && data.entries.length > 0 && (
         <div className="glass-panel">
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-sand-500">
               <tr>
                 <th className="py-2">名称</th>
                 <th>大小</th>
@@ -117,16 +117,16 @@ export function FileManagerPage() {
                   onClick={() => enter(e)}
                   title={e.path}
                 >
-                  <td className="flex items-center gap-2 py-2 text-white">
+                  <td className="flex items-center gap-2 py-2 text-ink-600">
                     {e.is_dir ? (
-                      <Folder size={16} className="text-primary-400" />
+                      <Folder size={16} className="text-brand-500" />
                     ) : (
-                      <FileVideo size={16} className="text-slate-400" />
+                      <FileVideo size={16} className="text-ink-50" />
                     )}
                     {e.name}
                   </td>
-                  <td className="text-slate-300">{e.is_dir ? '—' : fmtBytes(e.size)}</td>
-                  <td className="text-slate-500">
+                  <td className="text-ink-100">{e.is_dir ? '—' : fmtBytes(e.size)}</td>
+                  <td className="text-sand-500">
                     {new Date(e.modified * 1000).toLocaleString()}
                   </td>
                 </tr>
@@ -137,7 +137,7 @@ export function FileManagerPage() {
       )}
 
       {!loading && data?.entries && data.entries.length === 0 && (
-        <p className="text-slate-400">空目录。</p>
+        <p className="text-ink-50">空目录。</p>
       )}
     </div>
   )

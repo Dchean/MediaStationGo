@@ -30,7 +30,7 @@ const SITE_TYPE_COLORS: Record<string, string> = {
   unit3d: 'bg-orange-500/15 text-orange-400',
   mteam: 'bg-green-500/15 text-green-400',
   discuz: 'bg-yellow-500/15 text-yellow-400',
-  custom_rss: 'bg-slate-500/15 text-slate-400',
+  custom_rss: 'bg-sand-500/15 text-ink-50',
 }
 
 const AUTH_TYPE_LABELS: Record<string, string> = {
@@ -237,7 +237,7 @@ export function SitesPage() {
     <div className="space-y-6">
       {/* 页头 */}
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-3xl font-bold text-white">站点管理</h1>
+        <h1 className="font-display text-3xl font-bold text-ink-600">站点管理</h1>
         <button onClick={openCreate} className="neon-button flex items-center gap-2">
           <Plus size={16} />
           添加站点
@@ -251,12 +251,12 @@ export function SitesPage() {
             {/* 头部 */}
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2 min-w-0">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${SITE_TYPE_COLORS[site.type] || 'bg-slate-500/15 text-slate-400'}`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${SITE_TYPE_COLORS[site.type] || 'bg-sand-500/15 text-ink-50'}`}>
                   {SITE_TYPE_ABBR[site.type] || '?'}
                 </div>
                 <div className="min-w-0">
-                  <div className="font-medium text-white truncate">{site.name}</div>
-                  <div className="text-xs text-slate-400 truncate max-w-[160px]">{site.url}</div>
+                  <div className="font-medium text-ink-600 truncate">{site.name}</div>
+                  <div className="text-xs text-ink-50 truncate max-w-[160px]">{site.url}</div>
                 </div>
               </div>
               {/* 状态指示 */}
@@ -268,22 +268,22 @@ export function SitesPage() {
                     <CheckCircle size={14} className="text-green-400" />
                   )
                 ) : (
-                  <HelpCircle size={14} className="text-slate-500" />
+                  <HelpCircle size={14} className="text-sand-500" />
                 )}
-                {!site.enabled && <span className="text-xs text-slate-500 ml-1">已停用</span>}
+                {!site.enabled && <span className="text-xs text-sand-500 ml-1">已停用</span>}
               </div>
             </div>
 
             {/* 标签 */}
             <div className="flex flex-wrap gap-1.5">
-              <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-slate-400">
+              <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-ink-50">
                 {SITE_TYPE_LABELS[site.type] || site.type}
               </span>
-              <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-slate-400">
+              <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-ink-50">
                 {AUTH_TYPE_LABELS[site.auth_type] || site.auth_type}
               </span>
               {site.is_default && (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-primary-400/15 text-primary-400">默认</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-primary-400/15 text-brand-500">默认</span>
               )}
               {site.use_proxy && (
                 <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">代理</span>
@@ -297,11 +297,11 @@ export function SitesPage() {
             </div>
 
             {/* 状态与统计（只读） */}
-            <div className="text-xs text-slate-500 space-y-0.5">
+            <div className="text-xs text-sand-500 space-y-0.5">
               <div>状态：
                 <span className={
                   site.login_status === 'ok' ? 'text-green-400' :
-                  site.login_status === 'failed' ? 'text-red-400' : 'text-slate-400'
+                  site.login_status === 'failed' ? 'text-red-400' : 'text-ink-50'
                 }>
                   {site.login_status || 'unknown'}
                 </span>
@@ -319,7 +319,7 @@ export function SitesPage() {
               <button
                 onClick={() => handleTest(site.id)}
                 disabled={testingId === site.id}
-                className="flex-1 rounded border border-white/10 px-2 py-1.5 text-xs text-slate-300 hover:bg-white/5 disabled:opacity-50 flex items-center justify-center gap-1 transition"
+                className="flex-1 rounded border border-white/10 px-2 py-1.5 text-xs text-ink-100 hover:bg-white/5 disabled:opacity-50 flex items-center justify-center gap-1 transition"
               >
                 {testingId === site.id ? (
                   <>
@@ -335,14 +335,14 @@ export function SitesPage() {
               </button>
               <button
                 onClick={() => openEdit(site.id)}
-                className="rounded border border-white/10 p-1.5 text-slate-400 hover:text-white hover:bg-white/5 transition"
+                className="rounded border border-white/10 p-1.5 text-ink-50 hover:text-white hover:bg-white/5 transition"
                 title="编辑"
               >
                 <Edit3 size={14} />
               </button>
               <button
                 onClick={() => handleDelete(site)}
-                className="rounded border border-white/10 p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-400/10 transition"
+                className="rounded border border-white/10 p-1.5 text-ink-50 hover:text-red-400 hover:bg-red-400/10 transition"
                 title="删除"
               >
                 <Trash2 size={14} />
@@ -353,16 +353,16 @@ export function SitesPage() {
 
         {/* 空状态 */}
         {!loading && sites.length === 0 && (
-          <div className="col-span-full py-12 text-center text-slate-400">
-            <Globe size={40} className="mx-auto mb-3 text-slate-600" />
+          <div className="col-span-full py-12 text-center text-ink-50">
+            <Globe size={40} className="mx-auto mb-3 text-sand-400" />
             <p>暂无站点</p>
-            <p className="text-sm mt-1 text-slate-500">点击「添加站点」添加 PT/BT 站点</p>
+            <p className="text-sm mt-1 text-sand-500">点击「添加站点」添加 PT/BT 站点</p>
           </div>
         )}
 
         {/* 加载中 */}
         {loading && (
-          <div className="col-span-full py-12 text-center text-slate-400">
+          <div className="col-span-full py-12 text-center text-ink-50">
             <RefreshCw size={24} className="mx-auto mb-3 animate-spin" />
             <p>加载中...</p>
           </div>
@@ -378,10 +378,10 @@ export function SitesPage() {
           >
             {/* 标题栏 */}
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">
+              <h2 className="text-lg font-bold text-ink-600">
                 {editingId ? '编辑站点' : '添加站点'}
               </h2>
-              <button onClick={closeModal} className="text-slate-400 hover:text-white transition">
+              <button onClick={closeModal} className="text-ink-50 hover:text-white transition">
                 <X size={20} />
               </button>
             </div>
@@ -389,7 +389,7 @@ export function SitesPage() {
             <form onSubmit={handleSave} className="space-y-4">
               {/* 名称 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">站点名称 *</label>
+                <label className="block text-sm text-ink-50 mb-1.5">站点名称 *</label>
                 <input
                   required
                   className="input-base w-full"
@@ -401,7 +401,7 @@ export function SitesPage() {
 
               {/* 地址 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1.5">站点地址 *</label>
+                <label className="block text-sm text-ink-50 mb-1.5">站点地址 *</label>
                 <input
                   required
                   className="input-base w-full"
@@ -409,13 +409,13 @@ export function SitesPage() {
                   value={form.url}
                   onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
                 />
-                <p className="text-xs text-slate-500 mt-1">格式: https://www.example.com/</p>
+                <p className="text-xs text-sand-500 mt-1">格式: https://www.example.com/</p>
               </div>
 
               {/* 站点类型 + 状态 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1.5">站点类型</label>
+                  <label className="block text-sm text-ink-50 mb-1.5">站点类型</label>
                   <select
                     className="input-base w-full"
                     value={form.type}
@@ -430,7 +430,7 @@ export function SitesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1.5">状态</label>
+                  <label className="block text-sm text-ink-50 mb-1.5">状态</label>
                   <div className="flex items-center gap-3 h-10">
                     <button
                       type="button"
@@ -441,7 +441,7 @@ export function SitesPage() {
                         className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${form.enabled ? 'translate-x-4' : 'translate-x-0.5'}`}
                       />
                     </button>
-                    <span className={`text-sm ${form.enabled ? 'text-white' : 'text-slate-500'}`}>
+                    <span className={`text-sm ${form.enabled ? 'text-white' : 'text-sand-500'}`}>
                       {form.enabled ? '启用' : '停用'}
                     </span>
                   </div>
@@ -452,10 +452,10 @@ export function SitesPage() {
               {form.type === 'mteam' && (
                 <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
                   <div className="text-sm font-medium text-green-400 mb-1">馒头站点配置指南</div>
-                  <div className="text-xs text-slate-400 space-y-1">
+                  <div className="text-xs text-ink-50 space-y-1">
                     <div><b>站点地址：</b><code className="text-green-300">https://api2.m-team.cc</code></div>
                     <div><b>认证方式：</b>推荐使用「API Key / Passkey」</div>
-                    <div className="pl-3 text-slate-500">
+                    <div className="pl-3 text-sand-500">
                       1. 登录馒头站 → 控制台 → 实验室 → 存取令牌<br />
                       2. 点击「创建令牌」，复制生成的 Token<br />
                       3. 将 Token 填入下方「令牌」输入框
@@ -466,7 +466,7 @@ export function SitesPage() {
 
               {/* 认证方式 */}
               <div>
-                <label className="block text-sm text-slate-400 mb-2">认证方式</label>
+                <label className="block text-sm text-ink-50 mb-2">认证方式</label>
                 <div className="flex gap-2 mb-3">
                   {[
                     { value: 'cookie', label: 'Cookie' },
@@ -479,8 +479,8 @@ export function SitesPage() {
                       onClick={() => setForm((f) => ({ ...f, auth_type: opt.value }))}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                         form.auth_type === opt.value
-                          ? 'bg-primary-500 text-white border-primary-500'
-                          : 'border-white/10 text-slate-400 hover:border-primary-500/50'
+                          ? 'bg-primary-500 text-ink-600 border-primary-500'
+                          : 'border-white/10 text-ink-50 hover:border-primary-500/50'
                       }`}
                     >
                       {opt.label}
@@ -490,7 +490,7 @@ export function SitesPage() {
 
                 {form.auth_type === 'cookie' && (
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Cookie</label>
+                    <label className="block text-xs text-ink-50 mb-1">Cookie</label>
                     <textarea
                       rows={3}
                       className="input-base w-full resize-none text-xs font-mono"
@@ -498,13 +498,13 @@ export function SitesPage() {
                       value={form.cookie}
                       onChange={(e) => setForm((f) => ({ ...f, cookie: e.target.value }))}
                     />
-                    <p className="text-xs text-slate-500 mt-1">从浏览器开发者工具的请求头中获取 Cookie 值</p>
+                    <p className="text-xs text-sand-500 mt-1">从浏览器开发者工具的请求头中获取 Cookie 值</p>
                   </div>
                 )}
 
                 {form.auth_type === 'api_key' && (
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">令牌（API Key / Passkey）</label>
+                    <label className="block text-xs text-ink-50 mb-1">令牌（API Key / Passkey）</label>
                     <input
                       type="password"
                       className="input-base w-full font-mono text-sm"
@@ -512,7 +512,7 @@ export function SitesPage() {
                       value={form.api_key}
                       onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
                     />
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-sand-500 mt-1">
                       {form.type === 'mteam'
                         ? '馒头：控制台 → 实验室 → 存取令牌'
                         : '站点的访问 API Key'}
@@ -522,7 +522,7 @@ export function SitesPage() {
 
                 {form.auth_type === 'auth_header' && (
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">请求头（Authorization）</label>
+                    <label className="block text-xs text-ink-50 mb-1">请求头（Authorization）</label>
                     <input
                       className="input-base w-full font-mono text-xs"
                       placeholder="Bearer eyJhbGciOiJIUzI1NiIs..."
@@ -534,14 +534,14 @@ export function SitesPage() {
 
                 {/* RSS 地址（主表单） */}
                 <div className="mt-4">
-                  <label className="block text-xs text-slate-400 mb-1">RSS 地址</label>
+                  <label className="block text-xs text-ink-50 mb-1">RSS 地址</label>
                   <input
                     className="input-base w-full text-xs font-mono"
                     placeholder="https://.../torrents/rss?..."
                     value={form.rss_url}
                     onChange={(e) => setForm((f) => ({ ...f, rss_url: e.target.value }))}
                   />
-                  <p className="text-xs text-slate-500 mt-1">站点 RSS 订阅地址，用于获取最新资源</p>
+                  <p className="text-xs text-sand-500 mt-1">站点 RSS 订阅地址，用于获取最新资源</p>
                 </div>
               </div>
 
@@ -550,7 +550,7 @@ export function SitesPage() {
                 <button
                   type="button"
                   onClick={() => setAdvancedOpen(!advancedOpen)}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition"
+                  className="flex items-center gap-1 text-xs text-ink-50 hover:text-white transition"
                 >
                   {advancedOpen ? '▾' : '▸'} 高级选项
                 </button>
@@ -559,7 +559,7 @@ export function SitesPage() {
                     {/* 新增高级字段 */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">User-Agent</label>
+                        <label className="block text-xs text-ink-50 mb-1">User-Agent</label>
                         <input
                           className="input-base w-full text-xs"
                           placeholder="自定义 UA，留空使用默认"
@@ -568,7 +568,7 @@ export function SitesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">请求超时 (秒)</label>
+                        <label className="block text-xs text-ink-50 mb-1">请求超时 (秒)</label>
                         <input
                           type="number"
                           className="input-base w-full"
@@ -579,7 +579,7 @@ export function SitesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">优先级 (数字越大越优先)</label>
+                        <label className="block text-xs text-ink-50 mb-1">优先级 (数字越大越优先)</label>
                         <input
                           type="number"
                           className="input-base w-full"
@@ -590,7 +590,7 @@ export function SitesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">关联下载器</label>
+                        <label className="block text-xs text-ink-50 mb-1">关联下载器</label>
                         <input
                           className="input-base w-full text-xs"
                           placeholder="下载器 ID 或名称"
@@ -609,7 +609,7 @@ export function SitesPage() {
                           checked={form.use_proxy}
                           onChange={(e) => setForm((f) => ({ ...f, use_proxy: e.target.checked }))}
                         />
-                        <span className="text-xs text-slate-300">使用代理</span>
+                        <span className="text-xs text-ink-100">使用代理</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -618,7 +618,7 @@ export function SitesPage() {
                           checked={form.rate_limit}
                           onChange={(e) => setForm((f) => ({ ...f, rate_limit: e.target.checked }))}
                         />
-                        <span className="text-xs text-slate-300">启用限流</span>
+                        <span className="text-xs text-ink-100">启用限流</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -627,13 +627,13 @@ export function SitesPage() {
                           checked={form.browser_emulation}
                           onChange={(e) => setForm((f) => ({ ...f, browser_emulation: e.target.checked }))}
                         />
-                        <span className="text-xs text-slate-300">浏览器模拟</span>
+                        <span className="text-xs text-ink-100">浏览器模拟</span>
                       </label>
                     </div>
 
                     {/* Extra JSON */}
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Extra 扩展配置 (JSON)</label>
+                      <label className="block text-xs text-ink-50 mb-1">Extra 扩展配置 (JSON)</label>
                       <textarea
                         rows={3}
                         className="input-base w-full resize-none text-xs font-mono"
@@ -652,7 +652,7 @@ export function SitesPage() {
                           className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform mt-0.5 ${form.is_default ? 'translate-x-4' : 'translate-x-0.5'}`}
                         />
                       </button>
-                      <span className="text-sm text-slate-400">设为默认站点</span>
+                      <span className="text-sm text-ink-50">设为默认站点</span>
                     </div>
                   </div>
                 )}
@@ -660,7 +660,7 @@ export function SitesPage() {
 
               {/* 按钮 */}
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={closeModal} className="rounded border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5 transition">
+                <button type="button" onClick={closeModal} className="rounded border border-white/10 px-4 py-2 text-sm text-ink-100 hover:bg-white/5 transition">
                   取消
                 </button>
                 <button

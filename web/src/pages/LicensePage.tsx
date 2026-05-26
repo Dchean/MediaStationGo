@@ -102,16 +102,16 @@ export function LicensePage() {
           <KeySquare size={20} />
         </div>
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">许可证</h1>
-          <p className="text-sm text-slate-400">绑定授权密钥以解锁全部功能</p>
+          <h1 className="font-display text-3xl font-bold text-ink-600">许可证</h1>
+          <p className="text-sm text-ink-50">绑定授权密钥以解锁全部功能</p>
         </div>
       </div>
 
       {/* ── Bind Form ── */}
       <div className="glass-panel space-y-4">
         <div className="flex items-center gap-2">
-          <Link2 size={18} className="text-primary-400" />
-          <h2 className="font-display text-lg font-semibold text-white">绑定许可证</h2>
+          <Link2 size={18} className="text-brand-500" />
+          <h2 className="font-display text-lg font-semibold text-ink-600">绑定许可证</h2>
         </div>
         <form onSubmit={onBind} className="flex gap-3">
           <input
@@ -126,14 +126,14 @@ export function LicensePage() {
             绑定
           </button>
         </form>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-sand-500">
           输入从授权服务器获取的许可证密钥，激活后即可使用所有高级功能。
         </p>
       </div>
 
       {/* ── License Status ── */}
       {loadingStatus ? (
-        <div className="flex justify-center py-8 text-slate-400">
+        <div className="flex justify-center py-8 text-ink-50">
           <Loader2 className="animate-spin" />
         </div>
       ) : (
@@ -143,14 +143,14 @@ export function LicensePage() {
               {active && !isExpired ? (
                 <CheckCircle2 size={18} className="text-emerald-400" />
               ) : (
-                <XCircle size={18} className="text-slate-500" />
+                <XCircle size={18} className="text-sand-500" />
               )}
-              <h2 className="font-display text-lg font-semibold text-white">当前状态</h2>
+              <h2 className="font-display text-lg font-semibold text-ink-600">当前状态</h2>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={refreshStatus}
-                className="rounded border border-white/10 p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+                className="rounded border border-white/10 p-2 text-ink-50 hover:bg-white/5 hover:text-white"
                 title="刷新状态"
               >
                 <RefreshCw size={14} />
@@ -158,7 +158,7 @@ export function LicensePage() {
               {active && (
                 <button
                   onClick={onHeartbeat}
-                  className="rounded border border-primary-400/30 px-3 py-1.5 text-xs text-primary-400 hover:bg-primary-400/10"
+                  className="rounded border border-primary-400/30 px-3 py-1.5 text-xs text-brand-500 hover:bg-primary-400/10"
                 >
                   心跳上报
                 </button>
@@ -168,7 +168,7 @@ export function LicensePage() {
 
           {!active && (
             <div className="space-y-3 rounded-lg border border-white/5 bg-white/[0.02] p-4 text-center">
-              <p className="text-slate-400">
+              <p className="text-ink-50">
                 尚未绑定许可证。请在上方输入密钥完成激活。
               </p>
             </div>
@@ -184,8 +184,8 @@ export function LicensePage() {
                   activation.plan === 'enterprise'
                     ? 'text-amber-300'
                     : activation.plan === 'pro'
-                      ? 'text-primary-400'
-                      : 'text-slate-300'
+                      ? 'text-brand-500'
+                      : 'text-ink-100'
                 }
               />
               <StatusBadge label="设备名称" value={activation.device_name || 'Web Client'} />
@@ -212,10 +212,10 @@ export function LicensePage() {
       {/* ── Pro tip ── */}
       {!active && !loadingStatus && (
         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-5 text-center">
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-sand-500">
             需要获取许可证？请联系管理员获取 MediaStationGo 授权密钥。
           </p>
-          <p className="mt-1 text-xs text-slate-600">
+          <p className="mt-1 text-xs text-sand-400">
             授权服务器地址可在系统设置中配置
           </p>
         </div>
@@ -239,8 +239,8 @@ function StatusBadge({
 }) {
   return (
     <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-      <p className="mb-0.5 text-xs text-slate-500">{label}</p>
-      <p className={`text-sm text-white ${mono ? 'font-mono' : ''} ${className ?? ''}`}>
+      <p className="mb-0.5 text-xs text-sand-500">{label}</p>
+      <p className={`text-sm text-ink-600 ${mono ? 'font-mono' : ''} ${className ?? ''}`}>
         {value}
       </p>
     </div>

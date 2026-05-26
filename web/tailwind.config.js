@@ -1,4 +1,4 @@
-/** @type {import('tailwindcss').Config} */
+﻿/** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
@@ -9,73 +9,100 @@ export default {
         mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
       },
       colors: {
-        // ── New Warm Industrial palette ──
+        // ── Brand: Luxurious Editorial Gold ──
         brand: {
           DEFAULT: '#c9954a',
-          50:  '#fdf8f0',
-          100: '#f9edda',
-          200: '#f2d8b0',
-          300: '#e8bc7d',
-          400: '#dca45c',
+          50:  '#fdf9f4',
+          100: '#fbeedf',
+          200: '#f6dbb9',
+          300: '#efc187',
+          400: '#e5a153',
           500: '#c9954a',
-          600: '#b07a38',
-          700: '#936031',
-          800: '#794e2d',
-          900: '#654128',
-          950: '#3a2214',
+          600: '#b07f3c',
+          700: '#926630',
+          800: '#755027',
+          900: '#5e4121',
+          950: '#332110',
         },
+        // ── Sage: Muted Teal Accent ──
         sage: {
-          DEFAULT: '#7a9a8a',
-          50:  '#f3f7f4',
-          100: '#e4ece6',
-          200: '#c9d9ce',
-          300: '#a6bfad',
-          400: '#7a9a8a',
-          500: '#5e7e6e',
-          600: '#496558',
-          700: '#3c5247',
-          800: '#334339',
-          900: '#2c3831',
-          950: '#151f19',
+          DEFAULT: '#6b8275',
+          50:  '#f4f6f5',
+          100: '#e5eae7',
+          200: '#ccd7d1',
+          300: '#a3b8ad',
+          400: '#6b8275',
+          500: '#54685d',
+          600: '#425149',
+          700: '#35413a',
+          800: '#2d3531',
+          950: '#141a17',
         },
+        // ── Ink: High-Contrast Graphite / Charcoal (Elegant Light-Theme Text) ──
+        ink: {
+          DEFAULT: '#111827',
+          50:  '#6b7280', // Elegant secondary text
+          100: '#4b5563', // Main body text
+          200: '#374151', // Dark text
+          300: '#1f2937',
+          400: '#111827',
+          500: '#111827',
+          600: '#111827', // Headers
+          700: '#030712',
+          800: '#000000',
+          900: '#000000',
+        },
+        // ── Sand: High-End Swiss Slate Grays ──
+        sand: {
+          DEFAULT: '#f9fafb',
+          50:  '#ffffff', // Card base
+          100: '#f9fafb', // System body background
+          200: '#f3f4f6', // Panel base / hover background
+          300: '#e5e7eb', // Thin premium borders
+          400: '#d1d5db', // Mid-lines
+          500: '#9ca3af', // Muted placeholders
+          600: '#6b7280',
+          700: '#4b5563',
+          800: '#374151',
+          900: '#1f2937',
+        },
+        // ── Surface: Compatibility ──
         surface: {
-          DEFAULT: '#1a1a18',
-          50:  '#2e2e2a',
-          100: '#2a2a26',
-          200: '#242420',
-          300: '#1e1e1b',
-          400: '#1a1a18',
-          500: '#161614',
-          600: '#111110',
-          // Backward-compat (old 700-950 → warm charcoal)
-          700: '#242420',
-          800: '#1a1a18',
-          900: '#111110',
-          950: '#0d0d0c',
+          DEFAULT: '#ffffff',
+          50:  '#ffffff',
+          100: '#f9fafb',
+          200: '#f3f4f6',
+          300: '#e5e7eb',
+          400: '#ffffff',
+          500: '#ffffff',
+          600: '#1f2937',
+          700: '#111827',
+          800: '#030712',
+          900: '#000000',
+          950: '#000000',
         },
-        cream: {
-          DEFAULT: '#e8e4d9',
-          50:  '#faf8f4',
-          100: '#f3f0e8',
-          200: '#e8e4d9',
-          300: '#c4bfb5',
-          400: '#a09b92',
-          500: '#7d7871',
-          600: '#605c56',
-          700: '#4a4742',
-          800: '#363330',
-          900: '#242220',
-        },
-
-        // ── Backward-compat aliases (old class names → new warm colors) ──
+        // Backward compatibility colors mapped to slate-light
         primary: {
-          400: '#dca45c',  // was cyan → now brand-400
-          500: '#c9954a',  // was cyan → now brand-500
-          600: '#b07a38',  // was cyan → now brand-600
+          400: '#e5a153',
+          500: '#c9954a',
+          600: '#b07f3c',
         },
         accent: {
-          400: '#7a9a8a',  // was purple → now sage-400
-          500: '#5e7e6e',  // was purple → now sage-500
+          400: '#6b8275',
+          500: '#54685d',
+        },
+        cream: {
+          DEFAULT: '#faf9f6',
+          50:  '#ffffff',
+          100: '#faf9f6',
+          200: '#f4f3ee',
+          300: '#e8e6dc',
+          400: '#9ca3af',
+          500: '#6b7280',
+          600: '#4b5563',
+          700: '#1f2937',
+          800: '#111827',
+          900: '#000000',
         },
       },
       fontSize: {
@@ -88,24 +115,11 @@ export default {
       transitionDuration: {
         '400': '400ms',
       },
-      animation: {
-        'slide-in-left': 'slideInLeft 0.3s ease-out',
-        'fade-in': 'fadeIn 0.4s ease-out',
-        'scale-in': 'scaleIn 0.3s ease-out',
-      },
-      keyframes: {
-        slideInLeft: {
-          '0%': { opacity: '0', transform: 'translateX(-8px)' },
-          '100%': { opacity: '1', transform: 'translateX(0)' },
-        },
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
-        scaleIn: {
-          '0%': { opacity: '0', transform: 'scale(0.96)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
-        },
+      boxShadow: {
+        'card': '0 1px 3px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.01)',
+        'card-hover': '0 10px 30px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.02)',
+        'elevated': '0 20px 50px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.03)',
+        'sidebar': '1px 0 0 rgba(0,0,0,0.03)',
       },
     },
   },

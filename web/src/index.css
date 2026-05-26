@@ -1,162 +1,133 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
+html, body, #root { height: 100%; }
 
 body {
-  background-color: #111110;
-  color: #e8e4d9;
+  background-color: #f9fafb; /* Premium Swiss Editorial Light/Slate Background */
+  color: #111827;            /* Deep Graphite Charcoal Body Text */
   margin: 0;
-}
-
-/* ─── SVG 噪点纹理 ─── */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
-}
-
-/* ─── Scrollbar ─── */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #2e2e2a;
-  border-radius: 999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3a3a35;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ─── Selection ─── */
 ::selection {
-  background: rgba(201, 149, 74, 0.3);
-  color: #e8e4d9;
+  background: rgba(201, 149, 74, 0.2);
+  color: #111827;
 }
 
-/* ─── Focus ring ─── */
+/* ─── Focus Ring ─── */
 *:focus-visible {
   outline: 2px solid #c9954a;
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: 6px;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #c9954a; }
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @layer components {
-  /* ─── Surface Card — 替代 glass-panel ─── */
-  .surface-card {
-    @apply rounded-lg border border-cream-900/20 bg-surface-400 px-4 py-3;
-    /* No shadow, no blur. Pure material feel. */
+  /* ── Unified Swiss-Editorial Cards ── */
+  .card {
+    @apply rounded-2xl bg-white border border-gray-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.01),0_1px_2px_rgba(0,0,0,0.015)];
   }
-  .surface-card-elevated {
-    @apply surface-card;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  .card-hover {
+    @apply card transition-all duration-300 ease-out hover:border-gray-300 hover:shadow-[0_12px_32px_rgba(17,24,39,0.04),0_4px_12px_rgba(17,24,39,0.01)] hover:-translate-y-1;
   }
-
-  /* ─── 暖色分割线 ─── */
-  .warm-divider {
-    @apply border-t border-cream-900/15;
+  .card-elevated {
+    @apply card shadow-[0_20px_40px_rgba(17,24,39,0.05),0_1px_3px_rgba(17,24,39,0.01)];
   }
 
-  /* ─── 琥珀色按钮 — 替代 neon-button ─── */
-  .amber-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-brand-500/30
-      bg-brand-500/10 px-4 py-2 text-sm font-medium text-brand-400 transition-all
-      hover:border-brand-500/50 hover:bg-brand-500/20 hover:text-brand-300
-      active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
-  }
-  .amber-btn--solid {
-    @apply amber-btn border-transparent bg-brand-600 text-cream-100
-      hover:bg-brand-500 hover:text-white;
-  }
-  .amber-btn--ghost {
-    @apply amber-btn border-transparent bg-transparent hover:bg-cream-900/10;
-  }
-
-  /* ─── 鼠尾草按钮 ─── */
-  .sage-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-sage-400/20
-      bg-sage-400/10 px-4 py-2 text-sm font-medium text-sage-300 transition-all
-      hover:border-sage-400/40 hover:bg-sage-400/20 hover:text-sage-200
-      active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
-  }
-
-  /* ─── 表单输入 ─── */
-  .field-input {
-    @apply w-full rounded-lg border border-cream-900/20 bg-surface-600 px-4 py-2.5
-      text-sm text-cream-200 placeholder:text-cream-500/40
-      transition-colors
-      focus:border-brand-500/50 focus:bg-surface-500 focus:outline-none
-      disabled:cursor-not-allowed disabled:opacity-50;
-  }
-  .field-label {
-    @apply block text-xs font-medium uppercase tracking-wider text-cream-400 mb-1.5;
-  }
-
-  /* ─── 标签/徽章 ─── */
-  .badge {
-    @apply inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium;
-  }
-  .badge--brand {
-    @apply badge bg-brand-500/15 text-brand-400;
-  }
-  .badge--sage {
-    @apply badge bg-sage-400/15 text-sage-300;
-  }
-  .badge--neutral {
-    @apply badge bg-cream-900/20 text-cream-400;
-  }
-
-  /* ─── 页面标题 ─── */
-  .page-heading {
-    @apply font-display text-2xl font-bold tracking-tight text-cream-100;
-  }
-  .page-subtitle {
-    @apply mt-1 text-sm text-cream-400;
-  }
-
-  /* ─── 表格（管理面板用） ─── */
-  .data-table {
-    @apply w-full text-left text-sm;
-  }
-  .data-table thead {
-    @apply border-b border-cream-900/20;
-  }
-  .data-table th {
-    @apply px-4 py-3 text-xs font-medium uppercase tracking-wider text-cream-400;
-  }
-  .data-table td {
-    @apply px-4 py-3 text-cream-300;
-  }
-  .data-table tbody tr {
-    @apply border-b border-cream-900/10 transition-colors hover:bg-cream-900/5;
-  }
-
-  /* ─── 旧版兼容别名（逐步废弃） ─── */
+  /* ── Glassmorphic Bright Panels ── */
   .glass-panel {
-    @apply surface-card;
+    @apply backdrop-blur-xl bg-white/80 border border-white/50 shadow-[0_8px_32px_rgba(17,24,39,0.015)];
   }
-  .neon-button {
-    @apply amber-btn;
+  .glass-card {
+    @apply rounded-2xl backdrop-blur-lg bg-white/90 border border-white/60 shadow-[0_4px_24px_rgba(17,24,39,0.01)];
   }
-  .input-base {
-    @apply field-input;
+  .glass-card-elevated {
+    @apply rounded-2xl backdrop-blur-xl bg-white/95 border border-white/70 shadow-[0_16px_48px_rgba(17,24,39,0.03)];
   }
+
+  /* ── Input Fields Redesign ── */
+  .input-field {
+    @apply w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-sm text-gray-900
+      placeholder:text-gray-400 outline-none transition-all duration-300 ease-out
+      focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-100/50;
+  }
+  .input-label {
+    @apply block mb-1.5 text-xs font-bold uppercase tracking-widest text-gray-500;
+  }
+
+  /* ── Premium Editorial Buttons Redesign ── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#111827] px-5 py-3
+      text-sm font-bold text-white transition-all duration-300 ease-out shadow-sm
+      hover:bg-[#1f2937] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]
+      disabled:cursor-not-allowed disabled:opacity-40 disabled:translate-y-0;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+      text-sm font-semibold text-gray-600 transition-all duration-200 ease-out
+      hover:bg-gray-100 hover:text-gray-900 active:scale-[0.98];
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200/90
+      bg-white px-4 py-2.5 text-sm font-bold text-gray-700 transition-all duration-300 ease-out shadow-sm
+      hover:border-gray-300 hover:text-gray-900 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98];
+  }
+
+  /* ── Badges Redesign ── */
+  .badge {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-2xs font-bold uppercase tracking-wider;
+  }
+  .badge-brand { @apply badge bg-brand-50 text-brand-700 border border-brand-100/30; }
+  .badge-sage  { @apply badge bg-sage-50 text-sage-700 border border-sage-100/30; }
+  .badge-neutral { @apply badge bg-gray-100 text-gray-600 border border-gray-200/50; }
+
+  /* ── Page Headings ── */
+  .page-heading  { @apply font-display text-3xl font-extrabold tracking-tight text-gray-900; }
+  .page-subtitle { @apply mt-1 text-sm text-gray-500; }
+
+  /* ── Data Tables Redesign ── */
+  .data-table { @apply w-full text-left text-sm border-collapse; }
+  .data-table thead { @apply border-b border-gray-200 bg-gray-50/70; }
+  .data-table th { @apply px-5 py-4 text-xs font-bold uppercase tracking-wider text-gray-500; }
+  .data-table td { @apply px-5 py-4 text-gray-700 border-b border-gray-100; }
+  .data-table tbody tr { @apply transition-colors hover:bg-gray-50/50; }
+
+  /* ── Dividers ── */
+  .divider { @apply border-t border-gray-200/80; }
+
+  /* ── Backward Compatibility ── */
+  .surface-card { @apply card; }
+  .surface-card-elevated { @apply card-elevated; }
+  .field-input { @apply input-field; }
+  .field-label  { @apply input-label; }
+  .amber-btn { @apply btn-outline; }
+  .amber-btn--solid { @apply btn-primary; }
+  .amber-btn--ghost { @apply btn-ghost; }
+  .neon-button { @apply btn-outline; }
+  .input-base { @apply input-field; }
+  .warm-divider { @apply divider; }
 }

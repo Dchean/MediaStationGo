@@ -66,8 +66,8 @@ export function DownloadClientsPage() {
             <Server size={20} />
           </div>
           <div>
-            <h1 className="font-display text-3xl font-bold text-white">下载器管理</h1>
-            <p className="text-sm text-slate-400">
+            <h1 className="font-display text-3xl font-bold text-ink-600">下载器管理</h1>
+            <p className="text-sm text-ink-50">
               qBittorrent / Aria2 / Transmission · 多客户端 + 连接测试
             </p>
           </div>
@@ -84,13 +84,13 @@ export function DownloadClientsPage() {
       </div>
 
       {loading && (
-        <div className="flex justify-center py-12 text-slate-400">
+        <div className="flex justify-center py-12 text-ink-50">
           <Loader2 className="animate-spin" />
         </div>
       )}
 
       {!loading && clients.length === 0 && (
-        <div className="glass-panel py-12 text-center text-slate-400">暂无下载器</div>
+        <div className="glass-panel py-12 text-center text-ink-50">暂无下载器</div>
       )}
 
       {!loading && clients.length > 0 && (
@@ -102,22 +102,22 @@ export function DownloadClientsPage() {
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-white">{c.name}</span>
-                  <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-slate-400">
+                  <span className="font-medium text-ink-600">{c.name}</span>
+                  <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-ink-50">
                     {c.type}
                   </span>
                   {c.is_default && (
-                    <span className="rounded bg-primary-400/20 px-2 py-0.5 text-xs text-primary-400">
+                    <span className="rounded bg-primary-400/20 px-2 py-0.5 text-xs text-brand-500">
                       默认
                     </span>
                   )}
                   {!c.enabled && (
-                    <span className="rounded bg-slate-500/30 px-2 py-0.5 text-xs text-slate-300">
+                    <span className="rounded bg-sand-500/30 px-2 py-0.5 text-xs text-ink-100">
                       已禁用
                     </span>
                   )}
                 </div>
-                <div className="mt-1 truncate text-xs text-slate-400">
+                <div className="mt-1 truncate text-xs text-ink-50">
                   {c.host}
                   {c.username && ` · ${c.username}`}
                 </div>
@@ -125,7 +125,7 @@ export function DownloadClientsPage() {
               <div className="flex shrink-0 gap-2">
                 <button
                   onClick={() => onTest(c.id)}
-                  className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300 hover:border-primary-400/40 hover:text-primary-400"
+                  className="rounded border border-white/10 px-2 py-1 text-xs text-ink-100 hover:border-primary-400/40 hover:text-brand-500"
                 >
                   <Send size={12} className="inline" /> 测试
                 </button>
@@ -134,7 +134,7 @@ export function DownloadClientsPage() {
                     setEditing(c)
                     setShowForm(true)
                   }}
-                  className="rounded border border-white/10 px-2 py-1 text-xs text-slate-300 hover:border-primary-400/40 hover:text-primary-400"
+                  className="rounded border border-white/10 px-2 py-1 text-xs text-ink-100 hover:border-primary-400/40 hover:text-brand-500"
                 >
                   <Pencil size={12} className="inline" /> 编辑
                 </button>
@@ -216,7 +216,7 @@ function ClientFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div className="glass-panel w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="mb-4 font-display text-xl font-semibold text-white">
+        <h2 className="mb-4 font-display text-xl font-semibold text-ink-600">
           {editing ? '编辑下载器' : '添加下载器'}
         </h2>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -278,7 +278,7 @@ function ClientFormModal({
             </Field>
           )}
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm text-ink-100">
               <input
                 type="checkbox"
                 className="h-4 w-4 accent-primary-400"
@@ -287,7 +287,7 @@ function ClientFormModal({
               />
               设为默认
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm text-ink-100">
               <input
                 type="checkbox"
                 className="h-4 w-4 accent-primary-400"
@@ -301,7 +301,7 @@ function ClientFormModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
+              className="rounded border border-white/10 px-4 py-2 text-sm text-ink-100 hover:bg-white/5"
             >
               取消
             </button>
@@ -318,7 +318,7 @@ function ClientFormModal({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm text-slate-300">{label}</span>
+      <span className="mb-1 block text-sm text-ink-100">{label}</span>
       {children}
     </label>
   )

@@ -1,19 +1,18 @@
-import { FormEvent, useState } from 'react'
+﻿import { FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { Film } from 'lucide-react'
-
+import { Eye, EyeOff, Film, ArrowRight, ShieldCheck, Lock, User } from 'lucide-react'
 import { AppFooter } from '../components/AppFooter'
 import { authAPI } from '../api/auth'
 import { useAuthStore } from '../stores/auth'
 
-// Single-form login screen. The first install seeds admin/admin123 — we
-// surface that hint when no JWT exists yet.
 export function LoginPage() {
   const navigate = useNavigate()
   const setSession = useAuthStore((s) => s.setSession)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: FormEvent) => {
@@ -25,67 +24,175 @@ export function LoginPage() {
       toast.success(`欢迎回来, ${data.user.username}`)
       navigate('/')
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        '登录失败,请检查用户名与密码'
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '登录失败'
       toast.error(msg)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center px-4">
-      {/* 表单居中区域：flex-grow + flex center 使表单在剩余空间内垂直居中 */}
-      <div className="flex flex-1 flex-col items-center justify-center">
-        <form onSubmit={handleSubmit} className="glass-panel w-full max-w-md">
-          <div className="mb-8 flex flex-col items-center gap-2">
-            <Film className="h-10 w-10 text-primary-400" />
-            <h1 className="font-display text-2xl font-bold tracking-wide text-white">
-              MediaStationGo
-            </h1>
-            <p className="text-sm text-slate-400">登录到你的家庭媒体中心</p>
-          </div>
-
-          <label className="mb-4 block">
-            <span className="mb-1 block text-sm text-slate-300">用户名</span>
-            <input
-              className="input-base"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </label>
-
-          <label className="mb-6 block">
-            <span className="mb-1 block text-sm text-slate-300">密码</span>
-            <input
-              type="password"
-              className="input-base"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </label>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="neon-button w-full justify-center"
-          >
-            {loading ? '登录中…' : '登录'}
-          </button>
-
-          <p className="mt-6 text-center text-xs text-slate-500">
-            首次部署默认账号:<code className="text-primary-400">admin / admin123</code>
-          </p>
-        </form>
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-gray-50/50 overflow-hidden px-4">
+      {/* ── Editorial Soft Geometric Background Decor ── */}
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <div className="absolute -right-20 -top-20 h-[600px] w-[600px] rounded-full bg-brand-100/30 blur-[130px]" />
+        <div className="absolute -bottom-40 -left-20 h-[500px] w-[500px] rounded-full bg-sage-100/30 blur-[110px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px] opacity-40" />
       </div>
 
-      {/* 页脚始终在底部 */}
-      <AppFooter className="mb-4 mt-auto" />
+      {/* ── Main Container ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 w-full max-w-[420px] px-2"
+      >
+        {/* High-Contrast Swiss White Panel */}
+        <div className="rounded-3xl border border-gray-200/90 bg-white p-8 sm:p-10 shadow-[0_25px_60px_rgba(17,24,39,0.04),0_1px_3px_rgba(17,24,39,0.01)]">
+          
+          {/* Logo & Headline */}
+          <div className="flex flex-col items-center text-center pb-8">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.15, type: 'spring', stiffness: 200 }}
+              className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#111827] shadow-sm"
+            >
+              <Film className="h-7 w-7 text-[#c9954a]" />
+            </motion.div>
+            
+            <motion.h1
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="font-display text-2xl font-extrabold tracking-tight text-gray-900"
+            >
+              MediaStation
+            </motion.h1>
+            
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.35 }}
+              className="mt-2 text-xs font-bold uppercase tracking-widest text-[#c9954a]"
+            >
+              家庭媒体私有站舱
+            </motion.p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Username Input with Integrated Icon */}
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <label className="block mb-2 text-xs font-bold uppercase tracking-widest text-gray-500">
+                用户名
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                  <User size={16} />
+                </span>
+                <input
+                  type="text"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-11 py-3.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition-all duration-300 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-100/50"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  autoFocus
+                  required
+                  placeholder="请输入您的账号"
+                />
+              </div>
+            </motion.div>
+
+            {/* Password Input with Integrated Icon */}
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.45 }}
+            >
+              <label className="block mb-2 text-xs font-bold uppercase tracking-widest text-gray-500">
+                安全密码
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                  <Lock size={16} />
+                </span>
+                <input
+                  type={showPw ? 'text' : 'password'}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-11 py-3.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition-all duration-300 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-100/50 pr-12"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(!showPw)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-900"
+                  tabIndex={-1}
+                >
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </motion.div>
+
+            {/* Submit Button */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="pt-2"
+            >
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#111827] py-3.5 text-sm font-bold text-white transition-all duration-300 hover:bg-[#1f2937] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] disabled:opacity-50"
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    正在进入系统舱...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    立即开启观影之旅 <ArrowRight size={16} />
+                  </span>
+                )}
+              </button>
+            </motion.div>
+
+            {/* Quick Helper Credentials */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.55 }}
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-gray-50 border border-gray-100 px-4 py-2.5 text-xs text-gray-500"
+            >
+              <ShieldCheck size={14} className="text-brand-500" />
+              <span>默认访问凭证: </span>
+              <code className="rounded bg-gray-200/50 px-1.5 py-0.5 font-mono text-[#111827] font-semibold">
+                admin / admin123
+              </code>
+            </motion.div>
+          </form>
+        </div>
+      </motion.div>
+
+      {/* Footer */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.6 }}
+        className="relative z-10 mt-10 text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        <AppFooter />
+      </motion.div>
     </div>
   )
 }

@@ -53,17 +53,17 @@ export function DlnaPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <Cast className="h-6 w-6 text-primary-400" />
+        <Cast className="h-6 w-6 text-brand-500" />
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">DLNA 投屏</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-display text-3xl font-bold text-ink-600">DLNA 投屏</h1>
+          <p className="text-sm text-ink-50">
             扫描局域网中的 UPnP MediaRenderer 设备(电视、机顶盒等),选择媒体后一键播放。
           </p>
         </div>
       </header>
 
       <div className="glass-panel space-y-3">
-        <label className="block text-sm text-slate-300">选择媒体:</label>
+        <label className="block text-sm text-ink-100">选择媒体:</label>
         <select
           className="input-base"
           value={selectedMedia}
@@ -79,7 +79,7 @@ export function DlnaPage() {
       </div>
 
       <div className="flex items-center justify-between">
-        <h2 className="font-display text-xl font-semibold text-white">
+        <h2 className="font-display text-xl font-semibold text-ink-600">
           设备 ({devices.length})
         </h2>
         <button
@@ -93,7 +93,7 @@ export function DlnaPage() {
 
       {devices.length === 0 && !scanning && (
         <div className="glass-panel">
-          <p className="text-slate-300">
+          <p className="text-ink-100">
             未发现任何 DLNA 设备。请确保:服务器与设备在同一局域网,容器使用 host 网络模式,
             目标设备已开启 DLNA / 屏幕镜像。
           </p>
@@ -104,10 +104,10 @@ export function DlnaPage() {
         {devices.map((dev) => (
           <div key={dev.udn} className="glass-panel space-y-2 !p-4">
             <div className="flex items-center gap-2">
-              <Tv size={18} className="text-primary-400" />
-              <p className="font-medium text-white">{dev.friendly_name || dev.model_name}</p>
+              <Tv size={18} className="text-brand-500" />
+              <p className="font-medium text-ink-600">{dev.friendly_name || dev.model_name}</p>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-ink-50">
               {dev.manufacturer} · {dev.ip_address}
             </p>
             <button

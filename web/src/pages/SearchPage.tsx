@@ -84,7 +84,7 @@ export function SearchPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
-        <h1 className="font-display text-3xl font-bold text-white">搜索</h1>
+        <h1 className="font-display text-3xl font-bold text-ink-600">搜索</h1>
         <button
           disabled={!aiAvailable}
           className={
@@ -122,14 +122,14 @@ export function SearchPage() {
       )}
 
       {intent && (
-        <div className="glass-panel !p-3 text-xs text-slate-300">
+        <div className="glass-panel !p-3 text-xs text-ink-100">
           AI 解析:
-          <span className="ml-2 font-mono text-primary-400">{JSON.stringify(intent)}</span>
+          <span className="ml-2 font-mono text-brand-500">{JSON.stringify(intent)}</span>
         </div>
       )}
 
       {loading && (
-        <div className="flex items-center gap-2 py-8 text-slate-400">
+        <div className="flex items-center gap-2 py-8 text-ink-50">
           <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary-400 border-t-transparent" />
           搜索中…
         </div>
@@ -141,8 +141,8 @@ export function SearchPage() {
 
       {showIdle && (
         <div className="glass-panel flex flex-col items-center gap-2 p-10 text-center">
-          <p className="text-lg text-slate-300">输入关键词开始搜索</p>
-          <p className="text-sm text-slate-500">
+          <p className="text-lg text-ink-100">输入关键词开始搜索</p>
+          <p className="text-sm text-sand-500">
             支持电影、电视剧、动漫等媒体内容的快速搜索
           </p>
         </div>
@@ -150,8 +150,8 @@ export function SearchPage() {
 
       {showEmpty && (
         <div className="glass-panel flex flex-col items-center gap-2 p-10 text-center">
-          <p className="text-lg text-slate-300">未找到匹配的媒体</p>
-          <p className="text-sm text-slate-500">尝试其他关键词，或者添加媒体库后执行扫描</p>
+          <p className="text-lg text-ink-100">未找到匹配的媒体</p>
+          <p className="text-sm text-sand-500">尝试其他关键词，或者添加媒体库后执行扫描</p>
         </div>
       )}
 

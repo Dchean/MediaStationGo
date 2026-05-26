@@ -239,12 +239,12 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-400/10 text-slate-300">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sand-300/40 text-ink-100">
           <SettingsIcon size={20} />
         </div>
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">系统设置</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-display text-3xl font-bold text-ink-600">系统设置</h1>
+          <p className="text-sm text-ink-50">
             按分组编辑转码 / 整理 / 刮削 / 下载器等关键配置
           </p>
         </div>
@@ -258,8 +258,8 @@ export function SettingsPage() {
             className={
               'border-b-2 px-4 py-2 text-sm whitespace-nowrap transition ' +
               (activeGroup === g.key
-                ? 'border-primary-400 text-primary-400'
-                : 'border-transparent text-slate-400 hover:text-white')
+                ? 'border-primary-400 text-brand-500'
+                : 'border-transparent text-ink-50 hover:text-white')
             }
           >
             {g.label}
@@ -268,14 +268,14 @@ export function SettingsPage() {
       </div>
 
       {loading && (
-        <div className="flex justify-center py-12 text-slate-400">
+        <div className="flex justify-center py-12 text-ink-50">
           <Loader2 className="animate-spin" />
         </div>
       )}
 
       {!loading && (
         <form onSubmit={onSave} className="glass-panel space-y-4">
-          {group.description && <p className="text-xs text-slate-500">{group.description}</p>}
+          {group.description && <p className="text-xs text-sand-500">{group.description}</p>}
           {group.items.map((it) => (
             <SettingRow
               key={it.key}
@@ -285,7 +285,7 @@ export function SettingsPage() {
             />
           ))}
           <div className="flex items-center justify-between pt-2">
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-sand-500">
               {dirty.size > 0 ? `有 ${dirty.size} 项未保存` : '所有更改已保存'}
             </span>
             <button
@@ -303,12 +303,12 @@ export function SettingsPage() {
       {/* 整理 tab 时显示各媒体库默认路径 */}
       {!loading && activeGroup === 'organize' && libraries.length > 0 && (
         <div className="glass-panel">
-          <div className="mb-3 flex items-center gap-2 text-sm text-slate-300">
-            <FolderOpen size={16} className="text-primary-400" />
+          <div className="mb-3 flex items-center gap-2 text-sm text-ink-100">
+            <FolderOpen size={16} className="text-brand-500" />
             <span>默认整理路径参考（未设目标目录时按媒体库归类）</span>
           </div>
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-sand-500">
               <tr>
                 <th className="py-2">媒体库</th>
                 <th>类型</th>
@@ -319,12 +319,12 @@ export function SettingsPage() {
             <tbody>
               {libraries.map((lib) => (
                 <tr key={lib.id} className="border-t border-white/5">
-                  <td className="py-2 font-medium text-white">{lib.name}</td>
-                  <td className="text-slate-400">
+                  <td className="py-2 font-medium text-ink-600">{lib.name}</td>
+                  <td className="text-ink-50">
                     {lib.type === 'movie' ? '电影' : lib.type === 'tv' ? '电视剧' : lib.type === 'anime' ? '动漫' : '音乐'}
                   </td>
-                  <td className="font-mono text-xs text-slate-400">{lib.path}</td>
-                  <td className="font-mono text-[11px] text-slate-500">
+                  <td className="font-mono text-xs text-ink-50">{lib.path}</td>
+                  <td className="font-mono text-[11px] text-sand-500">
                     {lib.type === 'movie'
                       ? `${lib.path}/片名 (2024)/片名 (2024).mkv`
                       : lib.type === 'tv' || lib.type === 'anime'
@@ -352,10 +352,10 @@ function SettingRow({
 }) {
   return (
     <div className="grid items-start gap-2 md:grid-cols-[280px_1fr]">
-      <label className="text-sm text-slate-300">
+      <label className="text-sm text-ink-100">
         <div className="font-medium">{def.label}</div>
-        {def.hint && <div className="mt-0.5 text-xs text-slate-500">{def.hint}</div>}
-        <div className="mt-0.5 font-mono text-[10px] text-slate-600">{def.key}</div>
+        {def.hint && <div className="mt-0.5 text-xs text-sand-500">{def.hint}</div>}
+        <div className="mt-0.5 font-mono text-[10px] text-sand-400">{def.key}</div>
       </label>
       <div>
         {def.type === 'text' && (
@@ -402,7 +402,7 @@ function SettingRow({
               checked={value === 'true' || value === '1' || value === 'on'}
               onChange={(e) => onChange(e.target.checked ? 'true' : 'false')}
             />
-            <span className="text-sm text-slate-300">{value === 'true' ? '已启用' : '已关闭'}</span>
+            <span className="text-sm text-ink-100">{value === 'true' ? '已启用' : '已关闭'}</span>
           </label>
         )}
       </div>

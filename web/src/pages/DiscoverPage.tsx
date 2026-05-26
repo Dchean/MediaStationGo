@@ -65,11 +65,11 @@ export function DiscoverPage() {
       {/* Header */}
       <header className="flex items-center gap-4 mb-8">
         <div className="p-3 rounded-2xl bg-gradient-to-br from-primary-500/20 to-primary-600/10 border border-primary-500/20">
-          <Sparkles className="h-8 w-8 text-primary-400" />
+          <Sparkles className="h-8 w-8 text-brand-500" />
         </div>
         <div>
-          <h1 className="font-display text-4xl font-bold text-white tracking-tight">发现</h1>
-          <p className="mt-1 text-base text-slate-400">
+          <h1 className="font-display text-4xl font-bold text-ink-600 tracking-tight">发现</h1>
+          <p className="mt-1 text-base text-ink-50">
             来自 TMDb 的当日热门与流行榜单
           </p>
         </div>
@@ -83,13 +83,13 @@ export function DiscoverPage() {
           <div className="mx-auto w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center">
             <AlertTriangle className="h-8 w-8 text-amber-400" />
           </div>
-          <h3 className="text-lg font-semibold text-white">TMDb API Key 未配置</h3>
-          <p className="text-sm text-slate-400 max-w-md mx-auto">
+          <h3 className="text-lg font-semibold text-ink-600">TMDb API Key 未配置</h3>
+          <p className="text-sm text-ink-50 max-w-md mx-auto">
             您需要在管理后台填入 TMDb API Key 才能查看发现内容。
           </p>
           <Link
             to="/admin"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-500/20 text-primary-400 hover:bg-primary-500/30 transition-colors font-medium"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-500/20 text-brand-500 hover:bg-primary-500/30 transition-colors font-medium"
           >
             前往管理后台
             <ExternalLink className="h-4 w-4" />
@@ -103,15 +103,15 @@ export function DiscoverPage() {
           <div className="mx-auto w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center">
             <Wifi className="h-8 w-8 text-orange-400" />
           </div>
-          <h3 className="text-lg font-semibold text-white">无法连接到 TMDb</h3>
-          <p className="text-sm text-slate-400 max-w-lg mx-auto">
+          <h3 className="text-lg font-semibold text-ink-600">无法连接到 TMDb</h3>
+          <p className="text-sm text-ink-50 max-w-lg mx-auto">
             服务器到 <code className="font-mono text-orange-300">api.themoviedb.org</code> 的连接超时。
             通常是因为部署机器没有走代理。可以在系统环境变量里设置
             <code className="font-mono text-orange-300 mx-1">HTTPS_PROXY</code>，
             或在「外部 API」配置里填写自建反代地址（tmdb_api_proxy / tmdb_image_proxy）。
           </p>
-          <details className="text-xs text-slate-500 max-w-lg mx-auto text-left">
-            <summary className="cursor-pointer hover:text-slate-400">查看原始错误</summary>
+          <details className="text-xs text-sand-500 max-w-lg mx-auto text-left">
+            <summary className="cursor-pointer hover:text-ink-50">查看原始错误</summary>
             <pre className="mt-2 p-2 rounded bg-black/40 overflow-x-auto whitespace-pre-wrap">{anyErr}</pre>
           </details>
         </div>
@@ -134,7 +134,7 @@ export function DiscoverPage() {
           {/* TMDB 配置 OK 但本次没拿到任何条目（极少见） */}
           {!networkErr && trending.length === 0 && popular.length === 0 && !otherErr && (
             <div className="text-center py-12">
-              <p className="text-slate-500">暂无发现内容</p>
+              <p className="text-sand-500">暂无发现内容</p>
             </div>
           )}
         </div>
@@ -146,7 +146,7 @@ export function DiscoverPage() {
 function ContentRow({ title, items }: { title: string; items: DiscoverItem[] }) {
   return (
     <section className="space-y-4">
-      <h2 className="font-display text-2xl font-semibold text-white pl-1">{title}</h2>
+      <h2 className="font-display text-2xl font-semibold text-ink-600 pl-1">{title}</h2>
       <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
         {items.map((item) => (
           <DiscoverCard key={item.tmdb_id} item={item} />
@@ -169,7 +169,7 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
             className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-slate-600 text-xs">
+          <div className="flex h-full w-full items-center justify-center text-sand-400 text-xs">
             无海报
           </div>
         )}
@@ -180,11 +180,11 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
         )}
       </div>
       <div className="px-2.5 py-2 space-y-0.5">
-        <p className="text-xs font-medium text-white truncate group-hover:text-primary-400 transition-colors">
+        <p className="text-xs font-medium text-ink-600 truncate group-hover:text-brand-500 transition-colors">
           {item.title}
         </p>
         {item.year > 0 && (
-          <p className="text-[11px] text-slate-500">{item.year}</p>
+          <p className="text-[11px] text-sand-500">{item.year}</p>
         )}
       </div>
     </div>

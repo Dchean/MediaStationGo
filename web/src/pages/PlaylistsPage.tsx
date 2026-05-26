@@ -37,7 +37,7 @@ export function PlaylistsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-display text-3xl font-bold text-white">播放列表</h1>
+      <h1 className="font-display text-3xl font-bold text-ink-600">播放列表</h1>
 
       <form onSubmit={onCreate} className="glass-panel grid gap-3 md:grid-cols-[1fr_auto]">
         <input
@@ -52,8 +52,8 @@ export function PlaylistsPage() {
         </button>
       </form>
 
-      {loading && <p className="text-slate-500">加载中…</p>}
-      {!loading && items.length === 0 && <p className="text-slate-400">还没有任何播放列表。</p>}
+      {loading && <p className="text-sand-500">加载中…</p>}
+      {!loading && items.length === 0 && <p className="text-ink-50">还没有任何播放列表。</p>}
 
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {items.map((p) => (
@@ -63,11 +63,11 @@ export function PlaylistsPage() {
           >
             <Link
               to={`/playlist/${p.id}`}
-              className="font-medium text-white transition hover:text-primary-400"
+              className="font-medium text-ink-600 transition hover:text-brand-500"
             >
               {p.name}
               {p.is_public && (
-                <span className="ml-2 rounded border border-primary-400/40 px-1.5 py-0.5 text-xs text-primary-400">
+                <span className="ml-2 rounded border border-primary-400/40 px-1.5 py-0.5 text-xs text-brand-500">
                   public
                 </span>
               )}

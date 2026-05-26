@@ -66,10 +66,10 @@ export function SiteSearchPage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-3">
-        <Search className="h-6 w-6 text-primary-400" />
+        <Search className="h-6 w-6 text-brand-500" />
         <div>
-          <h1 className="font-display text-3xl font-bold text-white">站点搜索</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="font-display text-3xl font-bold text-ink-600">站点搜索</h1>
+          <p className="text-sm text-ink-50">
             跨站搜索所有已启用的 PT/BT 站点,结果按做种数排序。
           </p>
         </div>
@@ -88,11 +88,11 @@ export function SiteSearchPage() {
         </button>
       </form>
 
-      {loading && <p className="text-slate-500">正在查询所有站点…</p>}
+      {loading && <p className="text-sand-500">正在查询所有站点…</p>}
 
       {!loading && searched && results.length === 0 && (
         <div className="glass-panel">
-          <p className="text-slate-300">
+          <p className="text-ink-100">
             未找到结果。请确认已在「站点管理」中添加并启用了至少一个站点,且 Cookie / API Key 有效。
           </p>
         </div>
@@ -101,7 +101,7 @@ export function SiteSearchPage() {
       {results.length > 0 && (
         <div className="glass-panel overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-500">
+            <thead className="text-xs uppercase tracking-wider text-sand-500">
               <tr>
                 <th className="py-2">站点</th>
                 <th>标题</th>
@@ -115,13 +115,13 @@ export function SiteSearchPage() {
             <tbody>
               {results.map((item, idx) => (
                 <tr key={idx} className="border-t border-white/5 align-top">
-                  <td className="py-2 text-primary-400">{item.site_name}</td>
+                  <td className="py-2 text-brand-500">{item.site_name}</td>
                   <td className="max-w-md py-2">
                     <a
                       href={item.torrent_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-white transition hover:text-primary-400"
+                      className="text-white transition hover:text-brand-500"
                       title={item.title}
                     >
                       {item.title.length > 80
@@ -129,7 +129,7 @@ export function SiteSearchPage() {
                         : item.title}
                     </a>
                   </td>
-                  <td className="whitespace-nowrap text-slate-300">
+                  <td className="whitespace-nowrap text-ink-100">
                     {fmtBytes(item.size)}
                   </td>
                   <td className="text-emerald-400">{item.seeders || '—'}</td>
@@ -144,7 +144,7 @@ export function SiteSearchPage() {
                   <td className="py-2 text-right">
                     <button
                       onClick={() => downloadTorrent(item)}
-                      className="rounded border border-primary-400/40 px-2 py-1 text-xs text-primary-400 hover:bg-primary-400/10"
+                      className="rounded border border-primary-400/40 px-2 py-1 text-xs text-brand-500 hover:bg-primary-400/10"
                       title="加入下载"
                     >
                       <Download size={12} className="inline" />
