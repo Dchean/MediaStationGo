@@ -49,10 +49,11 @@ func NewEmbyService(cfg *config.Config, log *zap.Logger, repo *repository.Contai
 func (e *EmbyService) SystemInfo() map[string]any {
 	return map[string]any{
 		"Id":                    embyServerID,
+		"ServerId":              embyServerID,
 		"ServerName":            "MediaStationGo",
 		"Version":               "10.8.13",
-		"ProductName":           "MediaStationGo",
-		"OperatingSystem":       "Linux",
+		"ProductName":           "Jellyfin Server",
+		"OperatingSystem":       "Windows",
 		"Architecture":          "X64",
 		"LocalAddress":          "",
 		"WanAddress":            "",
@@ -61,6 +62,9 @@ func (e *EmbyService) SystemInfo() map[string]any {
 		"SupportsLibraryMonitor": true,
 		"SupportsHttps":          false,
 		"SupportsAutoDiscovery":  true,
+		"HttpServerPortNumber":   e.cfg.App.Port,
+		"HttpsPortNumber":        0,
+		"PublishedServerUrl":     "",
 		"WebSocketPortNumber":    e.cfg.App.Port,
 		"CompletedInstallations": []any{},
 		"CanSelfRestart":         false,
@@ -72,11 +76,18 @@ func (e *EmbyService) SystemInfo() map[string]any {
 // SystemInfoPublic 是不需要认证的精简版（Emby Web 客户端登陆前会拉）。
 func (e *EmbyService) SystemInfoPublic() map[string]any {
 	return map[string]any{
-		"Id":              embyServerID,
-		"ServerName":      "MediaStationGo",
-		"Version":         "10.8.13",
-		"ProductName":     "MediaStationGo",
-		"OperatingSystem": "Linux",
+		"Id":                     embyServerID,
+		"ServerId":               embyServerID,
+		"ServerName":             "MediaStationGo",
+		"Version":                "10.8.13",
+		"ProductName":            "Jellyfin Server",
+		"OperatingSystem":        "Windows",
+		"LocalAddress":           "",
+		"WanAddress":             "",
+		"HttpServerPortNumber":    e.cfg.App.Port,
+		"HttpsPortNumber":         0,
+		"SupportsHttps":           false,
+		"SupportsAutoDiscovery":   true,
 		"StartupWizardCompleted": true,
 	}
 }

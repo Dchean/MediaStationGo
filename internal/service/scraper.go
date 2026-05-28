@@ -261,9 +261,6 @@ func mergeLocalMetadataIntoMatch(match *Match, local *LocalMetadata) {
 	if local.TMDbID > 0 {
 		match.TMDbID = local.TMDbID
 	}
-	if local.BangumiID > 0 {
-		match.BangumiID = local.BangumiID
-	}
 	if local.Genres != "" {
 		match.Genres = splitNFOList(local.Genres)
 	}
