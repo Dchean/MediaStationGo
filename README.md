@@ -280,7 +280,7 @@ git ls-files | grep -E 'data/|cache/|\\.db|\\.log|jwt_secret|config.yaml|\\.env'
 ## 赞赏
 <img width="200" height="200" alt="微信图片_20260528191337_3_983" src="https://github.com/user-attachments/assets/d6077de5-8305-400d-8b82-470ef05d926e" />
 
-请我吃桶泡面
+  请作者吃桶泡面
 
 ## Star History
 
