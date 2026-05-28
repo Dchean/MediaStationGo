@@ -307,7 +307,9 @@ vim docker-compose.yml
 services:
   mediastation-go:
     image: ghcr.io/shukebta/mediastation-go:${MEDIASTATION_IMAGE_TAG:-latest}
-    pull_policy: always
+    # 默认只在本地没有镜像时拉取，避免每次重启都访问 GHCR。
+    # 需要升级时手动执行：docker compose pull && docker compose up -d
+    pull_policy: missing
     container_name: mediastation-go
     restart: unless-stopped
 
@@ -879,6 +881,28 @@ git ls-files | grep -E 'data/|cache/|\.db|\.log|jwt_secret|config.yaml|\.env|tok
 ---
 
 ## ❓ 常见问题
+
+### Q: 拉取 GHCR 镜像时出现 `EOF` 怎么办？
+
+`EOF` 通常表示服务器到 GHCR 的网络连接中途断开，不是 compose 文件语法错误。建议按顺序处理：
+
+```bash
+# 1. 清理可能异常的 GHCR 登录状态
+docker logout ghcr.io || true
+
+# 2. 单独拉取镜像，确认是网络/ registry 问题还是 compose 问题
+docker pull ghcr.io/shukebta/mediastation-go:latest
+
+# 3. 如果是 x86_64/AMD64 主机，也可以显式指定平台重试
+docker pull --platform linux/amd64 ghcr.io/shukebta/mediastation-go:latest
+
+# 4. 拉取成功后再启动
+docker compose up -d
+```
+
+如果服务器在国内网络或 NAS 网络环境中，建议为 Docker daemon 配置可访问 GHCR 的代理；仅设置终端代理通常不一定会被 Docker 服务进程继承。默认 compose 已使用 `pull_policy: missing`，避免容器重启时反复访问 GHCR。
+
+另外，你示例中的路径如果是 NAS 绝对路径，建议写成 `/vol1/...`，不要写 `./vol1/...`；前者是系统根目录路径，后者是当前 compose 目录下面的相对路径。
 
 ### Q: Docker 部署后浏览器打不开？
 

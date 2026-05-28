@@ -36,7 +36,9 @@
 services:
   mediastation-go:
     image: ghcr.io/shukebta/mediastation-go:${MEDIASTATION_IMAGE_TAG:-latest}
-    pull_policy: always
+    # 默认只在本地没有镜像时拉取，避免每次重启都访问 GHCR。
+    # 需要升级时手动执行：docker compose pull && docker compose up -d
+    pull_policy: missing
     container_name: mediastation-go
     restart: unless-stopped
 

@@ -750,6 +750,28 @@ git ls-files | grep -E 'data/|cache/|\.db|\.log|jwt_secret|config.yaml|\.env|tok
 
 ## ❓ FAQ
 
+### Pulling the GHCR image fails with `EOF`.
+
+`EOF` usually means the connection from your server/NAS to GHCR was interrupted. It is normally a network or registry connectivity issue, not a compose syntax issue. Try:
+
+```bash
+# 1. Clear any stale GHCR login state
+docker logout ghcr.io || true
+
+# 2. Pull the image directly
+docker pull ghcr.io/shukebta/mediastation-go:latest
+
+# 3. On x86_64/AMD64 hosts, retry with an explicit platform
+docker pull --platform linux/amd64 ghcr.io/shukebta/mediastation-go:latest
+
+# 4. Start after the pull succeeds
+docker compose up -d
+```
+
+If the server is behind a restricted network, configure a Docker daemon proxy that can reach GHCR. A shell-only proxy is often not inherited by the Docker service. The default compose file uses `pull_policy: missing` to avoid contacting GHCR on every container restart.
+
+If your media path is an absolute NAS path, use `/vol1/...` instead of `./vol1/...`; the latter is relative to the compose directory.
+
 ### The Docker deployment starts but the browser cannot open the site.
 
 Check container status and logs:
