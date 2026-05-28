@@ -31,7 +31,7 @@ deploy:
 
 # ---- Docker ----
 docker:
-	docker compose up --build -d
+	docker compose up -d
 
 docker-stop:
 	docker compose down

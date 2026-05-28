@@ -37,7 +37,7 @@ cp config.example.yaml config.yaml
 docker compose up -d
 ```
 
-默认地址：`http://<服务器IP>:8080`
+默认地址：`http://<服务器IP>:18080`
 
 默认账号：`admin` / `admin123`
 
@@ -49,7 +49,13 @@ docker compose up -d
 volumes:
   - ./data:/data
   - ./cache:/cache
-  - /your/media/path:/media:ro
+  - ./media:/media:ro
+```
+
+可通过环境变量覆盖默认路径和端口：
+
+```bash
+MEDIASTATION_HTTP_PORT=18080 MEDIASTATION_MEDIA_DIR=/your/media/path docker compose up -d
 ```
 
 ### 硬件转码
@@ -137,7 +143,7 @@ go build -o bin/mediastation-go ./cmd/server
 ```bash
 make build       # 构建前后端
 make test        # Go 测试
-make docker      # docker compose up --build -d
+make docker      # docker compose up -d
 make deploy      # Linux 一键部署
 make docker-push # buildx 多架构推送
 ```

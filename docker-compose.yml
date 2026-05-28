@@ -1,60 +1,60 @@
-version: '3.8'
-
-# ============================================================================
-# MediaStationGo — recommended NAS deployment.
+# MediaStationGo default Docker Compose install file.
 #
-# 1. Edit the volume mappings under `volumes:` so that /media points at your
-#    actual library root (e.g. /volume1/Media).
-# 2. (Optional) set MEDIASTATION_SECRETS_JWT_SECRET to a strong random string;
-#    otherwise one is auto-generated and persisted to /data/.jwt_secret.
-# 3. `docker compose up -d` and visit http://<host>:8080 (admin / admin123).
-# ============================================================================
+# Quick start:
+#   1. docker compose pull
+#   2. docker compose up -d
+#   3. Open http://<host-ip>:18080
+#
+# Default account:
+#   admin / admin123
+#
+# Local persistent folders created next to this file:
+#   ./data   SQLite database, JWT secret, runtime configuration
+#   ./cache  posters, scraped artwork, transcode cache
+#   ./media  optional local media mount; replace with your NAS path if needed
 
 services:
   mediastation-go:
-    build:
-      context: .
-    image: ghcr.io/shukebta/mediastation-go:latest
+    image: ghcr.io/shukebta/mediastation-go:${MEDIASTATION_IMAGE_TAG:-latest}
+    pull_policy: always
     container_name: mediastation-go
     restart: unless-stopped
 
     ports:
-      - "8080:8080"
+      - "${MEDIASTATION_HTTP_PORT:-18080}:8080"
 
     volumes:
-      - ./data:/data
-      - ./cache:/cache
-      # Mount your media library into /media. Read-only is fine.
-      # - /volume1/Media:/media:ro
+      - ${MEDIASTATION_DATA_DIR:-./data}:/data
+      - ${MEDIASTATION_CACHE_DIR:-./cache}:/cache
+      - ${MEDIASTATION_MEDIA_DIR:-./media}:/media:ro
 
     environment:
+      MEDIASTATION_APP_HOST: 0.0.0.0
       MEDIASTATION_APP_PORT: 8080
       MEDIASTATION_APP_DATA_DIR: /data
       MEDIASTATION_APP_WEB_DIR: /app/web/dist
       MEDIASTATION_DATABASE_DB_PATH: /data/mediastation.db
       MEDIASTATION_CACHE_CACHE_DIR: /cache
-      MEDIASTATION_LOGGING_LEVEL: info
-      # MEDIASTATION_TRANSCODER_ENCODER: vaapi    # qsv | vaapi | nvenc | (empty=software)
-      # MEDIASTATION_TRANSCODER_MAX_HEIGHT: 1080
-      # MEDIASTATION_SECRETS_JWT_SECRET: change-me-to-a-strong-random-string
-      # MEDIASTATION_APP_CORS_ORIGINS: '["https://media.example.com"]'
-      PUID: "1000"
-      PGID: "1000"
-      TZ: Asia/Shanghai
+      MEDIASTATION_LOGGING_LEVEL: ${MEDIASTATION_LOGGING_LEVEL:-info}
+      MEDIASTATION_TRANSCODER_ENCODER: ${MEDIASTATION_TRANSCODER_ENCODER:-}
+      MEDIASTATION_TRANSCODER_MAX_HEIGHT: ${MEDIASTATION_TRANSCODER_MAX_HEIGHT:-1080}
+      MEDIASTATION_APP_CORS_ORIGINS: ${MEDIASTATION_APP_CORS_ORIGINS:-}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Asia/Shanghai}
 
-    # Hardware-accelerated transcoding.
-    #   * Intel iGPU (QSV / VAAPI): mount /dev/dri.
-    #   * NVIDIA NVENC: switch the runtime to nvidia and add `gpus: all`.
+    # Optional Intel QSV / VAAPI hardware acceleration.
+    # Uncomment on Linux/NAS hosts with /dev/dri available, then set:
+    #   MEDIASTATION_TRANSCODER_ENCODER=vaapi
     # devices:
     #   - /dev/dri:/dev/dri
     # group_add:
-    #   - "989"   # match render GID on host
-    # runtime: nvidia
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - capabilities: [gpu]
+    #   - "${RENDER_GID:-989}"
+
+    # Optional NVIDIA NVENC hardware acceleration.
+    # Install NVIDIA Container Toolkit on the host, then set:
+    #   MEDIASTATION_TRANSCODER_ENCODER=nvenc
+    # gpus: all
 
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health || exit 1"]

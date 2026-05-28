@@ -37,7 +37,7 @@ cp config.example.yaml config.yaml
 docker compose up -d
 ```
 
-Default URL: `http://<server-ip>:8080`
+Default URL: `http://<server-ip>:18080`
 
 Default account: `admin` / `admin123`
 
@@ -49,7 +49,13 @@ Default account: `admin` / `admin123`
 volumes:
   - ./data:/data
   - ./cache:/cache
-  - /your/media/path:/media:ro
+  - ./media:/media:ro
+```
+
+Override the default port and media path with environment variables:
+
+```bash
+MEDIASTATION_HTTP_PORT=18080 MEDIASTATION_MEDIA_DIR=/your/media/path docker compose up -d
 ```
 
 ### Hardware Transcoding
@@ -137,7 +143,7 @@ go build -o bin/mediastation-go ./cmd/server
 ```bash
 make build       # Build frontend and backend
 make test        # Run Go tests
-make docker      # docker compose up --build -d
+make docker      # docker compose up -d
 make deploy      # Linux one-click deploy
 make docker-push # Multi-arch buildx push
 ```
