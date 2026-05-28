@@ -491,12 +491,17 @@ func (d *DownloadService) onTorrentComplete(ctx context.Context, hash string, sa
 	if d.organizer == nil || savePath == "" {
 		return
 	}
-	// 仅当显式开启 organizer.auto_after_download 时才在下载完成后整理。
+	// 仅当显式开启 organizer.auto_after_download / organize.auto 时才在下载完成后整理。
 	// 之前的代码错误地把 organizer.smart_classify 也当成"自动整理"开关，
 	// 让操作员只想启用"分类子目录"就被动触发了文件 move。
 	autoOrganize := false
 	if v, err := d.repo.Setting.Get(ctx, "organizer.auto_after_download"); err == nil {
 		autoOrganize = v == "true" || v == "1" || v == "on"
+	}
+	if !autoOrganize {
+		if v, err := d.repo.Setting.Get(ctx, "organize.auto"); err == nil {
+			autoOrganize = v == "true" || v == "1" || v == "on"
+		}
 	}
 	if !autoOrganize {
 		d.log.Info("download completed, auto-organize disabled", zap.String("hash", hash))

@@ -97,6 +97,7 @@ flaresolverr:
 # 整理配置（智能分类）
 organizer:
   smart_classify: false           # 是否启用智能分类整理
+  auto_after_download: false      # 下载完成后是否自动整理；关闭时可在「整理与维护」手动整理
   categories:
     chinese_movie: "华语电影"
     animation_movie: "动画电影"

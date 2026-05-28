@@ -91,7 +91,7 @@ func TestSubscriptionResolveClassifiedSavePath(t *testing.T) {
 		t.Fatalf("classification = %q/%q, want tv/综艺", mediaType, category)
 	}
 	got := svc.resolveSubscriptionSavePath(t.Context(), sub, mediaType, category)
-	want := filepath.Join("D:", "Downloads", "tv", "综艺")
+	want := filepath.Join("D:", "Downloads", "综艺")
 	if got != want {
 		t.Fatalf("save path = %q, want %q", got, want)
 	}

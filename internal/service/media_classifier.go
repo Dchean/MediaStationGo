@@ -219,9 +219,6 @@ func (s *SubscriptionService) resolveSubscriptionSavePath(ctx context.Context, s
 	if !s.isSmartClassifyEnabled(ctx) || category == "" {
 		return base
 	}
-	if mediaType != "" {
-		return filepath.Join(base, mediaType, sanitizeFilename(category))
-	}
 	return filepath.Join(base, sanitizeFilename(category))
 }
 

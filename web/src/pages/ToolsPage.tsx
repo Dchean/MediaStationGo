@@ -135,7 +135,7 @@ function OrganizePanel() {
         <h2 className="font-display text-lg font-semibold text-ink-600">整理 &amp; 重命名</h2>
       </div>
       <p className="text-xs text-sand-500">
-        将媒体文件按 <code className="rounded-lg bg-gray-50 px-1">媒体库/年份/标题 (年份)/标题.ext</code>{' '}
+        将媒体文件按 <code className="rounded-lg bg-gray-50 px-1">媒体库/电影或电视剧/分类/标题/Season</code>{' '}
         的规范布局移动并重命名,确保已先完成刮削。
       </p>
 

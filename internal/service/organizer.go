@@ -59,7 +59,7 @@ func (o *OrganizerService) OrganizeMedia(ctx context.Context, mediaID string) (s
 	if err != nil || lib == nil {
 		return "", errors.New("library not found")
 	}
-	if lib.Type == "tv" || lib.Type == "anime" {
+	if isSeriesLibraryType(lib.Type) {
 		if err := o.refreshEpisodeIdentity(m, lib); err != nil {
 			return "", err
 		}
@@ -74,13 +74,14 @@ func (o *OrganizerService) OrganizeMedia(ctx context.Context, mediaID string) (s
 	category := o.SmartClassify(ctx, m)
 
 	var dst string
-	if lib.Type == "tv" || lib.Type == "anime" {
+	if isSeriesLibraryType(lib.Type) {
 		// TV: {lib.Path}/[分类]/{Title}/Season XX/{Title} - SxxExx.ext
 		season := fmt.Sprintf("Season %02d", m.SeasonNum)
 		epTag := fmt.Sprintf("S%02dE%02d", m.SeasonNum, m.EpisodeNum)
-		dir := filepath.Join(lib.Path, category, title, season)
+		root := o.organizeRoot(lib.Path, lib.Type, category)
+		dir := filepath.Join(root, category, title, season)
 		if category == "" {
-			dir = filepath.Join(lib.Path, title, season)
+			dir = filepath.Join(root, title, season)
 		}
 		dst = filepath.Join(dir, fmt.Sprintf("%s - %s%s", title, epTag, ext))
 	} else {
@@ -89,9 +90,10 @@ func (o *OrganizerService) OrganizeMedia(ctx context.Context, mediaID string) (s
 		if m.Year > 0 {
 			folder = fmt.Sprintf("%s (%d)", title, m.Year)
 		}
-		dir := filepath.Join(lib.Path, category, folder)
+		root := o.organizeRoot(lib.Path, lib.Type, category)
+		dir := filepath.Join(root, category, folder)
 		if category == "" {
-			dir = filepath.Join(lib.Path, folder)
+			dir = filepath.Join(root, folder)
 		}
 		dst = filepath.Join(dir, folder+ext)
 	}
@@ -266,6 +268,55 @@ func sanitizeFilename(s string) string {
 		"\"", "", "<", "", ">", "", "|", "",
 	)
 	return strings.TrimSpace(r.Replace(s))
+}
+
+func (o *OrganizerService) organizeRoot(libraryPath, mediaType, category string) string {
+	if strings.TrimSpace(category) == "" {
+		return libraryPath
+	}
+	typeDir := mediaTypeRootDir(mediaType)
+	if typeDir == "" || pathAlreadyEndsWith(libraryPath, typeDir) {
+		return libraryPath
+	}
+	if isGenericMediaRoot(libraryPath) {
+		return filepath.Join(libraryPath, typeDir)
+	}
+	return libraryPath
+}
+
+func mediaTypeRootDir(mediaType string) string {
+	switch normalizeMediaType(mediaType, "", "") {
+	case "movie":
+		return "电影"
+	case "tv", "anime", "variety":
+		return "电视剧"
+	default:
+		return ""
+	}
+}
+
+func isGenericMediaRoot(path string) bool {
+	base := strings.ToLower(strings.TrimSpace(filepath.Base(filepath.Clean(path))))
+	switch base {
+	case "media", "medias", "library", "libraries", "organized", "整理":
+		return true
+	default:
+		return false
+	}
+}
+
+func pathAlreadyEndsWith(path, suffix string) bool {
+	base := strings.TrimSpace(filepath.Base(filepath.Clean(path)))
+	return strings.EqualFold(base, suffix)
+}
+
+func isSeriesLibraryType(mediaType string) bool {
+	switch normalizeMediaType(mediaType, "", "") {
+	case "tv", "anime", "variety":
+		return true
+	default:
+		return false
+	}
 }
 
 // isSmartClassifyEnabled checks if smart classify is enabled.

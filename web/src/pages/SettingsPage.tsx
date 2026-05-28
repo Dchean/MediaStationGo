@@ -91,7 +91,7 @@ const GROUPS: SettingGroup[] = [
     description: '媒体文件命名 + 自动刮削 + 整理目标',
     items: [
       {
-        key: 'organize.auto',
+        key: 'organizer.auto_after_download',
         label: '入库时自动整理',
         type: 'toggle',
       },

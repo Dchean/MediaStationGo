@@ -341,12 +341,10 @@ then add libraries in the web UI using container paths:
 
 | Type | Recommended path |
 | --- | --- |
-| Movies | `/media/Movies` |
-| TV | `/media/TV` |
-| Anime | `/media/Anime` |
-| Variety | `/media/Variety` |
+| Movie library | `/media/电影` |
+| TV / anime / variety library | `/media/电视剧` |
 | Adult | `/media/Adult` |
-| Downloaded media | `/downloads/Movies`, `/downloads/TV`, etc. |
+| Download root | `/downloads` |
 
 #### NAS Absolute Path Syntax
 
@@ -369,7 +367,7 @@ MEDIASTATION_MEDIA_DIR=/vol1/1000/Docker/moviepilot-v2/media
 MEDIASTATION_DOWNLOAD_DIR=/vol1/1000/qBittorrent/downloads
 ```
 
-Inside MediaStationGo, still use container paths such as `/media/Movies` for libraries and `/downloads/Movies` for download targets.
+Inside MediaStationGo, add `/media/电影` and `/media/电视剧` as media library roots. Organized files will land in category folders such as `/media/电影/动画电影` and `/media/电视剧/国产剧`. Use `/downloads` as the download root; subscriptions will save to folders such as `/downloads/动画电影` and `/downloads/国产剧`.
 
 ### Download Client Paths
 
@@ -383,13 +381,24 @@ MediaStationGo container: /downloads
 qBittorrent container: /downloads
 ```
 
-Subscription save paths can then be:
+Recommended subscription save root:
 
 ```text
-/downloads/Movies
-/downloads/TV
-/downloads/Anime
-/downloads/Variety
+/downloads
+```
+
+With smart classification enabled, subscription and site-search downloads are saved to category folders such as:
+
+```text
+/downloads/动画电影
+/downloads/华语电影
+/downloads/外语电影
+/downloads/国产剧
+/downloads/国漫
+/downloads/日番
+/downloads/欧美剧
+/downloads/日韩剧
+/downloads/综艺
 ```
 
 ---
@@ -642,6 +651,63 @@ movie.nfo
 tvshow.nfo
 episode.nfo
 ```
+
+### Smart Classification Directory Rules
+
+MediaStationGo separates download classification from final media organization:
+
+1. Download stage: subscriptions and site-search downloads are saved under the downloader root by category.
+2. Organization stage: manual or automatic organization moves files into the media library root, then into type and category folders.
+
+Recommended host directories:
+
+```text
+/vol1/1000/qBittorrent/downloads
+/vol1/1000/Docker/moviepilot-v2/media/电影
+/vol1/1000/Docker/moviepilot-v2/media/电视剧
+```
+
+Container paths:
+
+```text
+/downloads
+/media/电影
+/media/电视剧
+```
+
+Download classification examples:
+
+```text
+/downloads/动画电影
+/downloads/国产剧
+/downloads/国漫
+/downloads/华语电影
+/downloads/日番
+/downloads/外语电影
+/downloads/综艺
+```
+
+Organized media examples:
+
+```text
+/media/电视剧/国产剧/Show Name (2026)/Season 01/Show Name - S01E01 - 第 1 集.mkv
+/media/电视剧/国漫/Anime Name (2026)/Season 01/Anime Name - S01E01 - 第 1 集.mkv
+/media/电视剧/欧美剧/Show Name (2026)/Season 01/Show Name - S01E01 - 第 1 集.mkv
+/media/电视剧/日番/Anime Name (2026)/Season 01/Anime Name - S01E01 - 第 1 集.mkv
+/media/电视剧/日韩剧/Show Name (2026)/Season 01/Show Name - S01E01 - 第 1 集.mkv
+/media/电视剧/综艺/Variety Name (2026)/Season 2026/Variety Name - S2026E01 - 第 1 集.mp4
+/media/电影/动画电影/Movie Name (2026)/Movie Name (2026) - 1080p.mkv
+/media/电影/华语电影/Movie Name (2026)/Movie Name (2026) - 1080p.mkv
+/media/电影/外语电影/Movie Name (2026)/Movie Name (2026) - 1080p.mkv
+```
+
+If the library root is set directly to `/media`, the organizer automatically adds the `电影/` or `电视剧/` type folder when smart classification is enabled. If the library root is already `/media/电影` or `/media/电视剧`, it will not add the type folder again.
+
+Automatic and manual organization are separate switches:
+
+- `organizer.smart_classify`: controls smart category folders only.
+- `organizer.auto_after_download` / `organize.auto`: controls whether completed downloads are organized automatically.
+- If auto organization is disabled, use the Tools page to organize a library or a single media item manually.
 
 ### Organization and Scraping Naming Templates
 

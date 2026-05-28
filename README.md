@@ -472,12 +472,10 @@ docker compose up -d
 
 | 类型 | 推荐路径 |
 | --- | --- |
-| 电影 | `/media/Movies` |
-| 剧集 | `/media/TV` |
-| 动漫 | `/media/Anime` |
-| 综艺 | `/media/Variety` |
+| 电影媒体库 | `/media/电影` |
+| 剧集/动漫/综艺媒体库 | `/media/电视剧` |
 | 成人内容 | `/media/Adult` |
-| 下载入库 | `/downloads/Movies`、`/downloads/TV` 等 |
+| 下载根目录 | `/downloads` |
 
 #### NAS 绝对路径写法
 
@@ -500,7 +498,7 @@ MEDIASTATION_MEDIA_DIR=/vol1/1000/Docker/moviepilot-v2/media
 MEDIASTATION_DOWNLOAD_DIR=/vol1/1000/qBittorrent/downloads
 ```
 
-容器内路径仍然填写 `/media` 和 `/downloads`，例如媒体库添加 `/media/Movies`，下载器保存路径填写 `/downloads/Movies`。
+容器内媒体库建议添加 `/media/电影` 和 `/media/电视剧` 两个根目录；整理后会自动进入 `/media/电影/动画电影`、`/media/电视剧/国产剧` 等分类目录。下载器保存根目录填写 `/downloads`，订阅下载会自动落到 `/downloads/动画电影`、`/downloads/国产剧` 等分类目录。
 
 ### 下载器路径怎么填
 
@@ -514,13 +512,24 @@ MediaStationGo 容器：/downloads
 qBittorrent 容器：/downloads
 ```
 
-订阅保存路径可填写：
+订阅保存根目录建议填写：
 
 ```text
-/downloads/Movies
-/downloads/TV
-/downloads/Anime
-/downloads/Variety
+/downloads
+```
+
+启用智能分类后，订阅或站点搜索下载会根据媒体类别自动进入：
+
+```text
+/downloads/动画电影
+/downloads/华语电影
+/downloads/外语电影
+/downloads/国产剧
+/downloads/国漫
+/downloads/日番
+/downloads/欧美剧
+/downloads/日韩剧
+/downloads/综艺
 ```
 
 ---
@@ -774,6 +783,63 @@ movie.nfo
 tvshow.nfo
 episode.nfo
 ```
+
+### 智能分类目录规则
+
+MediaStationGo 的智能分类分为两个阶段：
+
+1. 下载阶段：根据订阅类型、搜索结果分类和标题特征，把任务保存到下载器根目录下的分类子目录。
+2. 整理阶段：用户可选择手动整理，或开启自动整理；整理时先进入媒体库一级目录，再进入二级分类目录。
+
+推荐宿主机目录：
+
+```text
+/vol1/1000/qBittorrent/downloads
+/vol1/1000/Docker/moviepilot-v2/media/电影
+/vol1/1000/Docker/moviepilot-v2/media/电视剧
+```
+
+对应容器内目录：
+
+```text
+/downloads
+/media/电影
+/media/电视剧
+```
+
+下载器智能分类示例：
+
+```text
+/downloads/动画电影
+/downloads/国产剧
+/downloads/国漫
+/downloads/华语电影
+/downloads/日番
+/downloads/外语电影
+/downloads/综艺
+```
+
+整理后媒体库示例：
+
+```text
+/media/电视剧/国产剧/剧名 (2026)/Season 01/剧名 - S01E01 - 第 1 集.mkv
+/media/电视剧/国漫/动画名 (2026)/Season 01/动画名 - S01E01 - 第 1 集.mkv
+/media/电视剧/欧美剧/剧名 (2026)/Season 01/剧名 - S01E01 - 第 1 集.mkv
+/media/电视剧/日番/番剧名 (2026)/Season 01/番剧名 - S01E01 - 第 1 集.mkv
+/media/电视剧/日韩剧/剧名 (2026)/Season 01/剧名 - S01E01 - 第 1 集.mkv
+/media/电视剧/综艺/综艺名 (2026)/Season 2026/综艺名 - S2026E01 - 第 1 集.mp4
+/media/电影/动画电影/电影名 (2026)/电影名 (2026) - 1080p.mkv
+/media/电影/华语电影/电影名 (2026)/电影名 (2026) - 1080p.mkv
+/media/电影/外语电影/电影名 (2026)/电影名 (2026) - 1080p.mkv
+```
+
+如果媒体库根目录直接设置为 `/media`，整理器会在启用智能分类时自动补上 `电影/` 或 `电视剧/` 一级目录；如果你已经把媒体库设置为 `/media/电影` 或 `/media/电视剧`，则不会重复追加一级目录。
+
+自动整理与手动整理是两件事：
+
+- `organizer.smart_classify`：只控制是否使用智能分类目录。
+- `organizer.auto_after_download` / `organize.auto`：控制下载完成后是否自动整理。
+- 未开启自动整理时，可以在「整理与维护」页面手动整理媒体库或单个媒体。
 
 ### 整理与刮削命名模板
 
