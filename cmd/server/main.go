@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -149,13 +150,37 @@ func serveSPA(r *gin.Engine, webDir string) {
 	r.StaticFile("/favicon.ico", filepath.Join(webDir, "favicon.ico"))
 	r.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
-		// Do not swallow API or WebSocket routes; let them 404 naturally.
-		if len(path) >= 5 && path[:5] == "/api/" {
+		// Do not swallow API / Emby compatibility routes; clients expect JSON
+		// or 404, not the React index.html fallback.
+		if shouldBypassSPAFallback(path) {
 			c.Status(http.StatusNotFound)
 			return
 		}
 		c.File(filepath.Join(webDir, "index.html"))
 	})
+}
+
+func shouldBypassSPAFallback(path string) bool {
+	lower := strings.ToLower(path)
+	for _, prefix := range []string{
+		"/api/",
+		"/emby/",
+		"/system/",
+		"/users/",
+		"/items/",
+		"/shows/",
+		"/library/",
+		"/videos/",
+		"/sessions/",
+		"/displaypreferences/",
+		"/branding/",
+		"/localization/",
+	} {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func newLogger(cfg *config.Config) (*zap.Logger, error) {

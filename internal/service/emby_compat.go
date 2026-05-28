@@ -6,15 +6,20 @@
 // MediaStationGo without a custom plugin.
 //
 // The shim is read-mostly: items, images, playback are fully covered;
-//播放进度上报 / 收藏切换 是写路径但走我们自己的 PlaybackHistory /
+// 播放进度上报 / 收藏切换 是写路径但走我们自己的 PlaybackHistory /
 // Favorite 表，所以 Emby 客户端的"标记已看 / 收藏"也会反向同步到
 // 我们自己的 React UI。
 package service
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -220,7 +225,45 @@ type ItemsParams struct {
 	StartIndex       int
 }
 
-// Items paginates media in Emby's flat shape.
+const (
+	embyVirtualSeriesPrefix = "msgo-series-"
+	embyVirtualSeasonPrefix = "msgo-season-"
+)
+
+var (
+	embySeasonDirRE    = regexp.MustCompile(`(?i)^(season[\s._-]*\d+|s\d+|第\s*\d+\s*季)$`)
+	embyYearSuffixRE   = regexp.MustCompile(`\s*[\(（\[]\d{4}[\)）\]]\s*$`)
+	embyEpisodeTitleRE = regexp.MustCompile(`(?i)\s*[-_ ]*s\d{1,2}e\d{1,3}.*$`)
+)
+
+type embySeriesGroup struct {
+	ID          string
+	LibraryID   string
+	Name        string
+	PosterURL   string
+	BackdropURL string
+	Overview    string
+	Rating      float32
+	Year        int
+	TMDbID      int
+	BangumiID   int
+	CreatedAt   time.Time
+	Episodes    []model.Media
+}
+
+type embySeasonGroup struct {
+	ID        string
+	SeriesID  string
+	LibraryID string
+	Name      string
+	SeasonNum int
+	Series    embySeriesGroup
+	Episodes  []model.Media
+}
+
+// Items paginates media in Emby's hierarchy. Episodic libraries are exposed as
+// Series -> Season -> Episode so Infuse/Vidhub/SenPlayer stop treating every
+// episode as a separate movie card.
 func (e *EmbyService) Items(ctx context.Context, p ItemsParams) (map[string]any, error) {
 	if p.Limit <= 0 || p.Limit > 500 {
 		p.Limit = 50
@@ -228,24 +271,74 @@ func (e *EmbyService) Items(ctx context.Context, p ItemsParams) (map[string]any,
 	if p.StartIndex < 0 {
 		p.StartIndex = 0
 	}
-	q := e.repo.DB.WithContext(ctx).Model(&model.Media{}).Where("deleted_at IS NULL")
+
+	if len(p.IDs) > 0 {
+		items := make([]map[string]any, 0, len(p.IDs))
+		for _, id := range p.IDs {
+			item, err := e.Item(ctx, id, p.UserID)
+			if err != nil {
+				return nil, err
+			}
+			if item != nil {
+				items = append(items, item)
+			}
+		}
+		return map[string]any{"Items": items, "TotalRecordCount": len(items), "StartIndex": 0}, nil
+	}
+
+	if season, ok, err := e.findSeasonGroup(ctx, p.ParentID); err != nil {
+		return nil, err
+	} else if ok {
+		return e.episodeItems(ctx, season.Episodes, p)
+	}
+
+	if series, ok, err := e.findSeriesGroup(ctx, p.ParentID); err != nil {
+		return nil, err
+	} else if ok {
+		if p.Recursive || containsItemType(p.IncludeItemTypes, "Episode") {
+			return e.episodeItems(ctx, series.Episodes, p)
+		}
+		seasons := e.seasonsForSeries(series)
+		items := make([]map[string]any, 0, len(seasons))
+		for _, season := range pageSlice(seasons, p.StartIndex, p.Limit) {
+			items = append(items, e.seasonPayload(season))
+		}
+		return map[string]any{"Items": items, "TotalRecordCount": len(seasons), "StartIndex": p.StartIndex}, nil
+	}
+
 	if p.ParentID != "" {
-		// ParentID 既可能是 library_id 也可能是 series_id（剧集详情下钻）
+		if episodic, err := e.libraryIsEpisodic(ctx, p.ParentID); err != nil {
+			return nil, err
+		} else if episodic && !p.Recursive && !containsItemType(p.IncludeItemTypes, "Episode") {
+			return e.seriesItemsForLibrary(ctx, p.ParentID, p)
+		}
+	}
+
+	if containsItemType(p.IncludeItemTypes, "Series") && !containsItemType(p.IncludeItemTypes, "Episode") {
+		return e.seriesItemsForLibrary(ctx, p.ParentID, p)
+	}
+	return e.mediaItems(ctx, p)
+}
+
+func (e *EmbyService) mediaItems(ctx context.Context, p ItemsParams) (map[string]any, error) {
+	q := e.repo.DB.WithContext(ctx).Model(&model.Media{})
+	if p.ParentID != "" {
 		q = q.Where("library_id = ? OR series_id = ?", p.ParentID, p.ParentID)
 	}
-	if len(p.IDs) > 0 {
-		q = q.Where("id IN ?", p.IDs)
-	}
 	if p.SearchTerm != "" {
-		q = q.Where("title LIKE ?", "%"+p.SearchTerm+"%")
+		q = q.Where("title LIKE ? OR original_name LIKE ?", "%"+p.SearchTerm+"%", "%"+p.SearchTerm+"%")
+	}
+	if containsItemType(p.IncludeItemTypes, "Movie") && !containsItemType(p.IncludeItemTypes, "Episode") {
+		q = q.Where("season_num = 0 AND episode_num = 0")
+	}
+	if containsItemType(p.IncludeItemTypes, "Episode") && !containsItemType(p.IncludeItemTypes, "Movie") {
+		q = q.Where("season_num > 0 OR episode_num > 0")
 	}
 
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, err
 	}
-
-	// 排序
 	order := "created_at desc"
 	switch strings.ToLower(p.SortBy) {
 	case "sortname", "name":
@@ -267,18 +360,52 @@ func (e *EmbyService) Items(ctx context.Context, p ItemsParams) (map[string]any,
 	if err := q.Order(order).Offset(p.StartIndex).Limit(p.Limit).Find(&rows).Error; err != nil {
 		return nil, err
 	}
+	items, err := e.payloadsForMedia(ctx, rows, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"Items": items, "TotalRecordCount": total, "StartIndex": p.StartIndex}, nil
+}
 
-	// User-data: 收藏 + 进度
+func (e *EmbyService) episodeItems(ctx context.Context, rows []model.Media, p ItemsParams) (map[string]any, error) {
+	if p.SearchTerm != "" {
+		filtered := rows[:0]
+		needle := strings.ToLower(p.SearchTerm)
+		for _, row := range rows {
+			if strings.Contains(strings.ToLower(row.Title), needle) || strings.Contains(strings.ToLower(row.OriginalName), needle) {
+				filtered = append(filtered, row)
+			}
+		}
+		rows = filtered
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].SeasonNum != rows[j].SeasonNum {
+			return rows[i].SeasonNum < rows[j].SeasonNum
+		}
+		if rows[i].EpisodeNum != rows[j].EpisodeNum {
+			return rows[i].EpisodeNum < rows[j].EpisodeNum
+		}
+		return rows[i].CreatedAt.Before(rows[j].CreatedAt)
+	})
+	total := len(rows)
+	items, err := e.payloadsForMedia(ctx, pageSlice(rows, p.StartIndex, p.Limit), p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"Items": items, "TotalRecordCount": total, "StartIndex": p.StartIndex}, nil
+}
+
+func (e *EmbyService) payloadsForMedia(ctx context.Context, rows []model.Media, userID string) ([]map[string]any, error) {
 	userFavs := map[string]bool{}
 	userPos := map[string]int64{}
-	if p.UserID != "" {
+	if userID != "" {
 		var favs []model.Favorite
-		_ = e.repo.DB.WithContext(ctx).Where("user_id = ?", p.UserID).Find(&favs).Error
+		_ = e.repo.DB.WithContext(ctx).Where("user_id = ?", userID).Find(&favs).Error
 		for _, f := range favs {
 			userFavs[f.MediaID] = true
 		}
 		var hist []model.PlaybackHistory
-		_ = e.repo.DB.WithContext(ctx).Where("user_id = ?", p.UserID).Find(&hist).Error
+		_ = e.repo.DB.WithContext(ctx).Where("user_id = ?", userID).Find(&hist).Error
 		for _, h := range hist {
 			userPos[h.MediaID] = h.PositionMs
 		}
@@ -288,20 +415,35 @@ func (e *EmbyService) Items(ctx context.Context, p ItemsParams) (map[string]any,
 	for _, m := range rows {
 		items = append(items, e.itemPayload(&m, userFavs[m.ID], userPos[m.ID]))
 	}
-	return map[string]any{
-		"Items":            items,
-		"TotalRecordCount": total,
-		"StartIndex":       p.StartIndex,
-	}, nil
+	return items, nil
 }
 
 // Item 单条目详情。
 func (e *EmbyService) Item(ctx context.Context, mediaID, userID string) (map[string]any, error) {
+	if strings.HasPrefix(mediaID, embyVirtualSeasonPrefix) {
+		if season, ok, err := e.findSeasonGroup(ctx, mediaID); err != nil {
+			return nil, err
+		} else if ok {
+			return e.seasonPayload(season), nil
+		}
+	}
+	if strings.HasPrefix(mediaID, embyVirtualSeriesPrefix) {
+		if series, ok, err := e.findSeriesGroup(ctx, mediaID); err != nil {
+			return nil, err
+		} else if ok {
+			return e.seriesPayload(series), nil
+		}
+	}
 	m, err := e.repo.Media.FindByID(ctx, mediaID)
 	if err != nil {
 		return nil, err
 	}
 	if m == nil {
+		if series, ok, err := e.findSeriesGroup(ctx, mediaID); err != nil {
+			return nil, err
+		} else if ok {
+			return e.seriesPayload(series), nil
+		}
 		return nil, nil
 	}
 	fav := false
@@ -329,6 +471,21 @@ func (e *EmbyService) LatestItems(ctx context.Context, userID, parentID string, 
 	}
 	q := e.repo.DB.WithContext(ctx).Model(&model.Media{}).Where("deleted_at IS NULL")
 	if parentID != "" {
+		if episodic, err := e.libraryIsEpisodic(ctx, parentID); err == nil && episodic {
+			resp, err := e.seriesItemsForLibrary(ctx, parentID, ItemsParams{
+				UserID:     userID,
+				ParentID:   parentID,
+				Limit:      limit,
+				StartIndex: 0,
+				SortBy:     "datecreated",
+				SortOrder:  "Descending",
+			})
+			if err != nil {
+				return nil, err
+			}
+			items, _ := resp["Items"].([]map[string]any)
+			return items, nil
+		}
 		q = q.Where("library_id = ?", parentID)
 	}
 	var rows []model.Media
@@ -395,8 +552,23 @@ func (e *EmbyService) ResumeItems(ctx context.Context, userID string, limit int)
 
 func (e *EmbyService) itemPayload(m *model.Media, fav bool, posMs int64) map[string]any {
 	itemType := "Movie"
+	name := m.Title
+	parentID := m.LibraryID
+	seriesID := m.SeriesID
+	seriesName := ""
+	seasonID := ""
 	if m.SeasonNum > 0 || m.EpisodeNum > 0 {
 		itemType = "Episode"
+		seriesID = e.seriesIDForMedia(m)
+		seriesName = e.seriesNameForMedia(m)
+		seasonID = e.seasonIDForMedia(m)
+		parentID = seasonID
+		originalName := strings.TrimSpace(m.OriginalName)
+		if originalName != "" && !strings.EqualFold(originalName, seriesName) && !strings.EqualFold(originalName, m.Title) {
+			name = m.OriginalName
+		} else if m.EpisodeNum > 0 {
+			name = fmt.Sprintf("第 %d 集", m.EpisodeNum)
+		}
 	}
 	imageTags := map[string]string{}
 	backdropTags := []string{}
@@ -417,7 +589,7 @@ func (e *EmbyService) itemPayload(m *model.Media, fav bool, posMs int64) map[str
 
 	return map[string]any{
 		"Id":                m.ID,
-		"Name":              m.Title,
+		"Name":              name,
 		"OriginalTitle":     m.OriginalName,
 		"ServerId":          embyServerID,
 		"Type":              itemType,
@@ -434,8 +606,11 @@ func (e *EmbyService) itemPayload(m *model.Media, fav bool, posMs int64) map[str
 		"Height":            m.Height,
 		"DateCreated":       m.CreatedAt,
 		"Path":              m.Path,
-		"ParentId":          m.LibraryID,
-		"SeriesId":          m.SeriesID,
+		"ParentId":          parentID,
+		"SeasonId":          seasonID,
+		"SeasonName":        seasonName(m.SeasonNum),
+		"SeriesId":          seriesID,
+		"SeriesName":        seriesName,
 		"ImageTags":         imageTags,
 		"BackdropImageTags": backdropTags,
 		"Genres":            splitCSV(m.Genres),
@@ -454,11 +629,439 @@ func (e *EmbyService) itemPayload(m *model.Media, fav bool, posMs int64) map[str
 	}
 }
 
+func (e *EmbyService) seriesItemsForLibrary(ctx context.Context, libraryID string, p ItemsParams) (map[string]any, error) {
+	q := e.repo.DB.WithContext(ctx).Model(&model.Media{}).Where("season_num > 0 OR episode_num > 0")
+	if libraryID != "" {
+		q = q.Where("library_id = ?", libraryID)
+	}
+	if p.SearchTerm != "" {
+		q = q.Where("title LIKE ? OR original_name LIKE ?", "%"+p.SearchTerm+"%", "%"+p.SearchTerm+"%")
+	}
+	var rows []model.Media
+	if err := q.Order("created_at desc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	groups := e.seriesGroupsFromMedia(rows)
+	sortSeriesGroups(groups, p)
+	total := len(groups)
+	items := make([]map[string]any, 0, minInt(p.Limit, len(groups)))
+	for _, group := range pageSlice(groups, p.StartIndex, p.Limit) {
+		items = append(items, e.seriesPayload(group))
+	}
+	return map[string]any{"Items": items, "TotalRecordCount": total, "StartIndex": p.StartIndex}, nil
+}
+
+func (e *EmbyService) libraryIsEpisodic(ctx context.Context, libraryID string) (bool, error) {
+	if strings.TrimSpace(libraryID) == "" {
+		return false, nil
+	}
+	if lib, err := e.repo.Library.FindByID(ctx, libraryID); err != nil {
+		return false, err
+	} else if lib != nil {
+		switch lib.Type {
+		case "tv", "anime", "variety":
+			return true, nil
+		}
+	}
+	var count int64
+	err := e.repo.DB.WithContext(ctx).Model(&model.Media{}).
+		Where("library_id = ? AND (season_num > 0 OR episode_num > 0)", libraryID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (e *EmbyService) findSeriesGroup(ctx context.Context, id string) (embySeriesGroup, bool, error) {
+	if strings.TrimSpace(id) == "" {
+		return embySeriesGroup{}, false, nil
+	}
+	var rows []model.Media
+	q := e.repo.DB.WithContext(ctx).Model(&model.Media{}).Where("season_num > 0 OR episode_num > 0")
+	if !strings.HasPrefix(id, embyVirtualSeriesPrefix) {
+		q = q.Where("series_id = ?", id)
+	}
+	if err := q.Order("season_num asc, episode_num asc, created_at asc").Find(&rows).Error; err != nil {
+		return embySeriesGroup{}, false, err
+	}
+	for _, group := range e.seriesGroupsFromMedia(rows) {
+		if group.ID == id {
+			return group, true, nil
+		}
+	}
+	if !strings.HasPrefix(id, embyVirtualSeriesPrefix) {
+		if series, err := e.repo.Series.FindByID(ctx, id); err != nil {
+			return embySeriesGroup{}, false, err
+		} else if series != nil {
+			return embySeriesGroup{
+				ID:          series.ID,
+				LibraryID:   series.LibraryID,
+				Name:        series.Title,
+				PosterURL:   series.PosterURL,
+				BackdropURL: series.BackdropURL,
+				Overview:    series.Overview,
+				Rating:      series.Rating,
+				Year:        series.Year,
+				TMDbID:      series.TMDbID,
+				BangumiID:   series.BangumiID,
+				CreatedAt:   series.CreatedAt,
+			}, true, nil
+		}
+	}
+	return embySeriesGroup{}, false, nil
+}
+
+func (e *EmbyService) findSeasonGroup(ctx context.Context, id string) (embySeasonGroup, bool, error) {
+	if strings.TrimSpace(id) == "" || !strings.HasPrefix(id, embyVirtualSeasonPrefix) {
+		return embySeasonGroup{}, false, nil
+	}
+	var rows []model.Media
+	if err := e.repo.DB.WithContext(ctx).Model(&model.Media{}).
+		Where("season_num > 0 OR episode_num > 0").
+		Order("season_num asc, episode_num asc, created_at asc").
+		Find(&rows).Error; err != nil {
+		return embySeasonGroup{}, false, err
+	}
+	for _, series := range e.seriesGroupsFromMedia(rows) {
+		for _, season := range e.seasonsForSeries(series) {
+			if season.ID == id {
+				return season, true, nil
+			}
+		}
+	}
+	return embySeasonGroup{}, false, nil
+}
+
+func (e *EmbyService) seriesGroupsFromMedia(rows []model.Media) []embySeriesGroup {
+	byID := map[string]*embySeriesGroup{}
+	order := []string{}
+	for _, row := range rows {
+		row := row
+		seriesID := e.seriesIDForMedia(&row)
+		group, ok := byID[seriesID]
+		if !ok {
+			group = &embySeriesGroup{
+				ID:        seriesID,
+				LibraryID: row.LibraryID,
+				Name:      e.seriesNameForMedia(&row),
+				Year:      row.Year,
+				TMDbID:    row.TMDbID,
+				BangumiID: row.BangumiID,
+				CreatedAt: row.CreatedAt,
+			}
+			byID[seriesID] = group
+			order = append(order, seriesID)
+		}
+		if row.CreatedAt.After(group.CreatedAt) {
+			group.CreatedAt = row.CreatedAt
+		}
+		if group.PosterURL == "" && row.PosterURL != "" {
+			group.PosterURL = row.PosterURL
+		}
+		if group.BackdropURL == "" && row.BackdropURL != "" {
+			group.BackdropURL = row.BackdropURL
+		}
+		if group.Overview == "" && row.Overview != "" {
+			group.Overview = row.Overview
+		}
+		if group.Rating == 0 && row.Rating > 0 {
+			group.Rating = row.Rating
+		}
+		if group.Year == 0 && row.Year > 0 {
+			group.Year = row.Year
+		}
+		group.Episodes = append(group.Episodes, row)
+	}
+	groups := make([]embySeriesGroup, 0, len(order))
+	for _, id := range order {
+		group := *byID[id]
+		sort.SliceStable(group.Episodes, func(i, j int) bool {
+			if group.Episodes[i].SeasonNum != group.Episodes[j].SeasonNum {
+				return group.Episodes[i].SeasonNum < group.Episodes[j].SeasonNum
+			}
+			if group.Episodes[i].EpisodeNum != group.Episodes[j].EpisodeNum {
+				return group.Episodes[i].EpisodeNum < group.Episodes[j].EpisodeNum
+			}
+			return group.Episodes[i].CreatedAt.Before(group.Episodes[j].CreatedAt)
+		})
+		groups = append(groups, group)
+	}
+	return groups
+}
+
+func (e *EmbyService) seasonsForSeries(series embySeriesGroup) []embySeasonGroup {
+	bySeason := map[int]*embySeasonGroup{}
+	order := []int{}
+	for _, episode := range series.Episodes {
+		seasonNum := episode.SeasonNum
+		if seasonNum <= 0 {
+			seasonNum = 1
+		}
+		season, ok := bySeason[seasonNum]
+		if !ok {
+			season = &embySeasonGroup{
+				ID:        seasonID(series.ID, seasonNum),
+				SeriesID:  series.ID,
+				LibraryID: series.LibraryID,
+				Name:      seasonName(seasonNum),
+				SeasonNum: seasonNum,
+				Series:    series,
+			}
+			bySeason[seasonNum] = season
+			order = append(order, seasonNum)
+		}
+		season.Episodes = append(season.Episodes, episode)
+	}
+	sort.Ints(order)
+	out := make([]embySeasonGroup, 0, len(order))
+	for _, seasonNum := range order {
+		out = append(out, *bySeason[seasonNum])
+	}
+	return out
+}
+
+func (e *EmbyService) seriesPayload(group embySeriesGroup) map[string]any {
+	imageTags := map[string]string{}
+	backdropTags := []string{}
+	if group.PosterURL != "" {
+		imageTags["Primary"] = group.ID
+	}
+	if group.BackdropURL != "" {
+		backdropTags = append(backdropTags, group.ID+"-bd")
+	}
+	return map[string]any{
+		"Id":                 group.ID,
+		"Name":               group.Name,
+		"ServerId":           embyServerID,
+		"Type":               "Series",
+		"MediaType":          "Video",
+		"IsFolder":           true,
+		"ParentId":           group.LibraryID,
+		"ProductionYear":     group.Year,
+		"Overview":           group.Overview,
+		"CommunityRating":    group.Rating,
+		"RecursiveItemCount": len(group.Episodes),
+		"ChildCount":         len(e.seasonsForSeries(group)),
+		"DateCreated":        group.CreatedAt,
+		"ImageTags":          imageTags,
+		"BackdropImageTags":  backdropTags,
+		"ProviderIds": map[string]string{
+			"Tmdb":    intToStr(group.TMDbID),
+			"Bangumi": intToStr(group.BangumiID),
+		},
+		"UserData": emptyUserData(),
+	}
+}
+
+func (e *EmbyService) seasonPayload(season embySeasonGroup) map[string]any {
+	imageTags := map[string]string{}
+	backdropTags := []string{}
+	if season.Series.PosterURL != "" {
+		imageTags["Primary"] = season.ID
+	}
+	if season.Series.BackdropURL != "" {
+		backdropTags = append(backdropTags, season.ID+"-bd")
+	}
+	return map[string]any{
+		"Id":                season.ID,
+		"Name":              season.Name,
+		"ServerId":          embyServerID,
+		"Type":              "Season",
+		"MediaType":         "Video",
+		"IsFolder":          true,
+		"ParentId":          season.SeriesID,
+		"SeriesId":          season.SeriesID,
+		"SeriesName":        season.Series.Name,
+		"IndexNumber":       season.SeasonNum,
+		"ChildCount":        len(season.Episodes),
+		"ImageTags":         imageTags,
+		"BackdropImageTags": backdropTags,
+		"UserData":          emptyUserData(),
+	}
+}
+
+// ImageURL returns artwork for a media/series/season item id.
+func (e *EmbyService) ImageURL(ctx context.Context, id, imageType string) (string, error) {
+	pick := func(primary, backdrop string) string {
+		switch strings.ToLower(imageType) {
+		case "backdrop", "art":
+			if backdrop != "" {
+				return backdrop
+			}
+		}
+		if primary != "" {
+			return primary
+		}
+		return backdrop
+	}
+	if strings.HasPrefix(id, embyVirtualSeasonPrefix) {
+		if season, ok, err := e.findSeasonGroup(ctx, id); err != nil {
+			return "", err
+		} else if ok {
+			return pick(season.Series.PosterURL, season.Series.BackdropURL), nil
+		}
+	}
+	if strings.HasPrefix(id, embyVirtualSeriesPrefix) {
+		if series, ok, err := e.findSeriesGroup(ctx, id); err != nil {
+			return "", err
+		} else if ok {
+			return pick(series.PosterURL, series.BackdropURL), nil
+		}
+	}
+	m, err := e.repo.Media.FindByID(ctx, id)
+	if err == nil && m != nil {
+		return pick(m.PosterURL, m.BackdropURL), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if series, ok, err := e.findSeriesGroup(ctx, id); err != nil {
+		return "", err
+	} else if ok {
+		return pick(series.PosterURL, series.BackdropURL), nil
+	}
+	return "", nil
+}
+
+func (e *EmbyService) seriesIDForMedia(m *model.Media) string {
+	if strings.TrimSpace(m.SeriesID) != "" {
+		return m.SeriesID
+	}
+	return stableEmbyID(embyVirtualSeriesPrefix, m.LibraryID, e.seriesNameForMedia(m))
+}
+
+func (e *EmbyService) seasonIDForMedia(m *model.Media) string {
+	return seasonID(e.seriesIDForMedia(m), maxInt(m.SeasonNum, 1))
+}
+
+func (e *EmbyService) seriesNameForMedia(m *model.Media) string {
+	if strings.TrimSpace(m.SeriesID) != "" {
+		if series, err := e.repo.Series.FindByID(context.Background(), m.SeriesID); err == nil && series != nil && strings.TrimSpace(series.Title) != "" {
+			return series.Title
+		}
+	}
+	if name := inferSeriesNameFromPath(m.Path); name != "" {
+		return name
+	}
+	name := strings.TrimSpace(m.Title)
+	name = embyEpisodeTitleRE.ReplaceAllString(name, "")
+	name = embyYearSuffixRE.ReplaceAllString(name, "")
+	if name == "" {
+		name = strings.TrimSpace(m.OriginalName)
+	}
+	return name
+}
+
+func inferSeriesNameFromPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	dir := filepath.Dir(path)
+	base := filepath.Base(dir)
+	if embySeasonDirRE.MatchString(base) {
+		dir = filepath.Dir(dir)
+		base = filepath.Base(dir)
+	}
+	base = strings.TrimSpace(embyYearSuffixRE.ReplaceAllString(base, ""))
+	if base == "." || base == string(filepath.Separator) {
+		return ""
+	}
+	return base
+}
+
+func stableEmbyID(prefix string, parts ...string) string {
+	h := sha1.New()
+	for _, part := range parts {
+		_, _ = h.Write([]byte(strings.ToLower(strings.TrimSpace(part))))
+		_, _ = h.Write([]byte{0})
+	}
+	return prefix + hex.EncodeToString(h.Sum(nil))[:32]
+}
+
+func seasonID(seriesID string, seasonNum int) string {
+	return stableEmbyID(embyVirtualSeasonPrefix, seriesID, strconv.Itoa(maxInt(seasonNum, 1)))
+}
+
+func seasonName(seasonNum int) string {
+	if seasonNum <= 0 {
+		seasonNum = 1
+	}
+	return fmt.Sprintf("第 %d 季", seasonNum)
+}
+
+func sortSeriesGroups(groups []embySeriesGroup, p ItemsParams) {
+	switch strings.ToLower(p.SortBy) {
+	case "sortname", "name":
+		sort.SliceStable(groups, func(i, j int) bool {
+			if strings.EqualFold(p.SortOrder, "Descending") {
+				return groups[i].Name > groups[j].Name
+			}
+			return groups[i].Name < groups[j].Name
+		})
+	default:
+		sort.SliceStable(groups, func(i, j int) bool {
+			if strings.EqualFold(p.SortOrder, "Ascending") {
+				return groups[i].CreatedAt.Before(groups[j].CreatedAt)
+			}
+			return groups[i].CreatedAt.After(groups[j].CreatedAt)
+		})
+	}
+}
+
+func containsItemType(types []string, want string) bool {
+	for _, t := range types {
+		if strings.EqualFold(strings.TrimSpace(t), want) {
+			return true
+		}
+	}
+	return false
+}
+
+func pageSlice[T any](items []T, start, limit int) []T {
+	if start < 0 {
+		start = 0
+	}
+	if limit <= 0 {
+		limit = len(items)
+	}
+	if start >= len(items) {
+		return []T{}
+	}
+	end := start + limit
+	if end > len(items) {
+		end = len(items)
+	}
+	return items[start:end]
+}
+
+func emptyUserData() map[string]any {
+	return map[string]any{
+		"PlaybackPositionTicks": 0,
+		"PlayCount":             0,
+		"IsFavorite":            false,
+		"Played":                false,
+		"PlayedPercentage":      0,
+	}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // ─── Playback ────────────────────────────────────────────────────────────────
 
 // PlaybackInfo returns a PlaybackInfoResponse usable by Emby clients.
 func (e *EmbyService) PlaybackInfo(ctx context.Context, mediaID string) (map[string]any, error) {
-	m, err := e.repo.Media.FindByID(ctx, mediaID)
+	m, err := e.playableMedia(ctx, mediaID)
 	if err != nil || m == nil {
 		return nil, err
 	}
@@ -468,11 +1071,25 @@ func (e *EmbyService) PlaybackInfo(ctx context.Context, mediaID string) (map[str
 	}, nil
 }
 
+func (e *EmbyService) playableMedia(ctx context.Context, id string) (*model.Media, error) {
+	if season, ok, err := e.findSeasonGroup(ctx, id); err != nil {
+		return nil, err
+	} else if ok && len(season.Episodes) > 0 {
+		return &season.Episodes[0], nil
+	}
+	if series, ok, err := e.findSeriesGroup(ctx, id); err != nil {
+		return nil, err
+	} else if ok && len(series.Episodes) > 0 {
+		return &series.Episodes[0], nil
+	}
+	return e.repo.Media.FindByID(ctx, id)
+}
+
 // mediaSource 是 /Items 与 /PlaybackInfo 共享的 MediaSource 结构。
 //
 // asEmbedded=true：嵌在 /Items 列表里，不包含完整 stream URL（避免暴露
-// 直链给搜索接口）。/PlaybackInfo 走 false 路径，URL 完整指向
-// /api/stream/{id}（Emby 客户端会自动 append ?api_key=token）。
+// 直链给搜索接口）。/PlaybackInfo 走 false 路径，URL 指向 Emby 兼容
+// /Videos/{id}/stream（客户端会继续携带 X-Emby-Token 或 append api_key）。
 func (e *EmbyService) mediaSource(m *model.Media, asEmbedded bool) map[string]any {
 	src := map[string]any{
 		"Id":                   m.ID,
@@ -491,8 +1108,8 @@ func (e *EmbyService) mediaSource(m *model.Media, asEmbedded bool) map[string]an
 		"MediaStreams":         e.mediaStreams(m),
 	}
 	if !asEmbedded {
-		// 完整 URL，让 Infuse 直接 GET。Emby 客户端会自动加 ?api_key=token。
-		src["DirectStreamUrl"] = "/api/stream/" + m.ID
+		src["DirectStreamUrl"] = "/Videos/" + m.ID + "/stream"
+		src["TranscodingUrl"] = "/Videos/" + m.ID + "/stream"
 	}
 	if strings.TrimSpace(m.STRMURL) != "" {
 		// STRM 重定向：客户端直接拉远端，跳过我们这一层。

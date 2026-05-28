@@ -165,8 +165,15 @@ func extractToken(c *gin.Context) string {
 	if h := c.GetHeader("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
 	}
-	if q := c.Query("token"); q != "" {
-		return q
+	for _, header := range []string{"X-Emby-Token", "X-MediaBrowser-Token"} {
+		if value := strings.TrimSpace(c.GetHeader(header)); value != "" {
+			return value
+		}
+	}
+	for _, key := range []string{"token", "api_key", "apiKey", "ApiKey"} {
+		if value := strings.TrimSpace(c.Query(key)); value != "" {
+			return value
+		}
 	}
 	return ""
 }

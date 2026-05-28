@@ -72,6 +72,7 @@ func Register(r *gin.Engine, cfg *config.Config, log *zap.Logger, svc *service.C
 
 			// Streaming.
 			authed.GET("/stream/:id", streamHandler(svc))
+			authed.HEAD("/stream/:id", streamHandler(svc))
 			authed.GET("/hls/:id/index.m3u8", hlsPlaylistHandler(svc))
 			authed.GET("/hls/:id/:seg", hlsSegmentHandler(svc))
 			authed.DELETE("/hls/:id", stopTranscodeHandler(svc))

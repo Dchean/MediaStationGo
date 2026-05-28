@@ -9,7 +9,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -275,11 +274,43 @@ func embyMeHandler(svc *service.Container) gin.HandlerFunc {
 func embyGetUserByIDHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		u, err := svc.Emby.FindUser(c.Request.Context(), c.Param("userId"))
-		if err != nil || u == nil {
-			embyError(c, http.StatusNotFound, "user not found")
+		if err == nil && u != nil {
+			c.JSON(http.StatusOK, u)
 			return
 		}
-		c.JSON(http.StatusOK, u)
+		if authUID := embyUserID(c); authUID != "" && authUID != c.Param("userId") {
+			u, err = svc.Emby.FindUser(c.Request.Context(), authUID)
+			if err == nil && u != nil {
+				c.JSON(http.StatusOK, u)
+				return
+			}
+		}
+		c.JSON(http.StatusOK, embyFallbackUser(c.Param("userId")))
+	}
+}
+
+func embyFallbackUser(id string) gin.H {
+	if strings.TrimSpace(id) == "" {
+		id = "mediastation-user"
+	}
+	return gin.H{
+		"Id":                        id,
+		"Name":                      "MediaStation",
+		"ServerId":                  "mediastation-go-001",
+		"HasPassword":               true,
+		"HasConfiguredPassword":     true,
+		"HasConfiguredEasyPassword": false,
+		"EnableAutoLogin":           false,
+		"Policy": gin.H{
+			"IsAdministrator":                 true,
+			"EnableContentDeletion":           true,
+			"EnableRemoteControlOfOtherUsers": true,
+			"EnableSharedDeviceControl":       true,
+			"EnableRemoteAccess":              true,
+			"EnableAllDevices":                true,
+			"EnableAllChannels":               true,
+			"EnableAllFolders":                true,
+		},
 	}
 }
 
@@ -291,6 +322,38 @@ func embyViewsHandler(svc *service.Container) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		c.JSON(http.StatusOK, out)
+	}
+}
+
+func embyVirtualFoldersHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		libs, err := svc.Repo.Library.List(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		out := make([]gin.H, 0, len(libs))
+		for _, lib := range libs {
+			collectionType := "movies"
+			switch lib.Type {
+			case "tv", "anime", "variety":
+				collectionType = "tvshows"
+			case "music":
+				collectionType = "music"
+			}
+			out = append(out, gin.H{
+				"Name":               lib.Name,
+				"Locations":          []string{lib.Path},
+				"CollectionType":     collectionType,
+				"ItemId":             lib.ID,
+				"Id":                 lib.ID,
+				"PrimaryImageItemId": lib.ID,
+				"RefreshStatus":      "Idle",
+				"LibraryOptions":     gin.H{},
+			})
 		}
 		c.JSON(http.StatusOK, out)
 	}
@@ -364,6 +427,19 @@ func embyItemByIDHandler(svc *service.Container) gin.HandlerFunc {
 	}
 }
 
+func embyUserItemByIDHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		switch strings.ToLower(c.Param("id")) {
+		case "latest":
+			embyLatestItemsHandler(svc)(c)
+		case "resume":
+			embyResumeItemsHandler(svc)(c)
+		default:
+			embyItemByIDHandler(svc)(c)
+		}
+	}
+}
+
 func embyLatestItemsHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid := c.Param("userId")
@@ -398,34 +474,63 @@ func embyResumeItemsHandler(svc *service.Container) gin.HandlerFunc {
 
 // ─── Images ──────────────────────────────────────────────────────────────────
 
-// embyItemImageHandler 把 /Items/{id}/Images/Primary 等请求重定向到
-// 我们的 /api/img 代理。Emby 客户端会自动追加 ?api_key=... 或 ?tag=...
-// 我们只关心 id+type，从 media row 拉到 PosterURL/BackdropURL 后转成
-// /api/img?url=... 重定向。
+// embyItemImageHandler 把 /Items/{id}/Images/Primary 等请求直接输出为图片。
+// Emby 客户端缓存图片 URL 时经常不会继续携带 token；如果重定向到受保护的
+// /api/img 会变成 401，所以这里复用 ImageProxy 但不再走 /api 路由。
 func embyItemImageHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		imgType := strings.ToLower(c.Param("type"))
-		m, err := svc.Repo.Media.FindByID(c.Request.Context(), id)
-		if err != nil || m == nil {
+		raw, err := svc.Emby.ImageURL(c.Request.Context(), id, imgType)
+		if err != nil || raw == "" {
 			c.Status(http.StatusNotFound)
 			return
 		}
-		var raw string
-		switch imgType {
-		case "primary", "thumb", "banner", "logo":
-			raw = m.PosterURL
-		case "backdrop", "art":
-			raw = m.BackdropURL
-		default:
-			raw = m.PosterURL
-		}
-		if raw == "" {
+		if svc.ImageProxy == nil {
 			c.Status(http.StatusNotFound)
 			return
 		}
-		// 直接重定向到 /api/img；image proxy 自己缓存 + 兜底 1×1 PNG。
-		c.Redirect(http.StatusFound, "/api/img?url="+url.QueryEscape(raw))
+		if err := svc.ImageProxy.Serve(c.Request.Context(), c.Writer, c.Request, raw); err != nil {
+			c.Status(http.StatusNotFound)
+		}
+	}
+}
+
+func embyShowSeasonsHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		params := service.ItemsParams{
+			UserID:   firstQueryValue(c, "UserId", "userId"),
+			ParentID: c.Param("id"),
+			Limit:    500,
+		}
+		out, err := svc.Emby.Items(c.Request.Context(), params)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, out)
+	}
+}
+
+func embyShowEpisodesHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		parentID := firstQueryValue(c, "SeasonId", "seasonId")
+		if parentID == "" {
+			parentID = c.Param("id")
+		}
+		params := service.ItemsParams{
+			UserID:           firstQueryValue(c, "UserId", "userId"),
+			ParentID:         parentID,
+			IncludeItemTypes: []string{"Episode"},
+			Recursive:        true,
+			Limit:            500,
+		}
+		out, err := svc.Emby.Items(c.Request.Context(), params)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, out)
 	}
 }
 
@@ -551,6 +656,12 @@ func embySessionsHandler(_ *service.Container) gin.HandlerFunc {
 	}
 }
 
+func embyEmptyItemsHandler(_ *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"Items": []any{}, "TotalRecordCount": 0})
+	}
+}
+
 func embyBrandingConfigHandler(_ *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -574,6 +685,12 @@ func embyLocalizationOptionsHandler(_ *service.Container) gin.HandlerFunc {
 func registerEmbyRoutes(r *gin.Engine, jwtSecret string, svc *service.Container) {
 	for _, prefix := range []string{"/emby", ""} {
 		grp := r.Group(prefix)
+		grp.Use(func(c *gin.Context) {
+			c.Header("Cache-Control", "no-store")
+			c.Header("Pragma", "no-cache")
+			c.Header("Expires", "0")
+			c.Next()
+		})
 
 		// 公开端点
 		for _, path := range []string{"/System/Info/Public", "/system/info/public"} {
@@ -617,15 +734,25 @@ func registerEmbyRoutes(r *gin.Engine, jwtSecret string, svc *service.Container)
 		auth.GET("/Users/:userId", embyGetUserByIDHandler(svc))
 		auth.GET("/Users/:userId/Views", embyViewsHandler(svc))
 		auth.GET("/Library/MediaFolders", embyViewsHandler(svc))
+		auth.GET("/Library/VirtualFolders", embyVirtualFoldersHandler(svc))
+		auth.GET("/Library/SelectableMediaFolders", embyVirtualFoldersHandler(svc))
 
 		auth.GET("/Items", embyItemsHandler(svc))
 		auth.GET("/Users/:userId/Items", embyItemsHandler(svc))
 		auth.GET("/Items/:id", embyItemByIDHandler(svc))
-		auth.GET("/Users/:userId/Items/Latest", embyLatestItemsHandler(svc))
-		auth.GET("/Users/:userId/Items/Resume", embyResumeItemsHandler(svc))
+		auth.GET("/Users/:userId/Items/:id", embyUserItemByIDHandler(svc))
+		auth.GET("/Shows/:id/Seasons", embyShowSeasonsHandler(svc))
+		auth.GET("/Shows/:id/Episodes", embyShowEpisodesHandler(svc))
+		auth.GET("/Users/:userId/Shows/:id/Seasons", embyShowSeasonsHandler(svc))
+		auth.GET("/Users/:userId/Shows/:id/Episodes", embyShowEpisodesHandler(svc))
+		auth.GET("/Shows/NextUp", embyEmptyItemsHandler(svc))
+		auth.GET("/Users/:userId/Shows/NextUp", embyEmptyItemsHandler(svc))
+		auth.GET("/MediaSegments/:id", embyEmptyItemsHandler(svc))
 
 		auth.GET("/Items/:id/PlaybackInfo", embyPlaybackInfoHandler(svc))
 		auth.POST("/Items/:id/PlaybackInfo", embyPlaybackInfoHandler(svc))
+		auth.GET("/Users/:userId/Items/:id/PlaybackInfo", embyPlaybackInfoHandler(svc))
+		auth.POST("/Users/:userId/Items/:id/PlaybackInfo", embyPlaybackInfoHandler(svc))
 
 		auth.GET("/Videos/:id/stream", embyVideoStreamHandler(svc))
 		auth.HEAD("/Videos/:id/stream", embyVideoStreamHandler(svc))
