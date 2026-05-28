@@ -41,7 +41,12 @@ password.*
 .vscode/
 .workbuddy/
 node_modules/
+**/node_modules/
 web/dist/
+**/dist/
+web/.vite/
+**/.vite/
+web/coverage/
 bin/
 *.exe
 *.dll

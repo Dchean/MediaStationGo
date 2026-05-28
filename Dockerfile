@@ -33,18 +33,20 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 
 # ---- Stage 3: runtime ------------------------------------------------------
 FROM alpine:3.19
-# ffmpeg/intel-media-driver/libva enable QSV / VAAPI on Intel iGPUs.
+# ffmpeg plus optional VAAPI packages. Intel media driver is x86_64-only.
 # NVENC requires the proprietary NVIDIA Container Toolkit on the host —
 # no extra packages needed inside the image, only --gpus all on docker run.
 RUN apk add --no-cache \
         ffmpeg \
-        intel-media-driver \
-        libva-utils \
-        mesa-va-gallium \
         tzdata \
         ca-certificates \
         wget \
         su-exec \
+    && if [ "$(apk --print-arch)" = "x86_64" ]; then \
+        apk add --no-cache intel-media-driver libva-utils mesa-va-gallium; \
+    else \
+        apk add --no-cache libva-utils mesa-va-gallium || true; \
+    fi \
     && rm -rf /var/cache/apk/*
 
 # Non-root user for the long-running process.
