@@ -16,13 +16,19 @@ fi
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
+if [[ "$VERSION" == MediaStationGo-v* ]]; then
+  PACKAGE_PREFIX="$VERSION"
+else
+  PACKAGE_PREFIX="MediaStationGo-$VERSION"
+fi
+
 echo "Building frontend bundle"
 (cd web && npm ci && npm run build)
 
 for target in $PLATFORMS; do
   os="${target%/*}"
   arch="${target#*/}"
-  name="MediaStationGo_${VERSION}_${os}_${arch}"
+  name="${PACKAGE_PREFIX}-${os}-${arch}"
   work="$OUT_DIR/$name"
   mkdir -p "$work/web"
 
