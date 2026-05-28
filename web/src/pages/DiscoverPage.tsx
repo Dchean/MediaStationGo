@@ -247,6 +247,7 @@ function DiscoverDetailModal({ item, onClose }: { item: DiscoverItem; onClose: (
     effects: '',
     release_groups: '',
     exclude_words: 'cam,ts,tc,枪版',
+    wash_enabled: false,
     wash_priority: 'balanced',
     save_path: '',
     media_category: '',
@@ -269,11 +270,16 @@ function DiscoverDetailModal({ item, onClose }: { item: DiscoverItem; onClose: (
         save_path: form.save_path || undefined,
         search_mode: form.search_mode,
         imdb_id: form.imdb_id || undefined,
+        source,
+        poster_url: item.poster_url || undefined,
+        backdrop_url: item.backdrop_url || undefined,
+        overview: item.overview || undefined,
         resolution: form.resolution === 'best' ? 'best' : form.resolution,
         quality: form.quality || undefined,
         effects: form.effects || undefined,
         release_groups: form.release_groups || undefined,
         exclude_words: form.exclude_words || undefined,
+        wash_enabled: form.wash_enabled,
         wash_priority: form.wash_priority,
         priority: form.priority,
         enabled: true,
@@ -389,13 +395,17 @@ function DiscoverDetailModal({ item, onClose }: { item: DiscoverItem; onClose: (
                 </label>
                 <label className="text-xs text-sand-500">
                   洗版优先级
-                  <select className="input-base mt-1" value={form.wash_priority} onChange={(e) => setForm((f) => ({ ...f, wash_priority: e.target.value }))}>
+                  <select className="input-base mt-1 disabled:opacity-50" disabled={!form.wash_enabled} value={form.wash_priority} onChange={(e) => setForm((f) => ({ ...f, wash_priority: e.target.value }))}>
                     <option value="balanced">均衡</option>
                     <option value="resolution">分辨率优先</option>
                     <option value="quality">片源质量优先</option>
                     <option value="effects">HDR/DV/Atmos 优先</option>
                     <option value="seeders">做种数优先</option>
                   </select>
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs text-ink-100">
+                  <input type="checkbox" checked={form.wash_enabled} onChange={(e) => setForm((f) => ({ ...f, wash_enabled: e.target.checked }))} />
+                  启用洗版择优
                 </label>
                 <label className="text-xs text-sand-500">
                   发布组

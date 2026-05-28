@@ -186,6 +186,10 @@ export function SearchPage() {
                 feed_url: feed,
                 filter: keyword,
                 media_type: item.media_type,
+                source: item.source,
+                poster_url: item.poster_url,
+                backdrop_url: item.backdrop_url,
+                overview: item.overview,
                 enabled: true,
               })
               const run = await subscriptionsAPI.runNow(sub.id)

@@ -6,12 +6,21 @@ export interface DownloadsState {
   torrents: QBitTorrent[] | null
 }
 
+export interface AddDownloadInput {
+  url: string
+  save_path?: string
+  title?: string
+  poster_url?: string
+  backdrop_url?: string
+  overview?: string
+}
+
 export const downloadsAPI = {
   list: () => api.get<DownloadsState>('/downloads').then((r) => r.data),
 
-  add: (url: string, savePath = '') =>
+  add: (url: string, savePath = '', meta: Omit<AddDownloadInput, 'url' | 'save_path'> = {}) =>
     api
-      .post<DownloadTask>('/downloads', { url, save_path: savePath })
+      .post<DownloadTask>('/downloads', { url, save_path: savePath, ...meta })
       .then((r) => r.data),
 
   remove: (hash: string, deleteFiles = false) =>

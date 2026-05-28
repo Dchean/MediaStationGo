@@ -229,12 +229,12 @@ func (s *TelegramBotService) cmdSearch(ctx context.Context, args []string) (stri
 // cmdDownloads 处理 /downloads 命令。
 func (s *TelegramBotService) cmdDownloads(ctx context.Context) (string, error) {
 	type Row struct {
-		URL    string
+		Title  string
 		Status string
 	}
 	var rows []Row
 	if err := s.repo.DB.Raw(
-		"SELECT url, COALESCE(status,'unknown') as status FROM download_tasks ORDER BY created_at DESC LIMIT 8",
+		"SELECT COALESCE(NULLIF(title,''),'下载任务') as title, COALESCE(status,'unknown') as status FROM download_tasks ORDER BY created_at DESC LIMIT 8",
 	).Scan(&rows).Error; err != nil {
 		return "", err
 	}
@@ -255,10 +255,9 @@ func (s *TelegramBotService) cmdDownloads(ctx context.Context) (string, error) {
 		case "error":
 			icon = "❌"
 		}
-		// 截取文件名
-		name := r.URL
-		if idx := strings.LastIndex(name, "/"); idx >= 0 {
-			name = name[idx+1:]
+		name := strings.TrimSpace(r.Title)
+		if name == "" {
+			name = "下载任务"
 		}
 		if len(name) > 60 {
 			name = name[:57] + "..."

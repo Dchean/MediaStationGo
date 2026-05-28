@@ -247,11 +247,28 @@ func (q *QBitClient) addTorrentLocked(ctx context.Context, magnetOrURL string, t
 		}
 	}
 	q.log.Info("qbittorrent: torrent added",
-		zap.String("url", magnetOrURL),
+		zap.String("url", redactTorrentURL(magnetOrURL)),
 		zap.String("save_path", savePath),
 		zap.Bool("file_upload", useFileUpload),
 		zap.String("body", bodyText))
 	return nil
+}
+
+func redactTorrentURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(raw), "magnet:") {
+		return "magnet:?xt=***"
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "[redacted-download-url]"
+	}
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
 }
 
 func (q *QBitClient) fetchTorrentFile(ctx context.Context, raw string) ([]byte, string, error) {

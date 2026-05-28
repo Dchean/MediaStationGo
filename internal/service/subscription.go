@@ -223,7 +223,12 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 		}
 		mediaType, mediaCategory := s.classifySubscriptionItem(ctx, sub, item.Title, "")
 		savePath := s.resolveSubscriptionSavePath(ctx, sub, mediaType, mediaCategory)
-		if _, err := s.downloads.AddDownload(ctx, sub.UserID, download, savePath); err != nil {
+		if _, err := s.downloads.AddDownloadWithMeta(ctx, sub.UserID, download, savePath, DownloadTaskMeta{
+			Title:       firstNonEmpty(item.Title, sub.Name),
+			PosterURL:   sub.PosterURL,
+			BackdropURL: sub.BackdropURL,
+			Overview:    sub.Overview,
+		}); err != nil {
 			s.log.Warn("subscription enqueue failed",
 				zap.String("title", item.Title),
 				zap.String("media_type", mediaType),
@@ -294,7 +299,12 @@ func (s *SubscriptionService) runSiteSearch(ctx context.Context, sub *model.Subs
 		}
 		realURL := s.site.ResolveDownloadURL(ctx, candidate.Download)
 		savePath := s.resolveSubscriptionSavePath(ctx, sub, mediaType, mediaCategory)
-		if _, err := s.downloads.AddDownload(ctx, sub.UserID, realURL, savePath); err != nil {
+		if _, err := s.downloads.AddDownloadWithMeta(ctx, sub.UserID, realURL, savePath, DownloadTaskMeta{
+			Title:       firstNonEmpty(item.Title, sub.Name),
+			PosterURL:   sub.PosterURL,
+			BackdropURL: sub.BackdropURL,
+			Overview:    sub.Overview,
+		}); err != nil {
 			lastEnqueueErr = err
 			s.log.Warn("site-search subscription enqueue failed",
 				zap.String("subscription", sub.Name),
@@ -444,6 +454,12 @@ func matchesSubscriptionRules(sub *model.Subscription, title string) bool {
 func subscriptionCandidateScore(sub *model.Subscription, item SearchResult) int {
 	title := strings.ToLower(item.Title)
 	score := item.Seeders
+	if sub == nil || !sub.WashEnabled {
+		if item.Free {
+			score += 25
+		}
+		return score
+	}
 	resolutionScore := detectResolutionScore(title)
 	qualityScore := detectQualityScore(title)
 	effectScore := detectEffectScore(title)

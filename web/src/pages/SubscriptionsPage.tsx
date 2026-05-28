@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Pencil, Play, Plus, Save, Trash2 } from 'lucide-react'
+import { CalendarClock, Film, Pencil, Play, Plus, Save, ShieldCheck, Trash2 } from 'lucide-react'
 
 import { subscriptionsAPI } from '../api/subscriptions'
+import { imageURL } from '../api/client'
 import type { Subscription } from '../types'
 
 export function SubscriptionsPage() {
@@ -20,6 +21,7 @@ export function SubscriptionsPage() {
   const [effects, setEffects] = useState('')
   const [releaseGroups, setReleaseGroups] = useState('')
   const [excludeWords, setExcludeWords] = useState('cam,ts,tc,枪版')
+  const [washEnabled, setWashEnabled] = useState(false)
   const [washPriority, setWashPriority] = useState('balanced')
   const [editingId, setEditingId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -51,6 +53,7 @@ export function SubscriptionsPage() {
         effects: effects || undefined,
         release_groups: releaseGroups || undefined,
         exclude_words: excludeWords || undefined,
+        wash_enabled: washEnabled,
         wash_priority: washPriority,
         priority: 50,
       }
@@ -85,6 +88,7 @@ export function SubscriptionsPage() {
     setEffects('')
     setReleaseGroups('')
     setExcludeWords('cam,ts,tc,枪版')
+    setWashEnabled(false)
     setWashPriority('balanced')
   }
 
@@ -103,6 +107,7 @@ export function SubscriptionsPage() {
     setEffects(s.effects || '')
     setReleaseGroups(s.release_groups || '')
     setExcludeWords(s.exclude_words || '')
+    setWashEnabled(Boolean(s.wash_enabled))
     setWashPriority(s.wash_priority || 'balanced')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -173,7 +178,11 @@ export function SubscriptionsPage() {
           <option value="hdtv">HDTV</option>
         </select>
         <input className="input-base" placeholder="特效/音轨 hdr,dolby-vision,atmos" value={effects} onChange={(e) => setEffects(e.target.value)} />
-        <select className="input-base" value={washPriority} onChange={(e) => setWashPriority(e.target.value)}>
+        <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-ink-100">
+          <input type="checkbox" checked={washEnabled} onChange={(e) => setWashEnabled(e.target.checked)} />
+          启用洗版择优
+        </label>
+        <select className="input-base disabled:opacity-50" disabled={!washEnabled} value={washPriority} onChange={(e) => setWashPriority(e.target.value)}>
           <option value="balanced">洗版：均衡</option>
           <option value="resolution">洗版：分辨率优先</option>
           <option value="quality">洗版：片源质量优先</option>
@@ -197,72 +206,132 @@ export function SubscriptionsPage() {
       {!loading && items.length === 0 && <p className="text-ink-50">暂无订阅。</p>}
 
       {items.length > 0 && (
-        <div className="glass-panel">
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-sand-500">
-              <tr>
-                <th className="py-2">名称</th>
-                <th>RSS</th>
-                <th>过滤器</th>
-                <th>分类</th>
-                <th>规则</th>
-                <th>最近运行</th>
-                <th className="text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((s) => (
-                <tr key={s.id} className="border-t border-gray-200">
-                  <td className="py-2 text-ink-600">{s.name}</td>
-                  <td className="max-w-md truncate text-ink-100" title={s.feed_url}>
-                    {s.feed_url}
-                  </td>
-                  <td className="text-ink-100">{s.filter || '—'}</td>
-                  <td className="text-ink-100">
-                    {[s.media_type, s.media_category].filter(Boolean).join(' / ') || '自动'}
-                  </td>
-                  <td className="max-w-xs text-xs text-ink-100">
-                    {[s.search_mode === 'imdb' ? `IMDB:${s.imdb_id || '未填'}` : '', s.resolution, s.quality, s.effects, s.wash_priority]
-                      .filter(Boolean)
-                      .join(' · ') || '默认'}
-                  </td>
-                  <td className="text-sand-500">
-                    {s.last_run_at ? new Date(s.last_run_at).toLocaleString() : '—'}
-                  </td>
-                  <td className="space-x-2 py-2 text-right">
-                    <button
-                      className="rounded-lg border border-gray-300 px-2 py-1 text-xs text-ink-100 hover:bg-gray-50"
-                      onClick={() => startEdit(s)}
-                    >
-                      <Pencil size={12} />
-                    </button>
-                    <button
-                      className="rounded-lg border border-primary-400/40 px-2 py-1 text-xs text-brand-500 hover:bg-primary-400/10"
-                      onClick={async () => {
-                        const r = await subscriptionsAPI.runNow(s.id)
-                        toast.success(`已加入 ${r.queued} 项`)
-                      }}
-                    >
-                      <Play size={12} />
-                    </button>
-                    <button
-                      className="rounded-lg border border-red-400/40 px-2 py-1 text-xs text-red-400 hover:bg-red-400/10"
-                      onClick={async () => {
-                        if (!confirm(`删除订阅「${s.name}」?`)) return
-                        await subscriptionsAPI.remove(s.id)
-                        toast.success('已删除')
-                        await refresh()
-                      }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {items.map((subscription) => (
+            <article
+              key={subscription.id}
+              className="group overflow-hidden rounded-3xl border border-white/70 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+            >
+              <div className="relative flex gap-4 p-4">
+                <div className="relative h-36 w-24 flex-shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-primary-400/15 to-surface-200 shadow-inner">
+                  {subscription.poster_url ? (
+                    <img
+                      src={imageURL(subscription.poster_url)}
+                      alt={subscription.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-2 text-center text-xs font-semibold text-brand-500">
+                      <Film size={22} />
+                      <span className="line-clamp-3">{subscription.name}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div>
+                    <div className="mb-1 flex flex-wrap gap-1.5">
+                      <span className="rounded-full bg-primary-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-brand-500">
+                        {subscription.source || 'RSS'}
+                      </span>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-sand-500">
+                        {[subscription.media_type, subscription.media_category].filter(Boolean).join(' / ') || '自动分类'}
+                      </span>
+                      <span className={'rounded-full px-2 py-0.5 text-[10px] font-semibold ' + (subscription.enabled ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500')}>
+                        {subscription.enabled ? '启用中' : '已停用'}
+                      </span>
+                    </div>
+                    <h2 className="truncate font-display text-lg font-semibold text-ink-600" title={subscription.name}>
+                      {subscription.name}
+                    </h2>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-ink-50">
+                      {subscription.overview || subscription.filter || '已隐藏订阅源地址，避免多用户场景泄露私有 RSS Token。'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-ink-100">
+                    <div className="flex items-center gap-1.5">
+                      <ShieldCheck size={13} className="text-brand-500" />
+                      <span>订阅源已脱敏</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <CalendarClock size={13} className="text-brand-500" />
+                      <span>{subscription.last_run_at ? new Date(subscription.last_run_at).toLocaleString() : '尚未运行'}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {subscriptionRuleBadges(subscription).map((label) => (
+                      <span key={label} className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] text-ink-100">
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50/70 px-4 py-3">
+                <button
+                  className="rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-ink-100 hover:bg-gray-50"
+                  onClick={() => startEdit(subscription)}
+                >
+                  <Pencil size={13} className="mr-1 inline" />
+                  编辑
+                </button>
+                <button
+                  className="rounded-xl border border-primary-400/40 bg-white px-3 py-1.5 text-xs font-semibold text-brand-500 hover:bg-primary-400/10"
+                  onClick={async () => {
+                    const result = await subscriptionsAPI.runNow(subscription.id)
+                    toast.success(`已加入 ${result.queued} 项`)
+                  }}
+                >
+                  <Play size={13} className="mr-1 inline" />
+                  运行
+                </button>
+                <button
+                  className="rounded-xl border border-red-400/40 bg-white px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-400/10"
+                  onClick={async () => {
+                    if (!confirm(`删除订阅「${subscription.name}」?`)) return
+                    await subscriptionsAPI.remove(subscription.id)
+                    toast.success('已删除')
+                    await refresh()
+                  }}
+                >
+                  <Trash2 size={13} className="mr-1 inline" />
+                  删除
+                </button>
+              </div>
+            </article>
+          ))}
         </div>
       )}
     </div>
   )
+}
+
+function subscriptionRuleBadges(subscription: Subscription): string[] {
+  const labels = [
+    subscription.search_mode === 'imdb' ? `IMDB ${subscription.imdb_id || '未填'}` : '关键词搜索',
+    subscription.resolution && subscription.resolution !== 'best' ? subscription.resolution : '分辨率不限',
+    subscription.quality || '质量不限',
+    subscription.effects || '',
+    subscription.release_groups ? `发布组 ${subscription.release_groups}` : '',
+    subscription.wash_enabled ? `洗版 ${washPriorityLabel(subscription.wash_priority)}` : '未启用洗版',
+  ]
+  return labels.filter(Boolean)
+}
+
+function washPriorityLabel(priority?: string): string {
+  switch (priority) {
+    case 'resolution':
+      return '分辨率优先'
+    case 'quality':
+      return '片源质量优先'
+    case 'effects':
+      return '特效优先'
+    case 'seeders':
+      return '做种数优先'
+    default:
+      return '均衡'
+  }
 }

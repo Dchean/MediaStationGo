@@ -19,11 +19,16 @@ type subscriptionPatchReq struct {
 	SavePath      *string `json:"save_path"`
 	SearchMode    *string `json:"search_mode"`
 	IMDBID        *string `json:"imdb_id"`
+	Source        *string `json:"source"`
+	PosterURL     *string `json:"poster_url"`
+	BackdropURL   *string `json:"backdrop_url"`
+	Overview      *string `json:"overview"`
 	Resolution    *string `json:"resolution"`
 	Quality       *string `json:"quality"`
 	Effects       *string `json:"effects"`
 	ReleaseGroups *string `json:"release_groups"`
 	ExcludeWords  *string `json:"exclude_words"`
+	WashEnabled   *bool   `json:"wash_enabled"`
 	WashPriority  *string `json:"wash_priority"`
 	Priority      *int    `json:"priority"`
 	Enabled       *bool   `json:"enabled"`
@@ -79,6 +84,18 @@ func subscriptionPatchUpdates(patch subscriptionPatchReq) map[string]any {
 	if patch.IMDBID != nil {
 		updates["imdb_id"] = *patch.IMDBID
 	}
+	if patch.Source != nil {
+		updates["source"] = *patch.Source
+	}
+	if patch.PosterURL != nil {
+		updates["poster_url"] = *patch.PosterURL
+	}
+	if patch.BackdropURL != nil {
+		updates["backdrop_url"] = *patch.BackdropURL
+	}
+	if patch.Overview != nil {
+		updates["overview"] = *patch.Overview
+	}
 	if patch.Resolution != nil {
 		updates["resolution"] = *patch.Resolution
 	}
@@ -93,6 +110,9 @@ func subscriptionPatchUpdates(patch subscriptionPatchReq) map[string]any {
 	}
 	if patch.ExcludeWords != nil {
 		updates["exclude_words"] = *patch.ExcludeWords
+	}
+	if patch.WashEnabled != nil {
+		updates["wash_enabled"] = *patch.WashEnabled
 	}
 	if patch.WashPriority != nil {
 		updates["wash_priority"] = *patch.WashPriority

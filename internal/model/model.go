@@ -171,12 +171,16 @@ type PlaylistItem struct {
 // DownloadTask 是待处理（或已完成）的 torrent / HTTP 下载。
 type DownloadTask struct {
 	Base
-	UserID   string  `gorm:"index;size:36" json:"user_id"`
-	Source   string  `gorm:"size:32;not null" json:"source"` // qbittorrent / transmission / http
-	URL      string  `gorm:"size:2048;not null" json:"url"`
-	SavePath string  `gorm:"size:1024" json:"save_path"`
-	Status   string  `gorm:"size:32;default:queued" json:"status"`
-	Progress float32 `json:"progress"`
+	UserID      string  `gorm:"index;size:36" json:"user_id"`
+	Source      string  `gorm:"size:32;not null" json:"source"` // qbittorrent / transmission / http
+	URL         string  `gorm:"size:2048;not null" json:"-"`
+	Title       string  `gorm:"size:512" json:"title,omitempty"`
+	PosterURL   string  `gorm:"size:2048" json:"poster_url,omitempty"`
+	BackdropURL string  `gorm:"size:2048" json:"backdrop_url,omitempty"`
+	Overview    string  `gorm:"type:text" json:"overview,omitempty"`
+	SavePath    string  `gorm:"size:1024" json:"save_path"`
+	Status      string  `gorm:"size:32;default:queued" json:"status"`
+	Progress    float32 `json:"progress"`
 }
 
 // Subscription 是自动化规则，轮询 RSS 源并将匹配种子排队到配置的下载客户端。
@@ -191,13 +195,18 @@ type Subscription struct {
 	SavePath      string     `gorm:"size:1024" json:"save_path,omitempty"`
 	SearchMode    string     `gorm:"size:16;default:keyword" json:"search_mode,omitempty"` // keyword / imdb
 	IMDBID        string     `gorm:"size:32" json:"imdb_id,omitempty"`
+	Source        string     `gorm:"size:32" json:"source,omitempty"`
+	PosterURL     string     `gorm:"size:2048" json:"poster_url,omitempty"`
+	BackdropURL   string     `gorm:"size:2048" json:"backdrop_url,omitempty"`
+	Overview      string     `gorm:"type:text" json:"overview,omitempty"`
 	Resolution    string     `gorm:"size:32" json:"resolution,omitempty"`      // 2160p / 1080p / 720p / best
 	Quality       string     `gorm:"size:64" json:"quality,omitempty"`         // remux / bluray / web-dl / hdtv
 	Effects       string     `gorm:"size:128" json:"effects,omitempty"`        // hdr,dolby-vision,atmos
 	ReleaseGroups string     `gorm:"size:255" json:"release_groups,omitempty"` // comma separated
 	ExcludeWords  string     `gorm:"size:255" json:"exclude_words,omitempty"`  // comma separated
-	WashPriority  string     `gorm:"size:32" json:"wash_priority,omitempty"`   // balanced / resolution / quality / effects / seeders
-	Priority      int        `gorm:"default:50" json:"priority,omitempty"`     // lower is earlier when schedulers sort later
+	WashEnabled   bool       `gorm:"default:false" json:"wash_enabled"`
+	WashPriority  string     `gorm:"size:32" json:"wash_priority,omitempty"` // balanced / resolution / quality / effects / seeders
+	Priority      int        `gorm:"default:50" json:"priority,omitempty"`   // lower is earlier when schedulers sort later
 	Enabled       bool       `gorm:"default:true" json:"enabled"`
 	LastRunAt     *time.Time `json:"last_run_at,omitempty"`
 }

@@ -20,11 +20,16 @@ type subscriptionReq struct {
 	SavePath      string `json:"save_path"`
 	SearchMode    string `json:"search_mode"`
 	IMDBID        string `json:"imdb_id"`
+	Source        string `json:"source"`
+	PosterURL     string `json:"poster_url"`
+	BackdropURL   string `json:"backdrop_url"`
+	Overview      string `json:"overview"`
 	Resolution    string `json:"resolution"`
 	Quality       string `json:"quality"`
 	Effects       string `json:"effects"`
 	ReleaseGroups string `json:"release_groups"`
 	ExcludeWords  string `json:"exclude_words"`
+	WashEnabled   bool   `json:"wash_enabled"`
 	WashPriority  string `json:"wash_priority"`
 	Priority      int    `json:"priority"`
 	Enabled       *bool  `json:"enabled"`
@@ -52,15 +57,21 @@ func createSubscriptionHandler(svc *service.Container) gin.HandlerFunc {
 			SavePath:      req.SavePath,
 			SearchMode:    req.SearchMode,
 			IMDBID:        req.IMDBID,
+			Source:        req.Source,
+			PosterURL:     req.PosterURL,
+			BackdropURL:   req.BackdropURL,
+			Overview:      req.Overview,
 			Resolution:    req.Resolution,
 			Quality:       req.Quality,
 			Effects:       req.Effects,
 			ReleaseGroups: req.ReleaseGroups,
 			ExcludeWords:  req.ExcludeWords,
+			WashEnabled:   req.WashEnabled,
 			WashPriority:  req.WashPriority,
 			Priority:      req.Priority,
 			Enabled:       enabled,
 		}
+		enrichSubscriptionArtwork(c.Request.Context(), svc, s)
 		if err := svc.Subscription.Create(c.Request.Context(), s); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -76,6 +87,7 @@ func listSubscriptionsHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		enrichAndPersistSubscriptions(c.Request.Context(), svc, items)
 		c.JSON(http.StatusOK, gin.H{"items": items})
 	}
 }

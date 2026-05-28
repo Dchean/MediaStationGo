@@ -24,7 +24,7 @@ func TestSelectSiteSearchCandidatesPrefersSeriesPack(t *testing.T) {
 }
 
 func TestSelectSiteSearchCandidatesQueuesDistinctEpisodesWhenNoPack(t *testing.T) {
-	sub := &model.Subscription{Name: "葬送的芙莉莲 自动订阅", Filter: "葬送的芙莉莲", MediaType: "anime", WashPriority: "resolution"}
+	sub := &model.Subscription{Name: "葬送的芙莉莲 自动订阅", Filter: "葬送的芙莉莲", MediaType: "anime", WashEnabled: true, WashPriority: "resolution"}
 	results := []SearchResult{
 		{Title: "葬送的芙莉莲 S01E01 1080p", DownloadURL: "https://pt/download/1a", Seeders: 90},
 		{Title: "葬送的芙莉莲 S01E01 2160p", DownloadURL: "https://pt/download/1b", Seeders: 80},
@@ -54,6 +54,19 @@ func TestSelectSiteSearchCandidatesKeepsMovieSingleBest(t *testing.T) {
 	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{})
 	if len(got) != 1 || got[0].Download != "https://pt/download/1080" {
 		t.Fatalf("selected %#v, want movie best only", got)
+	}
+}
+
+func TestSelectSiteSearchCandidatesDoesNotWashByDefault(t *testing.T) {
+	sub := &model.Subscription{Name: "Inception 自动订阅", Filter: "Inception 2010", MediaType: "movie", WashPriority: "resolution"}
+	results := []SearchResult{
+		{Title: "Inception 2010 1080p", DownloadURL: "https://pt/download/1080", Seeders: 90},
+		{Title: "Inception 2010 2160p", DownloadURL: "https://pt/download/2160", Seeders: 80},
+	}
+
+	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{})
+	if len(got) != 1 || got[0].Download != "https://pt/download/1080" {
+		t.Fatalf("selected %#v, want seeders best when wash disabled", got)
 	}
 }
 

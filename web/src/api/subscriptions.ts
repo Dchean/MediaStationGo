@@ -14,11 +14,16 @@ export const subscriptionsAPI = {
     save_path?: string
     search_mode?: string
     imdb_id?: string
+    source?: string
+    poster_url?: string
+    backdrop_url?: string
+    overview?: string
     resolution?: string
     quality?: string
     effects?: string
     release_groups?: string
     exclude_words?: string
+    wash_enabled?: boolean
     wash_priority?: string
     priority?: number
     enabled?: boolean
