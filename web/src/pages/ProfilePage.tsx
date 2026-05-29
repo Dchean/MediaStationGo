@@ -23,7 +23,8 @@ export function ProfilePage() {
     e.preventDefault()
     try {
       let password: string | undefined
-      if (hideAdult !== Boolean(user?.hide_adult)) {
+      const hideAdultChanged = hideAdult !== Boolean(user?.hide_adult)
+      if (hideAdultChanged) {
         const input = await requestPassword({
           title: hideAdult ? '隐藏成人目录' : '取消隐藏成人目录',
           message: '此设置会同步影响 Web 与 Emby/Jellyfin/Infuse 等第三方客户端，请输入当前账号密码确认。',
@@ -32,14 +33,17 @@ export function ProfilePage() {
         if (!input) return
         password = input
       }
-      const u = await profileAPI.update({
+      const patch: Parameters<typeof profileAPI.update>[0] = {
         username,
         nickname,
         email,
         avatar_url: avatar,
-        hide_adult: hideAdult,
         password,
-      })
+      }
+      if (hideAdultChanged) {
+        patch.hide_adult = hideAdult
+      }
+      const u = await profileAPI.update(patch)
       setUser(u)
       toast.success('资料已更新')
     } catch (err: unknown) {
