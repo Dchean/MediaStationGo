@@ -222,16 +222,22 @@ func (s *NotifyChannelService) dispatchOne(ctx context.Context, n model.NotifyCh
 	case "telegram":
 		telegramCfg := telegramStringConfigFromAny(cfg)
 		token := telegramCfg["bot_token"]
-		chat := telegramCfg["chat_id"]
-		if token == "" || chat == "" {
-			return errors.New("telegram missing bot_token / chat_id")
+		chats := telegramTargetChatIDs(telegramCfg)
+		if token == "" || len(chats) == 0 {
+			return errors.New("telegram missing bot_token / group_chat_id / channel_chat_id")
 		}
 		text := fmt.Sprintf("<b>%s</b>\n\n%s", escapeHTML(title), escapeHTML(body))
-		form := url.Values{}
-		form.Set("chat_id", chat)
-		form.Set("text", text)
-		form.Set("parse_mode", "HTML")
-		return telegramPostForm(ctx, telegramCfg, "sendMessage", form, 15*time.Second)
+		var firstErr error
+		for _, chat := range chats {
+			form := url.Values{}
+			form.Set("chat_id", chat)
+			form.Set("text", text)
+			form.Set("parse_mode", "HTML")
+			if err := telegramPostForm(ctx, telegramCfg, "sendMessage", form, 15*time.Second); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+		return firstErr
 
 	case "bark":
 		key := str(cfg["device_key"])
@@ -325,14 +331,8 @@ func validateChannel(in ChannelInput) error {
 		if str(cfg["bot_token"]) == "" {
 			return errors.New("telegram bot_token required")
 		}
-		if str(cfg["chat_id"]) == "" {
-			return errors.New("telegram notification chat_id required")
-		}
 		if str(cfg["admin_user_ids"]) == "" {
 			return errors.New("telegram admin_user_ids required")
-		}
-		if str(cfg["group_chat_id"]) == "" && str(cfg["channel_chat_id"]) == "" && str(cfg["command_chat_id"]) == "" {
-			return errors.New("telegram group_chat_id or channel_chat_id required: 请填写绑定群组 ID 或绑定频道 ID；如果通知 Chat ID 是群组/频道负数 ID，也可以直接填在 Chat ID")
 		}
 	}
 	return nil
@@ -352,6 +352,48 @@ func normalizeChannelInput(in *ChannelInput) {
 	if str(in.Config["group_chat_id"]) == "" && str(in.Config["channel_chat_id"]) == "" && str(in.Config["command_chat_id"]) == "" {
 		in.Config["group_chat_id"] = chatID
 	}
+}
+
+func telegramTargetChatIDs(cfg map[string]string) []string {
+	seen := map[string]bool{}
+	targets := []string{}
+	for _, key := range []string{"group_chat_id", "channel_chat_id"} {
+		chatID := strings.TrimSpace(cfg[key])
+		if chatID == "" || seen[chatID] {
+			continue
+		}
+		seen[chatID] = true
+		targets = append(targets, chatID)
+	}
+	if len(targets) == 0 {
+		chatID := strings.TrimSpace(cfg["chat_id"])
+		if strings.HasPrefix(chatID, "-") {
+			targets = append(targets, chatID)
+		}
+	}
+	if len(targets) == 0 {
+		for _, userID := range telegramConfiguredUserIDs(cfg["admin_user_ids"]) {
+			if seen[userID] {
+				continue
+			}
+			seen[userID] = true
+			targets = append(targets, userID)
+		}
+	}
+	return targets
+}
+
+func telegramConfiguredUserIDs(raw string) []string {
+	out := []string{}
+	for _, value := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '，' || r == ' ' || r == '\n' || r == '\t'
+	}) {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 // str safely extracts a string from an interface{} loaded from JSON.

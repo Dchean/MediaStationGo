@@ -14,24 +14,30 @@ type TelegramProvider struct{}
 // Send 发送 Telegram 消息。
 func (p *TelegramProvider) Send(ctx context.Context, cfg map[string]string, event NotifyEvent) error {
 	botToken := cfg["bot_token"]
-	chatID := cfg["chat_id"]
+	chatIDs := telegramTargetChatIDs(cfg)
 	parseMode := cfg["parse_mode"]
 	if parseMode == "" {
 		parseMode = "HTML"
 	}
 
-	if botToken == "" || chatID == "" {
-		return fmt.Errorf("telegram: bot_token and chat_id are required")
+	if botToken == "" || len(chatIDs) == 0 {
+		return fmt.Errorf("telegram: bot_token and group_chat_id/channel_chat_id are required")
 	}
 
 	text := formatTelegramMessage(event, parseMode)
 
-	payload := map[string]string{
-		"chat_id":    chatID,
-		"text":       text,
-		"parse_mode": parseMode,
+	var firstErr error
+	for _, chatID := range chatIDs {
+		payload := map[string]string{
+			"chat_id":    chatID,
+			"text":       text,
+			"parse_mode": parseMode,
+		}
+		if err := telegramPostJSON(ctx, cfg, "sendMessage", payload, 15*time.Second); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return telegramPostJSON(ctx, cfg, "sendMessage", payload, 15*time.Second)
+	return firstErr
 }
 
 // ValidateConfig 验证 Telegram 配置。
@@ -39,8 +45,8 @@ func (p *TelegramProvider) ValidateConfig(cfg map[string]string) error {
 	if cfg["bot_token"] == "" {
 		return fmt.Errorf("telegram: bot_token is required")
 	}
-	if cfg["chat_id"] == "" {
-		return fmt.Errorf("telegram: chat_id is required")
+	if len(telegramTargetChatIDs(cfg)) == 0 {
+		return fmt.Errorf("telegram: group_chat_id or channel_chat_id is required")
 	}
 	return nil
 }

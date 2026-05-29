@@ -183,7 +183,7 @@ function channelSummary(ch: NotifyChannel): string {
   const cfg = ch.config ?? {}
   switch (ch.type) {
     case 'telegram':
-      return `Bot ${cfg.bot_token ? '已配置' : '未配置'} → 通知 ${cfg.chat_id ?? '-'} · 管理员 ${cfg.admin_user_ids ?? '-'} · 群组 ${cfg.group_chat_id ?? '-'} · 频道 ${cfg.channel_chat_id ?? '-'}`
+      return `Bot ${cfg.bot_token ? '已配置' : '未配置'} → 管理员 ${cfg.admin_user_ids ?? '-'} · 群组 ${cfg.group_chat_id ?? '-'} · 频道 ${cfg.channel_chat_id ?? '-'}`
     case 'wechat':
       return `SendKey ${String(cfg.sendkey ?? '').slice(0, 10)}…`
     case 'bark':
@@ -202,7 +202,6 @@ function channelSummary(ch: NotifyChannel): string {
 const EMPTY_CONFIG: Record<NotifyChannel['type'], Record<string, string>> = {
   telegram: {
     bot_token: '',
-    chat_id: '',
     admin_user_ids: '',
     group_chat_id: '',
     channel_chat_id: '',
@@ -213,6 +212,18 @@ const EMPTY_CONFIG: Record<NotifyChannel['type'], Record<string, string>> = {
   bark: { device_key: '', server: '' },
   webhook: { url: '', method: 'POST', headers: '', body_template: '' },
   email: { smtp_host: '', smtp_port: '465', username: '', password: '', from: '', to: '', tls: 'true' },
+}
+
+function normalizeInitialConfig(type: NotifyChannel['type'], raw: Record<string, unknown>): Record<string, string> {
+  const base = { ...EMPTY_CONFIG[type] }
+  for (const [key, value] of Object.entries(raw ?? {})) {
+    base[key] = String(value ?? '')
+  }
+  if (type === 'telegram' && !base.group_chat_id && !base.channel_chat_id && base.chat_id?.startsWith('-')) {
+    base.group_chat_id = base.chat_id
+  }
+  delete base.chat_id
+  return base
 }
 
 function ChannelFormModal({
@@ -229,7 +240,7 @@ function ChannelFormModal({
     editing?.type ?? 'telegram',
   )
   const [config, setConfig] = useState<Record<string, string>>(
-    { ...EMPTY_CONFIG[editing?.type ?? 'telegram'], ...(editing?.config ?? {}) },
+    normalizeInitialConfig(editing?.type ?? 'telegram', editing?.config ?? {}),
   )
   const [enabled, setEnabled] = useState(editing?.enabled ?? true)
   const [saving, setSaving] = useState(false)
@@ -246,33 +257,21 @@ function ChannelFormModal({
         toast.error('请填写 Telegram Bot Token')
         return
       }
-      if (!String(config.chat_id ?? '').trim()) {
-        toast.error('请填写通知 Chat ID')
-        return
-      }
       if (!String(config.admin_user_ids ?? '').trim()) {
         toast.error('请填写管理员 Telegram ID')
         return
       }
-      const chatID = String(config.chat_id ?? '').trim()
-      const groupChatID = String(config.group_chat_id ?? '').trim()
-      const channelChatID = String(config.channel_chat_id ?? '').trim()
-      if (!groupChatID && !channelChatID && !chatID.startsWith('-')) {
-        toast.error('请至少填写绑定群组 ID 或绑定频道 ID；或把群组/频道负数 ID 填到 Chat ID')
-        return
-      }
-      if (!groupChatID && !channelChatID && chatID.startsWith('-')) {
-        config.group_chat_id = chatID
-      }
     }
     setSaving(true)
     try {
+      const cleanedConfig = Object.fromEntries(
+        Object.entries(config).map(([key, value]) => [key, String(value ?? '').trim()]),
+      )
+      delete cleanedConfig.chat_id
       const input: NotifyChannelInput = {
         name: name.trim(),
         type: type,
-        config: Object.fromEntries(
-          Object.entries(config).map(([key, value]) => [key, String(value ?? '').trim()]),
-        ),
+        config: cleanedConfig,
         enabled,
       }
       if (editing) {
@@ -336,15 +335,6 @@ function ChannelFormModal({
                   onChange={(e) => updateConfig('bot_token', e.target.value)}
                 />
               </Field>
-              <Field label="Chat ID">
-                <input
-                  required
-                  className="input-base"
-                  placeholder="-100123456"
-                  value={config.chat_id ?? ''}
-                  onChange={(e) => updateConfig('chat_id', e.target.value)}
-                />
-              </Field>
               <Field label="管理员 Telegram ID">
                 <input
                   required
@@ -357,7 +347,7 @@ function ChannelFormModal({
               <Field label="绑定群组 ID">
                 <input
                   className="input-base"
-                  placeholder="如 -1001234567890；群组成员才允许唤醒/绑定"
+                  placeholder="选填，如 -1001234567890；填写后群组成员可唤醒/绑定"
                   value={config.group_chat_id ?? ''}
                   onChange={(e) => updateConfig('group_chat_id', e.target.value)}
                 />
@@ -365,7 +355,7 @@ function ChannelFormModal({
               <Field label="绑定频道 ID">
                 <input
                   className="input-base"
-                  placeholder="如 -1009876543210；频道成员才允许唤醒/绑定"
+                  placeholder="选填，如 -1009876543210；填写后频道成员可唤醒/绑定"
                   value={config.channel_chat_id ?? ''}
                   onChange={(e) => updateConfig('channel_chat_id', e.target.value)}
                 />
@@ -387,7 +377,7 @@ function ChannelFormModal({
                 />
               </Field>
               <div className="rounded-2xl border border-primary-400/15 bg-primary-400/5 px-4 py-3 text-xs leading-6 text-ink-50">
-                必须至少填写群组 ID 或频道 ID。只有配置群组/频道中的成员可以唤醒 Bot、使用 <code>/start 用户名 密码</code> 绑定账号和隐藏成人目录；<code>/status</code>、<code>/search</code>、<code>/downloads</code>、<code>/stats</code> 仅管理员 Telegram ID 或已绑定的本地管理员可用。若测试通知超时，可填写反代 API 地址或代理地址。
+                群组 ID、频道 ID 均为选填，可填一个、两个都填，也可以不填。不填时只有管理员 Telegram ID 可以私聊 Bot 使用；填写后，对应群组/频道成员可唤醒 Bot、使用 <code>/start 用户名 密码</code> 绑定账号和隐藏成人目录。<code>/status</code>、<code>/search</code>、<code>/downloads</code>、<code>/stats</code> 仍仅管理员 Telegram ID 或已绑定的本地管理员可用。若测试通知超时，可填写反代 API 地址或代理地址。
               </div>
             </>
           )}

@@ -32,3 +32,40 @@ func TestSanitizeTelegramErrorRedactsBotToken(t *testing.T) {
 		t.Fatalf("expected timeout hint, got: %s", msg)
 	}
 }
+
+func TestValidateTelegramChannelDoesNotRequireLegacyChatID(t *testing.T) {
+	err := validateChannel(ChannelInput{
+		Name: "Telegram",
+		Type: "telegram",
+		Config: map[string]any{
+			"bot_token":      "123456:ABC-def",
+			"admin_user_ids": "10001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("validateChannel returned error: %v", err)
+	}
+}
+
+func TestTelegramTargetChatIDsFallsBackToAdmins(t *testing.T) {
+	got := telegramTargetChatIDs(map[string]string{
+		"admin_user_ids": "10001, 10002",
+	})
+	if len(got) != 2 || got[0] != "10001" || got[1] != "10002" {
+		t.Fatalf("got %#v, want admin user ids", got)
+	}
+}
+
+func TestNormalizeTelegramChannelMigratesLegacyChatID(t *testing.T) {
+	input := ChannelInput{
+		Name: "Telegram",
+		Type: "telegram",
+		Config: map[string]any{
+			"chat_id": "-10001",
+		},
+	}
+	normalizeChannelInput(&input)
+	if got := str(input.Config["group_chat_id"]); got != "-10001" {
+		t.Fatalf("group_chat_id = %q, want -10001", got)
+	}
+}

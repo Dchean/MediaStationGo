@@ -17,7 +17,7 @@
 #
 # 镜像版本：
 #   默认拉取 latest；如需固定版本，创建 .env 并写入：
-#     MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
+#     MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.24
 #
 # 路径映射总览：
 #   /data      程序数据目录。保存 SQLite 数据库、JWT secret、系统配置等，必须持久化。

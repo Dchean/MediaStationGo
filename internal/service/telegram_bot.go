@@ -152,7 +152,7 @@ func (s *TelegramBotService) executeCommand(ctx context.Context, channel *model.
 	cmd := strings.ToLower(parts[0])
 	args := parts[1:]
 	if msg.Chat.Type != "" && msg.Chat.Type != "private" && !s.telegramChatAllowed(channel, msg.Chat.ID) {
-		return telegramCommandReply{Text: "此群组/频道未绑定到 Bot 管理入口，请在通知渠道里填写「命令群组/频道 Chat ID」。"}, nil
+		return telegramCommandReply{Text: "此群组/频道未绑定到 Bot 管理入口，请在通知渠道里填写「绑定群组 ID」或「绑定频道 ID」。"}, nil
 	}
 
 	switch cmd {
@@ -723,7 +723,7 @@ func (s *TelegramBotService) telegramUserCanBind(ctx context.Context, channel *m
 	groupID := strings.TrimSpace(cfg["group_chat_id"])
 	channelID := strings.TrimSpace(cfg["channel_chat_id"])
 	if groupID == "" && channelID == "" {
-		return true
+		return false
 	}
 	for _, chatID := range []string{groupID, channelID} {
 		if chatID == "" {

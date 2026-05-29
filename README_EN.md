@@ -235,7 +235,7 @@ mkdir -p data cache media downloads
 
 ```bash
 cat > .env <<'EOF'
-MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
+MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.24
 MEDIASTATION_HTTP_PORT=18080
 MEDIASTATION_DATA_DIR=./data
 MEDIASTATION_CACHE_DIR=./cache
@@ -344,7 +344,7 @@ For production, pin a specific release tag instead of using `latest`. Recommende
 
 ```bash
 cat > .env <<'EOF'
-MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
+MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.24
 MEDIASTATION_HTTP_PORT=18080
 MEDIASTATION_DATA_DIR=./data
 MEDIASTATION_CACHE_DIR=./cache
@@ -593,25 +593,25 @@ Each release provides multi-platform archives:
 
 | Platform | Package example |
 | --- | --- |
-| Linux x86_64 | `MediaStationGo-v0.0.23-linux-amd64.tar.gz` |
-| Linux ARM64 | `MediaStationGo-v0.0.23-linux-arm64.tar.gz` |
-| Windows x86_64 | `MediaStationGo-v0.0.23-windows-amd64.zip` |
-| macOS Intel | `MediaStationGo-v0.0.23-darwin-amd64.tar.gz` |
-| macOS Apple Silicon | `MediaStationGo-v0.0.23-darwin-arm64.tar.gz` |
+| Linux x86_64 | `MediaStationGo-v0.0.24-linux-amd64.tar.gz` |
+| Linux ARM64 | `MediaStationGo-v0.0.24-linux-arm64.tar.gz` |
+| Windows x86_64 | `MediaStationGo-v0.0.24-windows-amd64.zip` |
+| macOS Intel | `MediaStationGo-v0.0.24-darwin-amd64.tar.gz` |
+| macOS Apple Silicon | `MediaStationGo-v0.0.24-darwin-arm64.tar.gz` |
 
 Linux example:
 
 ```bash
-tar -xzf MediaStationGo-v0.0.23-linux-amd64.tar.gz
-cd MediaStationGo-v0.0.23-linux-amd64
+tar -xzf MediaStationGo-v0.0.24-linux-amd64.tar.gz
+cd MediaStationGo-v0.0.24-linux-amd64
 MEDIASTATION_APP_PORT=18080 ./mediastation-go
 ```
 
 Windows example:
 
 ```powershell
-Expand-Archive .\MediaStationGo-v0.0.23-windows-amd64.zip
-cd .\MediaStationGo-v0.0.23-windows-amd64
+Expand-Archive .\MediaStationGo-v0.0.24-windows-amd64.zip
+cd .\MediaStationGo-v0.0.24-windows-amd64
 $env:MEDIASTATION_APP_PORT = "18080"
 .\mediastation-go.exe
 ```
