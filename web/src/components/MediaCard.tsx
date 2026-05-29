@@ -1,4 +1,4 @@
-﻿import { useRef } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Film, Play, Layers, Star } from 'lucide-react'
@@ -17,6 +17,11 @@ export const MediaCard = ({
 }) => {
   const ref = useRef<HTMLDivElement>(null)
   const href = linkTo ?? `/media/${media.id}`
+  const [posterFit, setPosterFit] = useState<'cover' | 'contain'>('cover')
+
+  useEffect(() => {
+    setPosterFit('cover')
+  }, [media.poster_url])
 
   const card = (
       <motion.div
@@ -28,13 +33,33 @@ export const MediaCard = ({
         {/* Poster Wrapper */}
         <div className="relative aspect-[2/3] w-full overflow-hidden bg-gray-50">
           {media.poster_url ? (
-            <img
-              src={imageURL(media.poster_url)}
-              alt={media.title}
-              loading="lazy"
-              className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-              referrerPolicy="no-referrer"
-            />
+            <>
+              {posterFit === 'contain' && (
+                <img
+                  src={imageURL(media.poster_url)}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                  className="absolute inset-0 h-full w-full scale-110 object-cover object-center opacity-25 blur-xl"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+              <img
+                src={imageURL(media.poster_url)}
+                alt={media.title}
+                loading="lazy"
+                decoding="async"
+                onLoad={(event) => {
+                  const img = event.currentTarget
+                  setPosterFit(img.naturalWidth > img.naturalHeight ? 'contain' : 'cover')
+                }}
+                className={
+                  'relative block h-full w-full object-center transition-transform duration-700 ease-out group-hover:scale-105 ' +
+                  (posterFit === 'contain' ? 'object-contain p-1.5' : 'object-cover')
+                }
+                referrerPolicy="no-referrer"
+              />
+            </>
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-gray-500 bg-gray-50">
               <Film size={28} className="stroke-[1.5]" />

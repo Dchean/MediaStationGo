@@ -3,6 +3,10 @@ package service
 import (
 	"encoding/xml"
 	"errors"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -41,6 +45,11 @@ type nfoFanart struct {
 	Thumbs []string `xml:"thumb"`
 }
 
+type nfoThumb struct {
+	Aspect string `xml:"aspect,attr"`
+	Value  string `xml:",chardata"`
+}
+
 type nfoArt struct {
 	Poster     string `xml:"poster"`
 	Thumb      string `xml:"thumb"`
@@ -68,7 +77,7 @@ type nfoDocument struct {
 	OriginalPlot  string        `xml:"originalplot"`
 	Rating        float32       `xml:"rating"`
 	Poster        string        `xml:"poster"`
-	Thumbs        []string      `xml:"thumb"`
+	Thumbs        []nfoThumb    `xml:"thumb"`
 	Fanart        nfoFanart     `xml:"fanart"`
 	Art           nfoArt        `xml:"art"`
 	TMDbID        int           `xml:"tmdbid"`
@@ -245,8 +254,8 @@ func metadataFromDoc(doc *nfoDocument, baseDir string, seriesLike bool) *LocalMe
 		Year:         doc.Year,
 		Overview:     firstText(doc.Plot, doc.Outline, doc.OriginalPlot),
 		Rating:       doc.Rating,
-		PosterURL:    firstRemoteURL(baseDir, append([]string{doc.Poster, doc.Art.Poster, doc.Art.Thumb}, doc.Thumbs...)...),
-		BackdropURL:  firstRemoteURL(baseDir, append([]string{doc.Fanart.Value, doc.Art.Fanart, doc.Art.Backdrop, doc.Art.Background, doc.Art.Banner, doc.Art.Landscape}, doc.Fanart.Thumbs...)...),
+		PosterURL:    firstRemoteURL(baseDir, nfoPosterValues(doc)...),
+		BackdropURL:  firstRemoteURL(baseDir, nfoBackdropValues(doc)...),
 		TMDbID:       doc.TMDbID,
 		SeasonNum:    doc.Season,
 		EpisodeNum:   doc.Episode,
@@ -320,7 +329,7 @@ func mergeArtworkMetadata(meta *LocalMetadata, mediaPath, showBaseDir string) {
 		return
 	}
 	mediaDir := filepath.Dir(mediaPath)
-	if localPoster := firstExistingImage(mediaDir, localPosterCandidates(mediaPath)...); localPoster != "" {
+	if localPoster := firstLocalPoster(mediaPath, showBaseDir); localPoster != "" {
 		meta.PosterURL = localPoster
 	} else if meta.PosterURL == "" {
 		meta.PosterURL = firstAdultLooseImage(mediaDir, "poster")
@@ -434,19 +443,19 @@ func firstRemoteURL(baseDir string, values ...string) string {
 func localPosterCandidates(mediaPath string) []string {
 	base := strings.TrimSuffix(filepath.Base(mediaPath), filepath.Ext(mediaPath))
 	names := []string{
-		base,
-		base + "-thumb",
-		base + ".thumb",
-		base + "-cover",
-		base + ".cover",
 		base + "-poster",
 		base + ".poster",
-		"thumb",
 		"poster",
 		"folder",
 		"cover",
 		"movie",
 		"show",
+		base + "-cover",
+		base + ".cover",
+		base,
+		base + "-thumb",
+		base + ".thumb",
+		"thumb",
 	}
 	return append(adultArtworkNameCandidates(mediaPath, "poster"), names...)
 }
@@ -523,6 +532,69 @@ func firstExistingImage(dir string, names ...string) string {
 	return ""
 }
 
+func nfoPosterValues(doc *nfoDocument) []string {
+	if doc == nil {
+		return nil
+	}
+	values := []string{doc.Poster, doc.Art.Poster}
+	for _, thumb := range doc.Thumbs {
+		aspect := strings.ToLower(strings.TrimSpace(thumb.Aspect))
+		if aspect == "" || aspect == "poster" || aspect == "cover" || aspect == "default" {
+			values = append(values, thumb.Value)
+		}
+	}
+	values = append(values, doc.Art.Thumb)
+	return values
+}
+
+func nfoBackdropValues(doc *nfoDocument) []string {
+	if doc == nil {
+		return nil
+	}
+	values := []string{doc.Fanart.Value, doc.Art.Fanart, doc.Art.Backdrop, doc.Art.Background, doc.Art.Landscape, doc.Art.Banner}
+	for _, thumb := range doc.Thumbs {
+		aspect := strings.ToLower(strings.TrimSpace(thumb.Aspect))
+		if aspect == "fanart" || aspect == "backdrop" || aspect == "background" || aspect == "landscape" {
+			values = append(values, thumb.Value)
+		}
+	}
+	values = append(values, doc.Fanart.Thumbs...)
+	return values
+}
+
+func firstLocalPoster(mediaPath, showBaseDir string) string {
+	mediaDir := filepath.Dir(mediaPath)
+	dirs := []string{}
+	if showBaseDir != "" && !samePath(showBaseDir, mediaDir) {
+		dirs = append(dirs, showBaseDir)
+	}
+	dirs = append(dirs, mediaDir)
+	for _, dir := range dirs {
+		if localPoster := firstExistingPosterImage(dir, localPosterCandidates(mediaPath)...); localPoster != "" {
+			return localPoster
+		}
+	}
+	return ""
+}
+
+func firstExistingPosterImage(dir string, names ...string) string {
+	if dir == "" {
+		return ""
+	}
+	for _, name := range names {
+		if isRejectedPosterName(name) {
+			continue
+		}
+		for _, ext := range []string{".jpg", ".jpeg", ".png", ".webp"} {
+			path := filepath.Join(dir, name+ext)
+			if fileExists(path) && likelyPosterImage(path) {
+				return filepath.Clean(path)
+			}
+		}
+	}
+	return ""
+}
+
 func firstAdultLooseImage(dir, kind string) string {
 	if dir == "" {
 		return ""
@@ -537,13 +609,18 @@ func firstAdultLooseImage(dir, kind string) string {
 		}
 		name := strings.ToLower(strings.TrimSuffix(filepath.Base(path), ext))
 		if kind == "poster" {
-			if strings.Contains(name, "poster") || strings.Contains(name, "cover") || strings.Contains(name, "thumb") || strings.HasSuffix(name, "pl") {
+			if isRejectedPosterName(name) {
+				continue
+			}
+			if strings.Contains(name, "poster") || strings.Contains(name, "cover") || strings.Contains(name, "folder") || strings.Contains(name, "movie") || strings.HasSuffix(name, "pl") {
 				preferred = append(preferred, path)
 			}
 		} else if strings.Contains(name, "fanart") || strings.Contains(name, "backdrop") || strings.Contains(name, "background") || strings.Contains(name, "landscape") || strings.Contains(name, "jp") {
 			preferred = append(preferred, path)
 		}
-		fallback = append(fallback, path)
+		if kind != "poster" || likelyPosterImage(path) {
+			fallback = append(fallback, path)
+		}
 	}
 	if len(preferred) > 0 {
 		return filepath.Clean(preferred[0])
@@ -552,6 +629,34 @@ func firstAdultLooseImage(dir, kind string) string {
 		return filepath.Clean(fallback[0])
 	}
 	return ""
+}
+
+func isRejectedPosterName(name string) bool {
+	name = strings.ToLower(name)
+	rejected := []string{
+		"actor", "actors", "actress", "cast", "avatar", "portrait", "person",
+		"sample", "screenshot", "screen", "still", "scene", "extrafanart", "extrathumb",
+		"fanart", "backdrop", "background", "landscape", "banner", "clearlogo", "clearart", "logo", "disc",
+	}
+	for _, token := range rejected {
+		if strings.Contains(name, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func likelyPosterImage(path string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	cfg, _, err := image.DecodeConfig(file)
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+		return true
+	}
+	return cfg.Height >= cfg.Width
 }
 
 func fileExists(path string) bool {

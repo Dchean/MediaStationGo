@@ -91,6 +91,10 @@ func TestReadLocalVarietyMetadataUsesLocalArtwork(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(showDir, "哈哈哈哈哈.nfo"), []byte(`<tvshow><title>哈哈哈哈哈</title><genre>综艺</genre></tvshow>`), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	showPoster := filepath.Join(showDir, "poster.jpg")
+	if err := os.WriteFile(showPoster, []byte("jpg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	episodeThumb := filepath.Join(seasonDir, "哈哈哈哈哈 - S06E17-thumb.jpg")
 	if err := os.WriteFile(episodeThumb, []byte("jpg"), 0o644); err != nil {
 		t.Fatal(err)
@@ -110,11 +114,60 @@ func TestReadLocalVarietyMetadataUsesLocalArtwork(t *testing.T) {
 	if got.Title != "哈哈哈哈哈" || got.Genres != "综艺" {
 		t.Fatalf("unexpected metadata: %+v", got)
 	}
-	if got.PosterURL != episodeThumb {
-		t.Fatalf("PosterURL = %q, want %q", got.PosterURL, episodeThumb)
+	if got.PosterURL != showPoster {
+		t.Fatalf("PosterURL = %q, want show poster %q, not episode thumb %q", got.PosterURL, showPoster, episodeThumb)
 	}
 	if got.BackdropURL != backdrop {
 		t.Fatalf("BackdropURL = %q, want %q", got.BackdropURL, backdrop)
+	}
+}
+
+func TestReadLocalMetadataPrioritizesPosterOverThumbAndStills(t *testing.T) {
+	root := t.TempDir()
+	mediaPath := filepath.Join(root, "Movie.mkv")
+	if err := os.WriteFile(mediaPath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	thumb := filepath.Join(root, "Movie-thumb.jpg")
+	if err := os.WriteFile(thumb, []byte("jpg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	still := filepath.Join(root, "Movie-still.jpg")
+	if err := os.WriteFile(still, []byte("jpg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	poster := filepath.Join(root, "poster.jpg")
+	if err := os.WriteFile(poster, []byte("jpg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ReadLocalMetadata(mediaPath, root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.PosterURL != poster {
+		t.Fatalf("PosterURL = %q, want poster %q", got.PosterURL, poster)
+	}
+}
+
+func TestReadLocalMetadataIgnoresActorAndStillArtworkOnly(t *testing.T) {
+	root := t.TempDir()
+	mediaPath := filepath.Join(root, "SSIS-001.mp4")
+	if err := os.WriteFile(mediaPath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"actor.jpg", "sample.jpg", "fanart.jpg"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("jpg"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := ReadLocalMetadata(mediaPath, root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.PosterURL != "" || got.BackdropURL == "" {
+		t.Fatalf("expected backdrop-only metadata without actor/still poster, got %+v", got)
 	}
 }
 
