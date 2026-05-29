@@ -1,6 +1,8 @@
 package service
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ShukeBta/MediaStationGo/internal/model"
@@ -136,5 +138,57 @@ func TestSelectSiteSearchCandidatesWithUnknownTotalSkipsExistingEpisodes(t *test
 	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{}, availability)
 	if len(got) != 1 || got[0].Episode != 3 {
 		t.Fatalf("selected %#v, want only not-yet-local episode 3", got)
+	}
+}
+
+func TestSubscriptionPendingDownloadAvailabilitySkipsUnorganizedEpisodes(t *testing.T) {
+	root := t.TempDir()
+	seasonDir := filepath.Join(root, "间谍过家家", "Season 01")
+	if err := os.MkdirAll(seasonDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"间谍过家家 - S01E01.mkv",
+		"间谍过家家 - S01E02.mkv.!qB",
+	} {
+		if err := os.WriteFile(filepath.Join(seasonDir, name), []byte("video"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sub := &model.Subscription{
+		Name:          "间谍过家家 自动订阅",
+		Filter:        "间谍过家家",
+		MediaType:     "tv",
+		SavePath:      root,
+		TotalEpisodes: 3,
+	}
+	svc := NewSubscriptionService(nil, nil, nil, nil, nil, nil)
+	availability := svc.pendingDownloadAvailability(t.Context(), sub)
+	if availability.DownloadedEpisodes != 2 {
+		t.Fatalf("downloaded episodes = %d, want 2", availability.DownloadedEpisodes)
+	}
+	if _, ok := availability.ExistingEpisodeKeys[episodeKey(1, 1)]; !ok {
+		t.Fatalf("missing pending E01 key: %#v", availability.ExistingEpisodeKeys)
+	}
+	if _, ok := availability.ExistingEpisodeKeys[episodeKey(1, 2)]; !ok {
+		t.Fatalf("missing pending E02 key: %#v", availability.ExistingEpisodeKeys)
+	}
+
+	results := []SearchResult{
+		{Title: "间谍过家家 S01 Complete 1080p", DownloadURL: "https://pt/download/pack", Seeders: 100},
+		{Title: "间谍过家家 S01E01 1080p", DownloadURL: "https://pt/download/1", Seeders: 90},
+		{Title: "间谍过家家 S01E02 1080p", DownloadURL: "https://pt/download/2", Seeders: 80},
+		{Title: "间谍过家家 S01E03 1080p", DownloadURL: "https://pt/download/3", Seeders: 70},
+	}
+	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{}, availability)
+	if len(got) != 1 || got[0].Episode != 3 {
+		t.Fatalf("selected %#v, want only not-yet-downloaded episode 3", got)
+	}
+	if !svc.downloadPathHasCandidate(t.Context(), sub, "间谍过家家 S01E02 1080p", root) {
+		t.Fatal("expected existing pending E02 file to be detected")
+	}
+	if svc.downloadPathHasCandidate(t.Context(), sub, "间谍过家家 S01E03 1080p", root) {
+		t.Fatal("did not expect missing E03 to be detected")
 	}
 }

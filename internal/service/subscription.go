@@ -14,10 +14,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"go.uber.org/zap"
 
@@ -223,6 +226,11 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 		}
 		mediaType, mediaCategory := s.classifySubscriptionItem(ctx, sub, item.Title, "")
 		savePath := s.resolveSubscriptionSavePath(ctx, sub, mediaType, mediaCategory)
+		if s.downloadPathHasCandidate(ctx, sub, item.Title, savePath) {
+			seen = append(seen, guid)
+			seenSet[guid] = struct{}{}
+			continue
+		}
 		if _, err := s.downloads.AddDownloadWithMeta(ctx, sub.UserID, download, savePath, DownloadTaskMeta{
 			Title:       firstNonEmpty(item.Title, sub.Name),
 			PosterURL:   sub.PosterURL,
@@ -285,7 +293,10 @@ func (s *SubscriptionService) runSiteSearch(ctx context.Context, sub *model.Subs
 		seenSet[g] = struct{}{}
 	}
 
-	availability := SubscriptionLocalAvailability(ctx, s.repo, sub)
+	availability := mergeLocalAvailability(
+		SubscriptionLocalAvailability(ctx, s.repo, sub),
+		s.pendingDownloadAvailability(ctx, sub),
+	)
 	candidates := selectSiteSearchCandidates(results, sub, seenSet, availability)
 	var lastEnqueueErr error
 	queued := 0
@@ -300,6 +311,11 @@ func (s *SubscriptionService) runSiteSearch(ctx context.Context, sub *model.Subs
 		}
 		realURL := s.site.ResolveDownloadURL(ctx, candidate.Download)
 		savePath := s.resolveSubscriptionSavePath(ctx, sub, mediaType, mediaCategory)
+		if s.downloadPathHasCandidate(ctx, sub, candidate.Item.Title, savePath) {
+			seen = append(seen, candidate.GUID)
+			seenSet[candidate.GUID] = struct{}{}
+			continue
+		}
 		if _, err := s.downloads.AddDownloadWithMeta(ctx, sub.UserID, realURL, savePath, DownloadTaskMeta{
 			Title:       firstNonEmpty(item.Title, sub.Name),
 			PosterURL:   sub.PosterURL,
@@ -628,6 +644,201 @@ func (s *SubscriptionService) shouldSkipExistingTorrent(ctx context.Context, med
 		return false
 	}
 	return s.downloads.TorrentExistsByName(ctx, candidate.Item.Title)
+}
+
+func (s *SubscriptionService) pendingDownloadAvailability(ctx context.Context, sub *model.Subscription) LocalAvailability {
+	out := LocalAvailability{
+		ExistingEpisodeKeys: map[string]struct{}{},
+		MissingEpisodeKeys:  map[string]struct{}{},
+	}
+	if sub != nil {
+		out.TotalEpisodes = sub.TotalEpisodes
+	}
+	root := s.subscriptionBaseSavePath(ctx, sub)
+	query := availabilityQuery(subscriptionName(sub), subscriptionFilter(sub))
+	if root == "" || query == "" {
+		return out
+	}
+	_ = scanDownloadPath(ctx, root, query, func(_ string, season, episode int) bool {
+		out.LocalMediaCount++
+		out.InLibrary = true
+		if episode > 0 {
+			out.ExistingEpisodeKeys[episodeKey(season, episode)] = struct{}{}
+		}
+		return true
+	})
+	mediaType := ""
+	if sub != nil {
+		mediaType = sub.MediaType
+	}
+	if isSubscriptionSeriesType(mediaType) || len(out.ExistingEpisodeKeys) > 0 {
+		out.DownloadedEpisodes = len(out.ExistingEpisodeKeys)
+		out.MissingEpisodes = missingEpisodes(out.ExistingEpisodeKeys, out.TotalEpisodes)
+		for _, episode := range out.MissingEpisodes {
+			out.MissingEpisodeKeys[episodeKey(1, episode)] = struct{}{}
+		}
+	} else if out.LocalMediaCount > 0 {
+		out.DownloadedEpisodes = 1
+		if out.TotalEpisodes == 0 {
+			out.TotalEpisodes = 1
+		}
+	}
+	return out
+}
+
+func (s *SubscriptionService) subscriptionBaseSavePath(ctx context.Context, sub *model.Subscription) string {
+	if sub == nil {
+		return ""
+	}
+	base := strings.TrimSpace(sub.SavePath)
+	if base == "" && s != nil && s.repo != nil && s.repo.Setting != nil {
+		base, _ = s.repo.Setting.Get(ctx, "qbittorrent.savepath")
+	}
+	return base
+}
+
+func subscriptionName(sub *model.Subscription) string {
+	if sub == nil {
+		return ""
+	}
+	return sub.Name
+}
+
+func subscriptionFilter(sub *model.Subscription) string {
+	if sub == nil {
+		return ""
+	}
+	return sub.Filter
+}
+
+func mergeLocalAvailability(values ...LocalAvailability) LocalAvailability {
+	out := LocalAvailability{
+		ExistingEpisodeKeys: map[string]struct{}{},
+		MissingEpisodeKeys:  map[string]struct{}{},
+	}
+	for _, value := range values {
+		if out.TotalEpisodes == 0 {
+			out.TotalEpisodes = value.TotalEpisodes
+		}
+		out.LocalMediaCount += value.LocalMediaCount
+		out.InLibrary = out.InLibrary || value.InLibrary
+		for key := range value.ExistingEpisodeKeys {
+			out.ExistingEpisodeKeys[key] = struct{}{}
+		}
+	}
+	out.DownloadedEpisodes = len(out.ExistingEpisodeKeys)
+	if out.TotalEpisodes > 0 {
+		out.MissingEpisodes = missingEpisodes(out.ExistingEpisodeKeys, out.TotalEpisodes)
+		for _, episode := range out.MissingEpisodes {
+			out.MissingEpisodeKeys[episodeKey(1, episode)] = struct{}{}
+		}
+	}
+	if out.DownloadedEpisodes == 0 && out.LocalMediaCount > 0 {
+		out.DownloadedEpisodes = out.LocalMediaCount
+		if out.TotalEpisodes == 0 {
+			out.TotalEpisodes = 1
+		}
+	}
+	return out
+}
+
+func (s *SubscriptionService) downloadPathHasCandidate(ctx context.Context, sub *model.Subscription, title, savePath string) bool {
+	savePath = strings.TrimSpace(savePath)
+	if savePath == "" {
+		savePath = s.subscriptionBaseSavePath(ctx, sub)
+	}
+	query := availabilityQuery(title, subscriptionFilter(sub))
+	if savePath == "" || query == "" {
+		return false
+	}
+	wantSeason, wantEpisode := ParseEpisode(title)
+	if wantSeason <= 0 {
+		wantSeason = 1
+	}
+	found := false
+	_ = scanDownloadPath(ctx, savePath, query, func(path string, season, episode int) bool {
+		if wantEpisode <= 0 {
+			found = true
+			return false
+		}
+		if episode <= 0 {
+			return true
+		}
+		if season <= 0 {
+			season = 1
+		}
+		if episodeKey(season, episode) == episodeKey(wantSeason, wantEpisode) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+func scanDownloadPath(ctx context.Context, root, query string, visit func(path string, season, episode int) bool) error {
+	if strings.TrimSpace(root) == "" {
+		return nil
+	}
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	normalizedQuery := normalizeAvailabilityComparable(query)
+	if normalizedQuery == "" {
+		return nil
+	}
+	visited := 0
+	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if d.IsDir() {
+			if path != root && strings.HasPrefix(filepath.Base(path), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !isDownloadMediaPath(path) {
+			return nil
+		}
+		visited++
+		if visited > 10000 {
+			return filepath.SkipAll
+		}
+		if !strings.Contains(normalizeAvailabilityComparable(path), normalizedQuery) {
+			return nil
+		}
+		season, episode := ParseEpisode(path)
+		if !visit(path, season, episode) {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+}
+
+func isDownloadMediaPath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".!qb", ".part", ".aria2", ".crdownload":
+		path = strings.TrimSuffix(path, filepath.Ext(path))
+		ext = strings.ToLower(filepath.Ext(path))
+	}
+	_, ok := videoExtensions[ext]
+	return ok
+}
+
+func normalizeAvailabilityComparable(value string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(value) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func siteSearchKeyword(sub *model.Subscription) string {
