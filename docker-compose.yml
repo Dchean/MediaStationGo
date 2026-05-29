@@ -122,20 +122,6 @@ services:
       # 日志级别：debug / info / warn / error。
       MEDIASTATION_LOGGING_LEVEL: ${MEDIASTATION_LOGGING_LEVEL:-info}
 
-      # 外网 API 代理。TMDB / M-Team / Bangumi 等站点访问慢或 TLS handshake timeout 时配置。
-      # v2rayA 常见 HTTP 代理端口为 20171，示例：
-      #   HTTP_PROXY=http://172.17.0.1:20171
-      #   HTTPS_PROXY=http://172.17.0.1:20171
-      # qBittorrent / NAS / 局域网地址不要走代理，务必放入 NO_PROXY。
-      HTTP_PROXY: ${HTTP_PROXY:-}
-      HTTPS_PROXY: ${HTTPS_PROXY:-}
-      ALL_PROXY: ${ALL_PROXY:-}
-      NO_PROXY: ${NO_PROXY:-127.0.0.1,localhost,172.17.0.1,192.168.0.0/16,10.0.0.0/8}
-      http_proxy: ${HTTP_PROXY:-}
-      https_proxy: ${HTTPS_PROXY:-}
-      all_proxy: ${ALL_PROXY:-}
-      no_proxy: ${NO_PROXY:-127.0.0.1,localhost,172.17.0.1,192.168.0.0/16,10.0.0.0/8}
-
       # 转码配置。留空表示自动/软件转码；硬件加速见下方 Intel/NVIDIA 示例。
       MEDIASTATION_TRANSCODER_ENCODER: ${MEDIASTATION_TRANSCODER_ENCODER:-}
       MEDIASTATION_TRANSCODER_MAX_HEIGHT: ${MEDIASTATION_TRANSCODER_MAX_HEIGHT:-1080}

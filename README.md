@@ -247,12 +247,7 @@ MEDIASTATION_MEDIA_CONTAINER_DIR=/vol1/1000/Docker/moviepilot-v2/media
 MEDIASTATION_DOWNLOAD_DIR=/vol1/1000/qBittorrent/downloads
 MEDIASTATION_DOWNLOAD_CONTAINER_DIR=/vol1/1000/qBittorrent/downloads
 
-# 可选：如果 TMDB / M-Team / Bangumi 等外网 API 超时，填入 v2rayA HTTP 代理。
-# qBittorrent 走 172.17.0.1:8085，本地网段必须放入 NO_PROXY，避免绕远或失败。
-HTTP_PROXY=
-HTTPS_PROXY=
-ALL_PROXY=
-NO_PROXY=127.0.0.1,localhost,172.17.0.1,192.168.0.0/16,10.0.0.0/8
+# 如果 NAS 已使用 v2rayA redirect / 透明代理，不要在这里额外配置 HTTP_PROXY，避免叠加代理。
 
 TZ=Asia/Shanghai
 PUID=1000
@@ -500,10 +495,6 @@ MEDIASTATION_MEDIA_DIR=/vol1/1000/Docker/moviepilot-v2/media
 MEDIASTATION_MEDIA_CONTAINER_DIR=/vol1/1000/Docker/moviepilot-v2/media
 MEDIASTATION_DOWNLOAD_DIR=/vol1/1000/qBittorrent/downloads
 MEDIASTATION_DOWNLOAD_CONTAINER_DIR=/vol1/1000/qBittorrent/downloads
-HTTP_PROXY=
-HTTPS_PROXY=
-ALL_PROXY=
-NO_PROXY=127.0.0.1,localhost,172.17.0.1,192.168.0.0/16,10.0.0.0/8
 TZ=Asia/Shanghai
 PUID=1000
 PGID=1000
@@ -598,29 +589,19 @@ MEDIASTATION_DOWNLOAD_DIR=/vol1/1000/qBittorrent/downloads
 
 容器内媒体库建议添加 `/media/电影` 和 `/media/电视剧` 两个根目录；整理后会自动进入 `/media/电影/动画电影`、`/media/电视剧/国产剧` 等分类目录。下载器保存根目录填写 `/downloads`，订阅下载会自动落到 `/downloads/动画电影`、`/downloads/国产剧` 等分类目录。
 
-### 外网 API 代理怎么填
+### 外网访问与 v2rayA 说明
 
-如果站点或刮削接口出现 `TLS handshake timeout`、`context deadline exceeded`，而 NAS 使用 v2rayA，请给 MediaStationGo 容器显式传入代理环境变量。只在 `.env` 写还不够，`docker-compose.yml` 的 `environment` 里也必须引用这些变量；仓库模板已经内置。
+如果 NAS 已经开启 v2rayA 的 `redirect` / 透明代理，并使用大陆白名单分流，MediaStationGo 通常不需要额外配置 `HTTP_PROXY` / `HTTPS_PROXY`。
 
-常见 v2rayA HTTP 代理端口是 `20171`，请按你的 v2rayA 实际端口修改：
+不建议在 `docker-compose.yml` 或 `.env` 中重复配置代理环境变量，因为这会让容器网络和 Docker 拉镜像路径叠加代理，反而可能导致 GHCR、M-Team、TMDB 等访问异常。
 
-```env
-HTTP_PROXY=http://172.17.0.1:20171
-HTTPS_PROXY=http://172.17.0.1:20171
-ALL_PROXY=
-NO_PROXY=127.0.0.1,localhost,172.17.0.1,192.168.0.0/16,10.0.0.0/8
-```
-
-> `NO_PROXY` 很重要：qBittorrent 地址 `http://172.17.0.1:8085`、NAS 局域网地址和本机地址不应该走外网代理。
-
-容器内验证代理是否生效：
+排查外网链路时，先从容器内直接测试：
 
 ```bash
-docker exec -it mediastation-go sh -lc 'env | grep -i proxy'
 docker exec -it mediastation-go sh -lc 'wget -S -O- --timeout=20 https://api.m-team.cc/api/torrent/search'
 ```
 
-如果第二条能快速返回 HTTP 状态码，而不是卡在 `Connecting` 或 TLS 握手阶段，就说明链路已经通了。
+如果这里仍然卡在 TLS 阶段，应优先检查 v2rayA 的 redirect 规则、Docker 网桥流量是否被透明代理接管，而不是给 Docker daemon 或 compose 叠加 `HTTP_PROXY`。
 
 ### qBittorrent 连接怎么填
 

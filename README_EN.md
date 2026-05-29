@@ -236,10 +236,7 @@ MEDIASTATION_MEDIA_DIR=/vol1/1000/Docker/moviepilot-v2/media
 MEDIASTATION_MEDIA_CONTAINER_DIR=/vol1/1000/Docker/moviepilot-v2/media
 MEDIASTATION_DOWNLOAD_DIR=/vol1/1000/qBittorrent/downloads
 MEDIASTATION_DOWNLOAD_CONTAINER_DIR=/vol1/1000/qBittorrent/downloads
-HTTP_PROXY=
-HTTPS_PROXY=
-ALL_PROXY=
-NO_PROXY=127.0.0.1,localhost,172.17.0.1,192.168.0.0/16,10.0.0.0/8
+# If the NAS already uses v2rayA redirect / transparent proxy, do not add HTTP_PROXY here.
 TZ=Asia/Shanghai
 PUID=1000
 PGID=1000
@@ -418,27 +415,19 @@ MEDIASTATION_DOWNLOAD_DIR=/vol1/1000/qBittorrent/downloads
 
 Inside MediaStationGo, add `/media/电影` and `/media/电视剧` as media library roots. Organized files will land in category folders such as `/media/电影/动画电影` and `/media/电视剧/国产剧`. Use `/downloads` as the download root; subscriptions will save to folders such as `/downloads/动画电影` and `/downloads/国产剧`.
 
-### External API Proxy
+### External Access and v2rayA
 
-If sites or scraping APIs fail with `TLS handshake timeout` or `context deadline exceeded`, and the NAS uses v2rayA, pass proxy variables into the MediaStationGo container. Writing them only in `.env` is not enough unless `docker-compose.yml` also references them; the repository template already does.
+If the NAS already uses v2rayA `redirect` / transparent proxy with routing rules, MediaStationGo usually does not need explicit `HTTP_PROXY` / `HTTPS_PROXY` variables.
 
-Adjust the port to your v2rayA HTTP proxy port; `20171` is common:
+Avoid stacking proxy variables in `.env`, `docker-compose.yml`, or the Docker daemon unless you intentionally use an application-level HTTP proxy. Stacked proxies can break GHCR pulls and site APIs.
 
-```env
-HTTP_PROXY=http://172.17.0.1:20171
-HTTPS_PROXY=http://172.17.0.1:20171
-ALL_PROXY=
-NO_PROXY=127.0.0.1,localhost,172.17.0.1,192.168.0.0/16,10.0.0.0/8
-```
-
-`NO_PROXY` is important: qBittorrent at `http://172.17.0.1:8085`, NAS LAN addresses, and localhost should not go through the external proxy.
-
-Verify inside the container:
+Test from inside the container first:
 
 ```bash
-docker exec -it mediastation-go sh -lc 'env | grep -i proxy'
 docker exec -it mediastation-go sh -lc 'wget -S -O- --timeout=20 https://api.m-team.cc/api/torrent/search'
 ```
+
+If it still hangs during TLS, check v2rayA redirect rules and whether Docker bridge traffic is covered by the transparent proxy instead of adding another `HTTP_PROXY` layer.
 
 ### qBittorrent Connection
 
