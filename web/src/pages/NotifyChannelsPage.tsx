@@ -377,7 +377,7 @@ function ChannelFormModal({
                 />
               </Field>
               <div className="rounded-2xl border border-primary-400/15 bg-primary-400/5 px-4 py-3 text-xs leading-6 text-ink-50">
-                群组 ID、频道 ID 均为选填，可填一个、两个都填，也可以不填。不填时只有管理员 Telegram ID 可以私聊 Bot 使用；填写后，对应群组/频道成员可唤醒 Bot、使用 <code>/start 用户名 密码</code> 绑定账号和隐藏成人目录。<code>/status</code>、<code>/search</code>、<code>/downloads</code>、<code>/stats</code> 仍仅管理员 Telegram ID 或已绑定的本地管理员可用。若测试通知超时，可填写反代 API 地址或代理地址。
+                群组 ID、频道 ID 均为选填，可填一个、两个都填，也可以不填。管理功能始终仅管理员 Telegram ID 或已绑定的本地管理员可用；普通用户需要在已配置的群组或频道中，才能使用 <code>/start 用户名 密码</code> 绑定账号、切换隐藏成人媒体库和目录。不配置群组/频道时，普通用户不会被放行。若测试通知超时，可填写反代 API 地址或代理地址。
               </div>
             </>
           )}

@@ -212,7 +212,7 @@ func (s *TelegramBotService) cmdStart(ctx context.Context, msg *TelegramMessage,
 	}
 	channel := s.findChannelForMessage(ctx, msg)
 	if !s.telegramUserCanBind(ctx, channel, msg.From.ID) {
-		return telegramCommandReply{Text: "当前 Telegram 账号不在已绑定的群组/频道中，无法绑定媒体中心账号。请先加入管理员配置的群组或频道。"}
+		return telegramCommandReply{Text: "当前 Telegram 账号不在管理员配置的绑定群组/频道中，无法绑定媒体中心账号。请先加入管理员配置的群组或频道；如果尚未配置，请联系管理员。"}
 	}
 	username, password := parseStartCredentials(args)
 	if username == "" || password == "" {
@@ -268,7 +268,7 @@ func (s *TelegramBotService) cmdHelp(ctx context.Context, msg *TelegramMessage) 
 func (s *TelegramBotService) cmdHideAdult(ctx context.Context, msg *TelegramMessage, args []string) telegramCommandReply {
 	channel := s.findChannelForMessage(ctx, msg)
 	if !s.telegramUserCanBind(ctx, channel, msg.From.ID) {
-		return telegramCommandReply{Text: "当前 Telegram 账号不在已绑定的群组/频道中，无法使用成人目录隐藏开关。"}
+		return telegramCommandReply{Text: "当前 Telegram 账号不在管理员配置的绑定群组/频道中，无法使用成人目录隐藏开关。"}
 	}
 	binding := s.telegramBinding(ctx, msg.From.ID)
 	if binding == nil {
