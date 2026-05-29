@@ -34,7 +34,7 @@ func NewNotifyChannelService(log *zap.Logger, repo *repository.Container) *Notif
 	return &NotifyChannelService{
 		log:    log,
 		repo:   repo,
-		client: &http.Client{Timeout: 10 * time.Second},
+		client: NewExternalHTTPClient(10 * time.Second),
 	}
 }
 
@@ -89,6 +89,7 @@ func (s *NotifyChannelService) List(ctx context.Context) ([]channelView, error) 
 
 // Create persists a new channel.
 func (s *NotifyChannelService) Create(ctx context.Context, in ChannelInput) (*channelView, error) {
+	normalizeChannelInput(&in)
 	if err := validateChannel(in); err != nil {
 		return nil, err
 	}
@@ -113,6 +114,7 @@ func (s *NotifyChannelService) Create(ctx context.Context, in ChannelInput) (*ch
 
 // Update applies a partial patch to an existing channel.
 func (s *NotifyChannelService) Update(ctx context.Context, id string, in ChannelInput) (*channelView, error) {
+	normalizeChannelInput(&in)
 	if err := validateChannel(in); err != nil {
 		return nil, err
 	}
@@ -218,20 +220,18 @@ func (s *NotifyChannelService) dispatchOne(ctx context.Context, n model.NotifyCh
 
 	switch n.Type {
 	case "telegram":
-		token := str(cfg["bot_token"])
-		chat := str(cfg["chat_id"])
+		telegramCfg := telegramStringConfigFromAny(cfg)
+		token := telegramCfg["bot_token"]
+		chat := telegramCfg["chat_id"]
 		if token == "" || chat == "" {
 			return errors.New("telegram missing bot_token / chat_id")
 		}
 		text := fmt.Sprintf("<b>%s</b>\n\n%s", escapeHTML(title), escapeHTML(body))
-		u := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
 		form := url.Values{}
 		form.Set("chat_id", chat)
 		form.Set("text", text)
 		form.Set("parse_mode", "HTML")
-		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(form.Encode()))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		return s.do(req)
+		return telegramPostForm(ctx, telegramCfg, "sendMessage", form, 15*time.Second)
 
 	case "bark":
 		key := str(cfg["device_key"])
@@ -332,10 +332,26 @@ func validateChannel(in ChannelInput) error {
 			return errors.New("telegram admin_user_ids required")
 		}
 		if str(cfg["group_chat_id"]) == "" && str(cfg["channel_chat_id"]) == "" && str(cfg["command_chat_id"]) == "" {
-			return errors.New("telegram group_chat_id or channel_chat_id required")
+			return errors.New("telegram group_chat_id or channel_chat_id required: 请填写绑定群组 ID 或绑定频道 ID；如果通知 Chat ID 是群组/频道负数 ID，也可以直接填在 Chat ID")
 		}
 	}
 	return nil
+}
+
+func normalizeChannelInput(in *ChannelInput) {
+	if in == nil || in.Type != "telegram" {
+		return
+	}
+	if in.Config == nil {
+		in.Config = map[string]any{}
+	}
+	chatID := str(in.Config["chat_id"])
+	if chatID == "" || !strings.HasPrefix(chatID, "-") {
+		return
+	}
+	if str(in.Config["group_chat_id"]) == "" && str(in.Config["channel_chat_id"]) == "" && str(in.Config["command_chat_id"]) == "" {
+		in.Config["group_chat_id"] = chatID
+	}
 }
 
 // str safely extracts a string from an interface{} loaded from JSON.

@@ -238,7 +238,7 @@ mkdir -p data cache media downloads
 ```bash
 cat > .env <<'EOF'
 # 固定版本；需要升级时改成新的 MediaStationGo-vX.Y.Z 后执行 docker compose pull && docker compose up -d
-MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.22
+MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
 MEDIASTATION_HTTP_PORT=18080
 
 # 程序数据和缓存建议放在 MediaStationGo 部署目录下，便于备份和迁移。
@@ -307,7 +307,7 @@ vim docker-compose.yml
 #
 # 镜像版本：
 #   默认拉取 latest；如需固定版本，创建 .env 并写入：
-#     MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.22
+#     MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
 #
 # 路径映射总览：
 #   /data      程序数据目录。保存 SQLite 数据库、JWT secret、系统配置等，必须持久化。
@@ -516,7 +516,7 @@ docker compose up -d
 
 ```bash
 cat > .env <<'EOF'
-MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.22
+MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
 MEDIASTATION_HTTP_PORT=18080
 MEDIASTATION_DATA_DIR=./data
 MEDIASTATION_CACHE_DIR=./cache
@@ -779,26 +779,26 @@ cd MediaStationGo
 
 | 平台 | 包名示例 |
 | --- | --- |
-| Linux x86_64 | `MediaStationGo-v0.0.22-linux-amd64.tar.gz` |
-| Linux ARM64 | `MediaStationGo-v0.0.22-linux-arm64.tar.gz` |
-| Windows x86_64 | `MediaStationGo-v0.0.22-windows-amd64.zip` |
-| macOS Intel | `MediaStationGo-v0.0.22-darwin-amd64.tar.gz` |
-| macOS Apple Silicon | `MediaStationGo-v0.0.22-darwin-arm64.tar.gz` |
+| Linux x86_64 | `MediaStationGo-v0.0.23-linux-amd64.tar.gz` |
+| Linux ARM64 | `MediaStationGo-v0.0.23-linux-arm64.tar.gz` |
+| Windows x86_64 | `MediaStationGo-v0.0.23-windows-amd64.zip` |
+| macOS Intel | `MediaStationGo-v0.0.23-darwin-amd64.tar.gz` |
+| macOS Apple Silicon | `MediaStationGo-v0.0.23-darwin-arm64.tar.gz` |
 
 部署步骤：
 
 ```bash
 # Linux 示例
-tar -xzf MediaStationGo-v0.0.22-linux-amd64.tar.gz
-cd MediaStationGo-v0.0.22-linux-amd64
+tar -xzf MediaStationGo-v0.0.23-linux-amd64.tar.gz
+cd MediaStationGo-v0.0.23-linux-amd64
 MEDIASTATION_APP_PORT=18080 ./mediastation-go
 ```
 
 Windows：
 
 ```powershell
-Expand-Archive .\MediaStationGo-v0.0.22-windows-amd64.zip
-cd .\MediaStationGo-v0.0.22-windows-amd64
+Expand-Archive .\MediaStationGo-v0.0.23-windows-amd64.zip
+cd .\MediaStationGo-v0.0.23-windows-amd64
 $env:MEDIASTATION_APP_PORT = "18080"
 .\mediastation-go.exe
 ```
@@ -905,13 +905,15 @@ MediaStationGo/
 | `MEDIASTATION_CACHE_CACHE_DIR` | `./cache` | 图片/转码缓存目录 |
 | `MEDIASTATION_SECRETS_JWT_SECRET` | 自动生成 | JWT 和敏感配置加密种子 |
 | `MEDIASTATION_APP_CORS_ORIGINS` | 空 | 额外允许的跨域来源 |
+| `MEDIASTATION_TELEGRAM_API_BASE_URL` | `https://api.telegram.org` | Telegram Bot API 地址；网络受限时可填写反代地址 |
+| `MEDIASTATION_TELEGRAM_PROXY_URL` | 空 | Telegram 出站代理，例如 `http://172.17.0.1:7890` 或 `socks5://172.17.0.1:1080` |
 
 后台可运行时配置：
 
 - API Key：TMDb、Bangumi、TheTVDB、Fanart、OpenAI Compatible 等。
 - 站点：M-Team、NexusPHP、Unit3D、自定义 RSS 等。
 - 下载器：qBittorrent、Transmission、Aria2。
-- 通知渠道：Telegram、Bark、Webhook、Email 等。
+- 通知渠道：Telegram、Bark、Webhook、Email 等。Telegram 渠道支持单独配置 API 反代与代理地址，测试通知失败时错误信息会自动隐藏 Bot Token。
 - 播放配置、权限配置、调度任务、存储配置。
 
 ---

@@ -2,12 +2,8 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -35,30 +31,7 @@ func (p *TelegramProvider) Send(ctx context.Context, cfg map[string]string, even
 		"text":       text,
 		"parse_mode": parseMode,
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("telegram api error %d: %s", resp.StatusCode, string(respBody))
-	}
-	return nil
+	return telegramPostJSON(ctx, cfg, "sendMessage", payload, 15*time.Second)
 }
 
 // ValidateConfig 验证 Telegram 配置。

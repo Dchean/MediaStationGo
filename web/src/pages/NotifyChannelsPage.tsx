@@ -183,7 +183,7 @@ function channelSummary(ch: NotifyChannel): string {
   const cfg = ch.config ?? {}
   switch (ch.type) {
     case 'telegram':
-      return `Bot ${String(cfg.bot_token ?? '').slice(0, 10)}… → 通知 ${cfg.chat_id ?? '-'} · 管理员 ${cfg.admin_user_ids ?? '-'} · 群组 ${cfg.group_chat_id ?? '-'} · 频道 ${cfg.channel_chat_id ?? '-'}`
+      return `Bot ${cfg.bot_token ? '已配置' : '未配置'} → 通知 ${cfg.chat_id ?? '-'} · 管理员 ${cfg.admin_user_ids ?? '-'} · 群组 ${cfg.group_chat_id ?? '-'} · 频道 ${cfg.channel_chat_id ?? '-'}`
     case 'wechat':
       return `SendKey ${String(cfg.sendkey ?? '').slice(0, 10)}…`
     case 'bark':
@@ -200,7 +200,15 @@ function channelSummary(ch: NotifyChannel): string {
 // ─── Form Modal ─────────────────────────────────────────────────────────────
 
 const EMPTY_CONFIG: Record<NotifyChannel['type'], Record<string, string>> = {
-  telegram: { bot_token: '', chat_id: '', admin_user_ids: '', group_chat_id: '', channel_chat_id: '' },
+  telegram: {
+    bot_token: '',
+    chat_id: '',
+    admin_user_ids: '',
+    group_chat_id: '',
+    channel_chat_id: '',
+    api_base_url: '',
+    proxy_url: '',
+  },
   wechat: { sendkey: '' },
   bark: { device_key: '', server: '' },
   webhook: { url: '', method: 'POST', headers: '', body_template: '' },
@@ -221,7 +229,7 @@ function ChannelFormModal({
     editing?.type ?? 'telegram',
   )
   const [config, setConfig] = useState<Record<string, string>>(
-    editing?.config ?? EMPTY_CONFIG.telegram,
+    { ...EMPTY_CONFIG[editing?.type ?? 'telegram'], ...(editing?.config ?? {}) },
   )
   const [enabled, setEnabled] = useState(editing?.enabled ?? true)
   const [saving, setSaving] = useState(false)
@@ -233,12 +241,38 @@ function ChannelFormModal({
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (type === 'telegram') {
+      if (!String(config.bot_token ?? '').trim()) {
+        toast.error('请填写 Telegram Bot Token')
+        return
+      }
+      if (!String(config.chat_id ?? '').trim()) {
+        toast.error('请填写通知 Chat ID')
+        return
+      }
+      if (!String(config.admin_user_ids ?? '').trim()) {
+        toast.error('请填写管理员 Telegram ID')
+        return
+      }
+      const chatID = String(config.chat_id ?? '').trim()
+      const groupChatID = String(config.group_chat_id ?? '').trim()
+      const channelChatID = String(config.channel_chat_id ?? '').trim()
+      if (!groupChatID && !channelChatID && !chatID.startsWith('-')) {
+        toast.error('请至少填写绑定群组 ID 或绑定频道 ID；或把群组/频道负数 ID 填到 Chat ID')
+        return
+      }
+      if (!groupChatID && !channelChatID && chatID.startsWith('-')) {
+        config.group_chat_id = chatID
+      }
+    }
     setSaving(true)
     try {
       const input: NotifyChannelInput = {
         name: name.trim(),
         type: type,
-        config,
+        config: Object.fromEntries(
+          Object.entries(config).map(([key, value]) => [key, String(value ?? '').trim()]),
+        ),
         enabled,
       }
       if (editing) {
@@ -336,8 +370,24 @@ function ChannelFormModal({
                   onChange={(e) => updateConfig('channel_chat_id', e.target.value)}
                 />
               </Field>
+              <Field label="Telegram API 地址 (可选)">
+                <input
+                  className="input-base"
+                  placeholder="默认 https://api.telegram.org；反代可填 https://tg.example.com"
+                  value={config.api_base_url ?? ''}
+                  onChange={(e) => updateConfig('api_base_url', e.target.value)}
+                />
+              </Field>
+              <Field label="Telegram 代理 (可选)">
+                <input
+                  className="input-base"
+                  placeholder="如 http://172.17.0.1:7890 或 socks5://172.17.0.1:1080"
+                  value={config.proxy_url ?? ''}
+                  onChange={(e) => updateConfig('proxy_url', e.target.value)}
+                />
+              </Field>
               <div className="rounded-2xl border border-primary-400/15 bg-primary-400/5 px-4 py-3 text-xs leading-6 text-ink-50">
-                必须至少填写群组 ID 或频道 ID。只有配置群组/频道中的成员可以唤醒 Bot、使用 <code>/start 用户名 密码</code> 绑定账号和隐藏成人目录；<code>/status</code>、<code>/search</code>、<code>/downloads</code>、<code>/stats</code> 仅管理员 Telegram ID 或已绑定的本地管理员可用。
+                必须至少填写群组 ID 或频道 ID。只有配置群组/频道中的成员可以唤醒 Bot、使用 <code>/start 用户名 密码</code> 绑定账号和隐藏成人目录；<code>/status</code>、<code>/search</code>、<code>/downloads</code>、<code>/stats</code> 仅管理员 Telegram ID 或已绑定的本地管理员可用。若测试通知超时，可填写反代 API 地址或代理地址。
               </div>
             </>
           )}

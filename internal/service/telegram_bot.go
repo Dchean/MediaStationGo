@@ -5,7 +5,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -478,7 +477,7 @@ func (s *TelegramBotService) StartPolling(ctx context.Context) {
 		s.pollingCancel[botToken] = cancel
 		s.pollingMu.Unlock()
 
-		go s.pollLoop(pollCtx, botToken)
+		go s.pollLoop(pollCtx, cfg)
 		s.log.Info("started telegram polling", zap.String("channel", ch.Name))
 	}
 }
@@ -495,10 +494,14 @@ func (s *TelegramBotService) StopPolling() {
 }
 
 // pollLoop 对单个 Bot Token 执行长轮询。
-func (s *TelegramBotService) pollLoop(ctx context.Context, botToken string) {
+func (s *TelegramBotService) pollLoop(ctx context.Context, cfg map[string]string) {
 	var offset int64 = 0
-	pollURL := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates", botToken)
-	client := &http.Client{Timeout: 45 * time.Second}
+	pollURL, err := telegramMethodURL(cfg, cfg["bot_token"], "getUpdates")
+	if err != nil {
+		s.log.Warn("telegram polling config invalid", zap.Error(err))
+		return
+	}
+	client := telegramHTTPClient(45*time.Second, cfg)
 
 	for {
 		select {
@@ -511,7 +514,7 @@ func (s *TelegramBotService) pollLoop(ctx context.Context, botToken string) {
 			"offset":  offset,
 			"timeout": 30,
 		})
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, pollURL, bytes.NewReader(reqBody))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, pollURL, strings.NewReader(string(reqBody)))
 		if err != nil {
 			time.Sleep(5 * time.Second)
 			continue
@@ -520,6 +523,7 @@ func (s *TelegramBotService) pollLoop(ctx context.Context, botToken string) {
 
 		resp, err := client.Do(req)
 		if err != nil {
+			s.log.Debug("telegram polling failed", zap.Error(sanitizeTelegramError(err)))
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -554,18 +558,15 @@ func (s *TelegramBotService) pollLoop(ctx context.Context, botToken string) {
 
 // reply 通过 Telegram Bot API 发送回复消息。
 func (s *TelegramBotService) reply(ctx context.Context, channel *model.NotifyChannel, chatID int, reply telegramCommandReply) error {
-	botToken := ""
+	cfg := map[string]string{}
 	if channel != nil {
 		configStr := channel.Config
 		if s.crypto != nil && configStr != "" {
 			configStr = s.crypto.Decrypt(configStr)
 		}
-		var cfg map[string]string
-		if err := json.Unmarshal([]byte(configStr), &cfg); err == nil {
-			botToken = cfg["bot_token"]
-		}
+		_ = json.Unmarshal([]byte(configStr), &cfg)
 	}
-	if botToken == "" {
+	if strings.TrimSpace(cfg["bot_token"]) == "" {
 		return fmt.Errorf("bot_token not configured")
 	}
 
@@ -588,27 +589,7 @@ func (s *TelegramBotService) reply(ctx context.Context, channel *model.NotifyCha
 		}
 		payload["reply_markup"] = map[string]interface{}{"inline_keyboard": keyboard}
 	}
-	body, _ := json.Marshal(payload)
-
-	apiURL := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("telegram api error %d: %s", resp.StatusCode, string(respBody))
-	}
-	return nil
+	return telegramPostJSON(ctx, cfg, "sendMessage", payload, 15*time.Second)
 }
 
 // findChannelByChatID 根据 chat_id 查找已配置的通知渠道。
@@ -756,24 +737,27 @@ func (s *TelegramBotService) telegramUserCanBind(ctx context.Context, channel *m
 }
 
 func (s *TelegramBotService) telegramUserIsChatMember(ctx context.Context, channel *model.NotifyChannel, chatID string, telegramUserID int) bool {
-	token := strings.TrimSpace(s.telegramChannelConfig(channel)["bot_token"])
-	if token == "" || chatID == "" || telegramUserID == 0 {
+	cfg := s.telegramChannelConfig(channel)
+	if strings.TrimSpace(cfg["bot_token"]) == "" || chatID == "" || telegramUserID == 0 {
 		return false
 	}
-	payload, _ := json.Marshal(map[string]interface{}{
+	payload := map[string]interface{}{
 		"chat_id": chatID,
 		"user_id": telegramUserID,
-	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		fmt.Sprintf("https://api.telegram.org/bot%s/getChatMember", token),
-		bytes.NewReader(payload))
+	}
+	apiURL, err := telegramMethodURL(cfg, cfg["bot_token"], "getChatMember")
+	if err != nil {
+		return false
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, strings.NewReader(string(body)))
 	if err != nil {
 		return false
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req)
+	resp, err := telegramHTTPClient(8*time.Second, cfg).Do(req)
 	if err != nil {
-		s.log.Warn("telegram getChatMember failed", zap.String("chat_id", chatID), zap.Int("telegram_user_id", telegramUserID), zap.Error(err))
+		s.log.Warn("telegram getChatMember failed", zap.String("chat_id", chatID), zap.Int("telegram_user_id", telegramUserID), zap.Error(sanitizeTelegramError(err)))
 		return false
 	}
 	defer resp.Body.Close()
@@ -884,32 +868,39 @@ func (s *TelegramBotService) SetWebhook(ctx context.Context, botToken, webhookUR
 		"url":             webhookURL,
 		"allowed_updates": []string{"message"},
 	})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
-		fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook", botToken),
-		bytes.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
+	cfg := map[string]string{"bot_token": botToken}
+	apiURL, err := telegramMethodURL(cfg, botToken, "setWebhook")
 	if err != nil {
 		return err
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, strings.NewReader(string(payload)))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := telegramHTTPClient(15*time.Second, cfg)
+	resp, err := client.Do(req)
+	if err != nil {
+		return sanitizeTelegramError(err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("setWebhook failed: %s", string(body))
+		return fmt.Errorf("setWebhook failed: %s", sanitizeTelegramText(string(body)))
 	}
 	return nil
 }
 
 // GetWebhookInfo 获取 Webhook 配置信息。
 func (s *TelegramBotService) GetWebhookInfo(ctx context.Context, botToken string) (map[string]interface{}, error) {
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Get(
-		fmt.Sprintf("https://api.telegram.org/bot%s/getWebhookInfo", botToken),
-	)
+	cfg := map[string]string{"bot_token": botToken}
+	apiURL, err := telegramMethodURL(cfg, botToken, "getWebhookInfo")
 	if err != nil {
 		return nil, err
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	resp, err := telegramHTTPClient(10*time.Second, cfg).Do(req)
+	if err != nil {
+		return nil, sanitizeTelegramError(err)
 	}
 	defer resp.Body.Close()
 

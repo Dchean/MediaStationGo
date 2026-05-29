@@ -235,7 +235,7 @@ mkdir -p data cache media downloads
 
 ```bash
 cat > .env <<'EOF'
-MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.22
+MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
 MEDIASTATION_HTTP_PORT=18080
 MEDIASTATION_DATA_DIR=./data
 MEDIASTATION_CACHE_DIR=./cache
@@ -344,7 +344,7 @@ For production, pin a specific release tag instead of using `latest`. Recommende
 
 ```bash
 cat > .env <<'EOF'
-MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.22
+MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
 MEDIASTATION_HTTP_PORT=18080
 MEDIASTATION_DATA_DIR=./data
 MEDIASTATION_CACHE_DIR=./cache
@@ -593,25 +593,25 @@ Each release provides multi-platform archives:
 
 | Platform | Package example |
 | --- | --- |
-| Linux x86_64 | `MediaStationGo-v0.0.22-linux-amd64.tar.gz` |
-| Linux ARM64 | `MediaStationGo-v0.0.22-linux-arm64.tar.gz` |
-| Windows x86_64 | `MediaStationGo-v0.0.22-windows-amd64.zip` |
-| macOS Intel | `MediaStationGo-v0.0.22-darwin-amd64.tar.gz` |
-| macOS Apple Silicon | `MediaStationGo-v0.0.22-darwin-arm64.tar.gz` |
+| Linux x86_64 | `MediaStationGo-v0.0.23-linux-amd64.tar.gz` |
+| Linux ARM64 | `MediaStationGo-v0.0.23-linux-arm64.tar.gz` |
+| Windows x86_64 | `MediaStationGo-v0.0.23-windows-amd64.zip` |
+| macOS Intel | `MediaStationGo-v0.0.23-darwin-amd64.tar.gz` |
+| macOS Apple Silicon | `MediaStationGo-v0.0.23-darwin-arm64.tar.gz` |
 
 Linux example:
 
 ```bash
-tar -xzf MediaStationGo-v0.0.22-linux-amd64.tar.gz
-cd MediaStationGo-v0.0.22-linux-amd64
+tar -xzf MediaStationGo-v0.0.23-linux-amd64.tar.gz
+cd MediaStationGo-v0.0.23-linux-amd64
 MEDIASTATION_APP_PORT=18080 ./mediastation-go
 ```
 
 Windows example:
 
 ```powershell
-Expand-Archive .\MediaStationGo-v0.0.22-windows-amd64.zip
-cd .\MediaStationGo-v0.0.22-windows-amd64
+Expand-Archive .\MediaStationGo-v0.0.23-windows-amd64.zip
+cd .\MediaStationGo-v0.0.23-windows-amd64
 $env:MEDIASTATION_APP_PORT = "18080"
 .\mediastation-go.exe
 ```
@@ -718,13 +718,15 @@ Common variables:
 | `MEDIASTATION_CACHE_CACHE_DIR` | `./cache` | Image/transcode cache |
 | `MEDIASTATION_SECRETS_JWT_SECRET` | Auto-generated | JWT and encrypted settings seed |
 | `MEDIASTATION_APP_CORS_ORIGINS` | empty | Extra CORS origins |
+| `MEDIASTATION_TELEGRAM_API_BASE_URL` | `https://api.telegram.org` | Telegram Bot API base URL; use a reverse proxy when Telegram is blocked or slow |
+| `MEDIASTATION_TELEGRAM_PROXY_URL` | empty | Telegram outbound proxy, e.g. `http://172.17.0.1:7890` or `socks5://172.17.0.1:1080` |
 
 Runtime settings from the admin UI:
 
 - API keys: TMDb, Bangumi, TheTVDB, Fanart, OpenAI Compatible.
 - Sites: M-Team, NexusPHP, Unit3D, custom RSS.
 - Download clients: qBittorrent, Transmission, Aria2.
-- Notifications: Telegram, Bark, Webhook, Email.
+- Notifications: Telegram, Bark, Webhook, Email. Telegram channels can use a per-channel API base URL or proxy, and test errors redact Bot Tokens automatically.
 - Playback profiles, permissions, scheduler tasks, storage settings.
 
 ---

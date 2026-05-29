@@ -3,10 +3,10 @@
 // NotifierService dispatches structured messages to one or more channels
 // configured in the system settings table:
 //
-//   notify.telegram.bot_token + notify.telegram.chat_id
-//   notify.bark.server + notify.bark.key
-//   notify.wechat.sendkey
-//   notify.webhook.url + notify.webhook.method
+//	notify.telegram.bot_token + notify.telegram.chat_id
+//	notify.bark.server + notify.bark.key
+//	notify.wechat.sendkey
+//	notify.webhook.url + notify.webhook.method
 //
 // Notifications are triggered by the subscription poller, the download
 // poller, the scan / scrape completions, and any future event worth
@@ -38,7 +38,7 @@ func NewNotifierService(log *zap.Logger, repo *repository.Container) *NotifierSe
 	return &NotifierService{
 		log:    log,
 		repo:   repo,
-		client: &http.Client{Timeout: 10 * time.Second},
+		client: NewExternalHTTPClient(10 * time.Second),
 	}
 }
 
@@ -63,17 +63,20 @@ func (n *NotifierService) sendTelegram(ctx context.Context, title, body string) 
 		return
 	}
 	text := fmt.Sprintf("<b>%s</b>\n\n%s", escapeHTML(title), escapeHTML(body))
-	u := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", token)
 	form := url.Values{}
 	form.Set("chat_id", chatID)
 	form.Set("text", text)
 	form.Set("parse_mode", "HTML")
-	resp, err := n.client.PostForm(u, form)
-	if err != nil {
-		n.log.Debug("telegram notify failed", zap.Error(err))
-		return
+	cfg := map[string]string{"bot_token": token}
+	if apiBase := n.get(ctx, "notify.telegram.api_base_url"); apiBase != "" {
+		cfg["api_base_url"] = apiBase
 	}
-	defer resp.Body.Close()
+	if proxyURL := n.get(ctx, "notify.telegram.proxy_url"); proxyURL != "" {
+		cfg["proxy_url"] = proxyURL
+	}
+	if err := telegramPostForm(ctx, cfg, "sendMessage", form, 15*time.Second); err != nil {
+		n.log.Debug("telegram notify failed", zap.Error(err))
+	}
 }
 
 func (n *NotifierService) sendBark(ctx context.Context, title, body string) {

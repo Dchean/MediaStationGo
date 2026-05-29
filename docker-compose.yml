@@ -17,7 +17,7 @@
 #
 # 镜像版本：
 #   默认拉取 latest；如需固定版本，创建 .env 并写入：
-#     MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.22
+#     MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.23
 #
 # 路径映射总览：
 #   /data      程序数据目录。保存 SQLite 数据库、JWT secret、系统配置等，必须持久化。
@@ -140,6 +140,13 @@ services:
 
       # 跨域来源。通常无需设置；反向代理或三端客户端异常时再按需填写。
       MEDIASTATION_APP_CORS_ORIGINS: ${MEDIASTATION_APP_CORS_ORIGINS:-}
+
+      # Telegram 通知/Bot 出站网络。通常留空即可；如 NAS 访问 Telegram 超时，
+      # 可在 .env 中填写反代 API 或代理地址：
+      #   MEDIASTATION_TELEGRAM_API_BASE_URL=https://api.telegram.org
+      #   MEDIASTATION_TELEGRAM_PROXY_URL=http://172.17.0.1:7890
+      MEDIASTATION_TELEGRAM_API_BASE_URL: ${MEDIASTATION_TELEGRAM_API_BASE_URL:-}
+      MEDIASTATION_TELEGRAM_PROXY_URL: ${MEDIASTATION_TELEGRAM_PROXY_URL:-}
 
       # 宿主机文件权限映射。Linux/NAS 常用 1000:1000，可用 id 命令查看。
       PUID: ${PUID:-1000}
