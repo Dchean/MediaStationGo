@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -23,7 +24,7 @@ func newAuthTestServices(t *testing.T) (*repository.Container, *AuthService, *Pr
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.User{}, &model.UserPermission{}, &model.RefreshToken{}, &model.TelegramBinding{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}, &model.UserPermission{}, &model.RefreshToken{}, &model.TelegramBinding{}, &model.Setting{}); err != nil {
 		t.Fatal(err)
 	}
 	repos := repository.New(db)
@@ -54,6 +55,44 @@ func TestRegisterRejectsMoreThanTwentyUsers(t *testing.T) {
 	_, _, err := auth.Register(ctx, "overflow", "password")
 	if !errors.Is(err, ErrUserLimitReached) {
 		t.Fatalf("expected ErrUserLimitReached, got %v", err)
+	}
+}
+
+func TestRegisterUsesLicensedUserLimit(t *testing.T) {
+	ctx := context.Background()
+	repos, auth, _, _ := newAuthTestServices(t)
+	maxUsers := 25
+	state := LicenseActivationState{Valid: true, LicenseType: "plus", MaxUsers: &maxUsers}
+	raw, _ := json.Marshal(state)
+	if err := repos.Setting.Set(ctx, LicenseSettingActivation, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < OpenSourceUserLimit; i++ {
+		if err := repos.User.Create(ctx, &model.User{
+			Username:     fmt.Sprintf("licensed-%02d", i),
+			PasswordHash: "hash",
+			Role:         "user",
+			Tier:         "free",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, _, err := auth.Register(ctx, "extra", "password"); err != nil {
+		t.Fatalf("licensed user limit should allow user 21: %v", err)
+	}
+}
+
+func TestLicensedMaxUsersCanBeUnlimited(t *testing.T) {
+	ctx := context.Background()
+	repos, _, _, _ := newAuthTestServices(t)
+	state := LicenseActivationState{Valid: true, LicenseType: "enterprise", UnlimitedUsers: true}
+	raw, _ := json.Marshal(state)
+	if err := repos.Setting.Set(ctx, LicenseSettingActivation, string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	if got := LicensedMaxUsers(ctx, repos); got <= 1_000_000 {
+		t.Fatalf("unlimited license should return a very high limit, got %d", got)
 	}
 }
 

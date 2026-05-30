@@ -27,6 +27,11 @@ function fmtDateTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString('zh-CN')
 }
 
+function fmtUserLimit(maxUsers: number | null | undefined, unlimited?: boolean): string {
+  if (unlimited || maxUsers == null) return '不限制'
+  return `${maxUsers} 人`
+}
+
 // ── Page ──
 
 export function LicensePage() {
@@ -198,7 +203,10 @@ export function LicensePage() {
               />
               <StatusBadge label="最近心跳" value={fmtDateTime(activation.heartbeat_at)} />
               <StatusBadge label="客户端 IP" value={activation.ip ?? '—'} />
-              <StatusBadge label="用户额度" value={`${status?.max_users ?? 20} 人`} />
+              <StatusBadge
+                label="用户额度"
+                value={fmtUserLimit(status?.max_users, status?.unlimited_users)}
+              />
             </div>
           )}
 

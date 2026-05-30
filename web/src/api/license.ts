@@ -12,6 +12,8 @@ export interface LicenseActivation {
   device_name?: string
   plan?: string
   max_activations?: number
+  max_users?: number | null
+  unlimited_users?: boolean
   /** ISO8601 — null means perpetual */
   expires_at?: string | null
   valid: boolean
@@ -25,7 +27,8 @@ export interface LicenseStatus {
   /** Whether a license is currently active */
   active: boolean
   activation?: LicenseActivation
-  max_users?: number
+  max_users?: number | null
+  unlimited_users?: boolean
   /** Error or status message */
   message?: string
 }

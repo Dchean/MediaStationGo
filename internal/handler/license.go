@@ -36,22 +36,26 @@ type licenseActivateReq struct {
 }
 
 type licenseServerSignedResp struct {
-	Valid         bool    `json:"valid"`
-	LicenseType   string  `json:"license_type"`
-	ExpiryDate    *string `json:"expiry_date"`
-	MaxDevices    int     `json:"max_devices"`
-	DaysRemaining *int    `json:"days_remaining"`
-	NextHeartbeat string  `json:"next_heartbeat"`
-	Signature     string  `json:"signature"`
+	Valid           bool    `json:"valid"`
+	LicenseType     string  `json:"license_type"`
+	ExpiryDate      *string `json:"expiry_date"`
+	MaxDevices      int     `json:"max_devices"`
+	MaxUsers        *int    `json:"max_users"`
+	DaysRemaining   *int    `json:"days_remaining"`
+	NextHeartbeat   string  `json:"next_heartbeat"`
+	Signature       string  `json:"signature"`
+	LegacySignature bool    `json:"-"`
 }
 
 type licenseServerStatusResp struct {
-	Valid         bool    `json:"valid"`
-	LicenseType   *string `json:"license_type"`
-	ExpiryDate    *string `json:"expiry_date"`
-	DaysRemaining *int    `json:"days_remaining"`
-	DeviceName    string  `json:"device_name"`
-	IsActive      bool    `json:"is_active"`
+	Valid          bool    `json:"valid"`
+	LicenseType    *string `json:"license_type"`
+	ExpiryDate     *string `json:"expiry_date"`
+	MaxUsers       *int    `json:"max_users"`
+	UnlimitedUsers bool    `json:"unlimited_users"`
+	DaysRemaining  *int    `json:"days_remaining"`
+	DeviceName     string  `json:"device_name"`
+	IsActive       bool    `json:"is_active"`
 }
 
 func licenseActivateHandler(svc *service.Container) gin.HandlerFunc {
@@ -88,7 +92,7 @@ func licenseActivateHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
-		if err := client.verifySigned(upstream); err != nil {
+		if err := client.verifySigned(&upstream); err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
@@ -117,6 +121,8 @@ func licenseStatusHandler(svc *service.Container) gin.HandlerFunc {
 					if upstream.ExpiryDate != nil {
 						state.ExpiryDate = *upstream.ExpiryDate
 					}
+					state.MaxUsers = upstream.MaxUsers
+					state.UnlimitedUsers = upstream.UnlimitedUsers
 					state.DaysRemaining = upstream.DaysRemaining
 					if upstream.DeviceName != "" {
 						state.DeviceName = upstream.DeviceName
@@ -132,10 +138,11 @@ func licenseStatusHandler(svc *service.Container) gin.HandlerFunc {
 		}
 		active := state.Valid && !licenseStateExpired(state.ExpiryDate)
 		c.JSON(http.StatusOK, gin.H{
-			"active":     active,
-			"message":    licenseStatusMessage(active, err),
-			"max_users":  service.LicensedMaxUsers(c.Request.Context(), svc.Repo),
-			"activation": licenseActivationView(state),
+			"active":          active,
+			"message":         licenseStatusMessage(active, err),
+			"max_users":       licenseStatusMaxUsers(state),
+			"unlimited_users": state.Valid && !licenseStateExpired(state.ExpiryDate) && state.UnlimitedUsers,
+			"activation":      licenseActivationView(state),
 		})
 	}
 }
@@ -160,7 +167,7 @@ func licenseHeartbeatHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
-		if err := client.verifySigned(upstream); err != nil {
+		if err := client.verifySigned(&upstream); err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
@@ -248,10 +255,45 @@ func (c *licenseClient) do(req *http.Request, out any) error {
 	return json.Unmarshal(data, out)
 }
 
-func (c *licenseClient) verifySigned(resp licenseServerSignedResp) error {
+func (c *licenseClient) verifySigned(resp *licenseServerSignedResp) error {
 	if c.hmacSecret == "" {
 		return nil
 	}
+	unsigned := struct {
+		Valid         bool    `json:"valid"`
+		LicenseType   string  `json:"license_type"`
+		ExpiryDate    *string `json:"expiry_date"`
+		MaxDevices    int     `json:"max_devices"`
+		MaxUsers      *int    `json:"max_users"`
+		DaysRemaining *int    `json:"days_remaining"`
+		NextHeartbeat string  `json:"next_heartbeat"`
+	}{
+		Valid:         resp.Valid,
+		LicenseType:   resp.LicenseType,
+		ExpiryDate:    resp.ExpiryDate,
+		MaxDevices:    resp.MaxDevices,
+		MaxUsers:      resp.MaxUsers,
+		DaysRemaining: resp.DaysRemaining,
+		NextHeartbeat: resp.NextHeartbeat,
+	}
+	payload, err := json.Marshal(unsigned)
+	if err != nil {
+		return err
+	}
+	mac := hmac.New(sha256.New, []byte(c.hmacSecret))
+	_, _ = mac.Write(payload)
+	expected := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(expected), []byte(resp.Signature)) {
+		if c.verifyLegacySigned(*resp) {
+			resp.LegacySignature = true
+			return nil
+		}
+		return errors.New("license server signature verification failed")
+	}
+	return nil
+}
+
+func (c *licenseClient) verifyLegacySigned(resp licenseServerSignedResp) bool {
 	unsigned := struct {
 		Valid         bool    `json:"valid"`
 		LicenseType   string  `json:"license_type"`
@@ -269,15 +311,12 @@ func (c *licenseClient) verifySigned(resp licenseServerSignedResp) error {
 	}
 	payload, err := json.Marshal(unsigned)
 	if err != nil {
-		return err
+		return false
 	}
 	mac := hmac.New(sha256.New, []byte(c.hmacSecret))
 	_, _ = mac.Write(payload)
 	expected := hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(expected), []byte(resp.Signature)) {
-		return errors.New("license server signature verification failed")
-	}
-	return nil
+	return hmac.Equal([]byte(expected), []byte(resp.Signature))
 }
 
 func ensureLicenseDeviceID(ctx context.Context, svc *service.Container, candidate string) (string, error) {
@@ -313,16 +352,32 @@ func licenseStateFromSigned(resp licenseServerSignedResp, deviceID, deviceName s
 		expiry = *resp.ExpiryDate
 	}
 	return service.LicenseActivationState{
-		Valid:         resp.Valid,
-		LicenseType:   resp.LicenseType,
-		ExpiryDate:    expiry,
-		MaxDevices:    resp.MaxDevices,
-		DaysRemaining: resp.DaysRemaining,
-		NextHeartbeat: resp.NextHeartbeat,
-		DeviceID:      deviceID,
-		DeviceName:    deviceName,
-		UpdatedAt:     time.Now().Format(time.RFC3339),
+		Valid:          resp.Valid,
+		LicenseType:    resp.LicenseType,
+		ExpiryDate:     expiry,
+		MaxDevices:     resp.MaxDevices,
+		MaxUsers:       resp.MaxUsers,
+		UnlimitedUsers: !resp.LegacySignature && resp.MaxUsers == nil,
+		DaysRemaining:  resp.DaysRemaining,
+		NextHeartbeat:  resp.NextHeartbeat,
+		DeviceID:       deviceID,
+		DeviceName:     deviceName,
+		UpdatedAt:      time.Now().Format(time.RFC3339),
 	}
+}
+
+func licenseStatusMaxUsers(state service.LicenseActivationState) any {
+	active := state.Valid && !licenseStateExpired(state.ExpiryDate)
+	if active {
+		if state.UnlimitedUsers {
+			return nil
+		}
+		if state.MaxUsers != nil && *state.MaxUsers > 0 {
+			return *state.MaxUsers
+		}
+		return service.LicensedUserLimit
+	}
+	return service.OpenSourceUserLimit
 }
 
 func persistLicenseState(ctx context.Context, svc *service.Container, state service.LicenseActivationState) error {
@@ -357,6 +412,8 @@ func licenseActivationView(state service.LicenseActivationState) gin.H {
 		"device_name":     state.DeviceName,
 		"plan":            state.LicenseType,
 		"max_activations": state.MaxDevices,
+		"max_users":       state.MaxUsers,
+		"unlimited_users": state.UnlimitedUsers,
 		"expires_at":      emptyAsNil(state.ExpiryDate),
 		"valid":           state.Valid && !licenseStateExpired(state.ExpiryDate),
 		"heartbeat_at":    updatedAt,

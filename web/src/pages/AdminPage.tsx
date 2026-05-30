@@ -4,6 +4,7 @@ import { KeyRound, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react'
 
 import { adminAPI } from '../api/admin'
 import { libraryAPI } from '../api/library'
+import { licenseAPI, type LicenseStatus } from '../api/license'
 import type { Library, User } from '../types'
 import { APIConfigsPanel } from '../components/APIConfigsPanel'
 import { ManagementShortcuts } from '../components/ManagementShortcuts'
@@ -163,14 +164,29 @@ function LibraryPanel() {
 
 function UsersPanel() {
   const [users, setUsers] = useState<User[]>([])
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [editingID, setEditingID] = useState<string | null>(null)
   const [editingUsername, setEditingUsername] = useState('')
-  const refresh = () => adminAPI.listUsers().then(setUsers)
+  const refresh = async () => {
+    const [nextUsers, nextLicense] = await Promise.all([
+      adminAPI.listUsers(),
+      licenseAPI.status().catch(() => null),
+    ])
+    setUsers(nextUsers)
+    setLicenseStatus(nextLicense)
+  }
   useEffect(() => {
     refresh().catch(() => undefined)
   }, [])
+
+  const unlimitedUsers =
+    licenseStatus?.active === true &&
+    (licenseStatus.unlimited_users === true || licenseStatus.max_users == null)
+  const maxUsers = unlimitedUsers ? null : (licenseStatus?.max_users ?? 20)
+  const userLimitReached = maxUsers != null && users.length >= maxUsers
+  const userLimitLabel = unlimitedUsers ? '不限制' : String(maxUsers)
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
@@ -182,7 +198,7 @@ function UsersPanel() {
       await refresh()
     } catch (err: unknown) {
       const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        userCreateErrorMessage(err) ??
         '添加用户失败'
       toast.error(msg)
     }
@@ -236,7 +252,7 @@ function UsersPanel() {
           <div>
             <h2 className="font-display text-lg font-semibold text-ink-600">用户管理</h2>
             <p className="text-xs text-sand-500">
-              已创建 {users.length}/20 个用户；新增用户默认只有媒体库浏览、播放、外部播放器与第三方客户端观看权限。
+              已创建 {users.length}/{userLimitLabel} 个用户；新增用户默认只有媒体库浏览、播放、外部播放器与第三方客户端观看权限。
             </p>
           </div>
           <span className="rounded-full border border-primary-400/30 px-3 py-1 text-xs text-brand-500">
@@ -249,7 +265,7 @@ function UsersPanel() {
           placeholder="用户名"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          disabled={users.length >= 20}
+          disabled={userLimitReached}
         />
         <input
           required
@@ -259,9 +275,9 @@ function UsersPanel() {
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          disabled={users.length >= 20}
+          disabled={userLimitReached}
         />
-        <button type="submit" className="neon-button inline-flex items-center justify-center gap-2" disabled={users.length >= 20}>
+        <button type="submit" className="neon-button inline-flex items-center justify-center gap-2" disabled={userLimitReached}>
           <Plus size={16} />
           添加用户
         </button>
@@ -355,4 +371,13 @@ function UsersPanel() {
       </div>
     </div>
   )
+}
+
+function userCreateErrorMessage(err: unknown): string | undefined {
+  const data = (err as { response?: { data?: { error?: string; max_users?: number } } })?.response?.data
+  if (!data?.error) return undefined
+  if (data.error === 'user limit reached' && data.max_users != null) {
+    return `用户数量已达到授权上限：${data.max_users} 人`
+  }
+  return data.error
 }

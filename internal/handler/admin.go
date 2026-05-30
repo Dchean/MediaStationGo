@@ -42,7 +42,7 @@ func createUserHandler(svc *service.Container) gin.HandlerFunc {
 		}
 		u, _, err := svc.Auth.Register(c.Request.Context(), req.Username, req.Password)
 		if err != nil {
-			writeUserMutationError(c, err)
+			writeUserMutationError(c, svc, err)
 			return
 		}
 		// Admin-created users are intentionally normal viewers by default.
@@ -93,7 +93,7 @@ func updateUserHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		} else if existing != nil && existing.ID != userID {
-			writeUserMutationError(c, service.ErrUsernameTaken)
+			writeUserMutationError(c, svc, service.ErrUsernameTaken)
 			return
 		}
 		updates := map[string]any{"username": nextUsername}
@@ -167,12 +167,13 @@ func annotateProtectedUsers(ctx context.Context, svc *service.Container, users [
 	return nil
 }
 
-func writeUserMutationError(c *gin.Context, err error) {
+func writeUserMutationError(c *gin.Context, svc *service.Container, err error) {
 	switch {
 	case errors.Is(err, service.ErrUsernameTaken):
 		c.JSON(http.StatusConflict, gin.H{"error": "username already taken"})
 	case errors.Is(err, service.ErrUserLimitReached):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user limit reached: maximum 20 users"})
+		maxUsers := service.LicensedMaxUsers(c.Request.Context(), svc.Repo)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user limit reached", "max_users": maxUsers})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
