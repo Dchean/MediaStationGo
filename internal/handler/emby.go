@@ -704,6 +704,23 @@ func embySessionsHandler(_ *service.Container) gin.HandlerFunc {
 	}
 }
 
+func embyNoContentHandler(_ *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	}
+}
+
+func embyServerConfigurationHandler(_ *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"EnableFolderView":                   true,
+			"EnableGroupingIntoCollections":      true,
+			"EnableExternalContentInSuggestions": false,
+			"ImageSavingConvention":              "Compatible",
+		})
+	}
+}
+
 func embyEmptyItemsHandler(_ *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"Items": []any{}, "TotalRecordCount": 0})
@@ -777,6 +794,9 @@ func registerEmbyRoutes(r *gin.Engine, jwtSecret string, svc *service.Container)
 		grp.GET("/Items/:id/Images/:type", embyItemImageHandler(svc))
 		grp.GET("/Items/:id/Images/:type/:index", embyItemImageHandler(svc))
 		grp.HEAD("/Items/:id/Images/:type", embyItemImageHandler(svc))
+		grp.GET("/items/:id/images/:type", embyItemImageHandler(svc))
+		grp.GET("/items/:id/images/:type/:index", embyItemImageHandler(svc))
+		grp.HEAD("/items/:id/images/:type", embyItemImageHandler(svc))
 
 		// 鉴权后端点
 		auth := grp.Group("", middleware.EmbyAuthRequired(jwtSecret), activeEmbyUserRequired(svc))
@@ -828,5 +848,61 @@ func registerEmbyRoutes(r *gin.Engine, jwtSecret string, svc *service.Container)
 		auth.POST("/DisplayPreferences/:id", func(c *gin.Context) {
 			c.Status(http.StatusNoContent)
 		})
+
+		registerLowercaseEmbyAuthRoutes(auth, svc)
 	}
+}
+
+func registerLowercaseEmbyAuthRoutes(auth *gin.RouterGroup, svc *service.Container) {
+	auth.GET("/users/me", embyMeHandler(svc))
+	auth.GET("/users", embyListUsersHandler(svc))
+	auth.GET("/users/:userId", embyGetUserByIDHandler(svc))
+	auth.GET("/users/:userId/views", embyViewsHandler(svc))
+	auth.GET("/library/mediafolders", embyViewsHandler(svc))
+	auth.GET("/library/virtualfolders", embyVirtualFoldersHandler(svc))
+	auth.GET("/library/selectablemediafolders", embyVirtualFoldersHandler(svc))
+
+	auth.GET("/items", embyItemsHandler(svc))
+	auth.GET("/users/:userId/items", embyItemsHandler(svc))
+	auth.GET("/items/:id", embyItemByIDHandler(svc))
+	auth.GET("/users/:userId/items/:id", embyUserItemByIDHandler(svc))
+	auth.GET("/shows/:id/seasons", embyShowSeasonsHandler(svc))
+	auth.GET("/shows/:id/episodes", embyShowEpisodesHandler(svc))
+	auth.GET("/users/:userId/shows/:id/seasons", embyShowSeasonsHandler(svc))
+	auth.GET("/users/:userId/shows/:id/episodes", embyShowEpisodesHandler(svc))
+	auth.GET("/shows/nextup", embyEmptyItemsHandler(svc))
+	auth.GET("/users/:userId/shows/nextup", embyEmptyItemsHandler(svc))
+	auth.GET("/mediasegments/:id", embyEmptyItemsHandler(svc))
+
+	auth.GET("/items/:id/playbackinfo", embyPlaybackInfoHandler(svc))
+	auth.POST("/items/:id/playbackinfo", embyPlaybackInfoHandler(svc))
+	auth.GET("/users/:userId/items/:id/playbackinfo", embyPlaybackInfoHandler(svc))
+	auth.POST("/users/:userId/items/:id/playbackinfo", embyPlaybackInfoHandler(svc))
+
+	auth.GET("/videos/:id/stream", embyVideoStreamHandler(svc))
+	auth.HEAD("/videos/:id/stream", embyVideoStreamHandler(svc))
+	auth.GET("/videos/:id/stream.:container", embyVideoStreamHandler(svc))
+	auth.HEAD("/videos/:id/stream.:container", embyVideoStreamHandler(svc))
+	auth.GET("/videos/:id/original", embyVideoStreamHandler(svc))
+	auth.GET("/videos/:id/original.:container", embyVideoStreamHandler(svc))
+
+	auth.POST("/sessions/playing", embyPlayingProgressHandler(svc))
+	auth.POST("/sessions/playing/progress", embyPlayingProgressHandler(svc))
+	auth.POST("/sessions/playing/stopped", embyPlayingProgressHandler(svc))
+	auth.POST("/sessions/capabilities", embyNoContentHandler(svc))
+	auth.POST("/sessions/capabilities/full", embyNoContentHandler(svc))
+
+	auth.POST("/users/:userId/favoriteitems/:itemId", embyFavoriteHandler(svc, true))
+	auth.DELETE("/users/:userId/favoriteitems/:itemId", embyFavoriteHandler(svc, false))
+	auth.POST("/users/:userId/playeditems/:itemId", embyMarkPlayedHandler(svc, true))
+	auth.DELETE("/users/:userId/playeditems/:itemId", embyMarkPlayedHandler(svc, false))
+
+	auth.GET("/sessions", embySessionsHandler(svc))
+	auth.GET("/system/configuration", embyServerConfigurationHandler(svc))
+	auth.GET("/displaypreferences/:id", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"Id": c.Param("id"), "CustomPrefs": gin.H{}})
+	})
+	auth.POST("/displaypreferences/:id", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
 }
