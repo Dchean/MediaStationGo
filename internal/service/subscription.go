@@ -205,11 +205,17 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 		seenSet[g] = struct{}{}
 	}
 
-	// 非洗版订阅：成功下载一次即满足，预先算一次媒体库可用性用于跳过已入库的电影/剧集（对齐 MoviePilot）。
+	// 非洗版订阅：成功下载一次即满足，预先算一次媒体库与下载中任务的
+	// 可用性，用于跳过已入库/已在下载队列中的电影或剧集（对齐 MoviePilot）。
 	washOff := !sub.WashEnabled
 	var avail LocalAvailability
+	availQuery := ""
 	if washOff {
-		avail = SubscriptionLocalAvailability(ctx, s.repo, sub)
+		availQuery = availabilityQuery(subscriptionName(sub), subscriptionFilter(sub))
+		avail = mergeLocalAvailability(
+			SubscriptionLocalAvailability(ctx, s.repo, sub),
+			s.pendingDownloadAvailability(ctx, sub),
+		)
 	}
 
 	queued := 0
@@ -226,8 +232,6 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 			continue
 		}
 		if washOff && subscriptionItemAlreadyAvailable(sub, avail, item.Title) {
-			seen = append(seen, guid)
-			seenSet[guid] = struct{}{}
 			continue
 		}
 		download := item.Enclosure.URL
@@ -240,8 +244,9 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 		mediaType, mediaCategory := s.classifySubscriptionItem(ctx, sub, item.Title, "")
 		savePath := s.resolveSubscriptionSavePath(ctx, sub, mediaType, mediaCategory)
 		if s.downloadPathHasCandidate(ctx, sub, item.Title, savePath) {
-			seen = append(seen, guid)
-			seenSet[guid] = struct{}{}
+			if washOff {
+				addAvailabilityTitle(item.Title, availQuery, &avail)
+			}
 			continue
 		}
 		if _, err := s.downloads.AddDownloadWithMeta(ctx, sub.UserID, download, savePath, DownloadTaskMeta{
@@ -251,6 +256,9 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 			Overview:    sub.Overview,
 		}); err != nil {
 			if errors.Is(err, ErrDownloadAlreadyExists) {
+				if washOff {
+					addAvailabilityTitle(item.Title, availQuery, &avail)
+				}
 				seen = append(seen, guid)
 				seenSet[guid] = struct{}{}
 				continue
@@ -262,6 +270,9 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 				zap.String("save_path", savePath),
 				zap.Error(err))
 			continue
+		}
+		if washOff {
+			addAvailabilityTitle(item.Title, availQuery, &avail)
 		}
 		queued++
 		seen = append(seen, guid)
@@ -413,18 +424,20 @@ func selectSiteSearchCandidates(results []SearchResult, sub *model.Subscription,
 			Score:    score,
 		})
 	}
-	if len(candidates) <= 1 {
-		return candidates
+	if len(candidates) > 1 {
+		sort.SliceStable(candidates, func(i, j int) bool {
+			if candidates[i].Score != candidates[j].Score {
+				return candidates[i].Score > candidates[j].Score
+			}
+			if candidates[i].Item.Seeders != candidates[j].Item.Seeders {
+				return candidates[i].Item.Seeders > candidates[j].Item.Seeders
+			}
+			return candidates[i].Item.Size > candidates[j].Item.Size
+		})
 	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].Score != candidates[j].Score {
-			return candidates[i].Score > candidates[j].Score
-		}
-		if candidates[i].Item.Seeders != candidates[j].Item.Seeders {
-			return candidates[i].Item.Seeders > candidates[j].Item.Seeders
-		}
-		return candidates[i].Item.Size > candidates[j].Item.Size
-	})
+	if len(candidates) == 0 {
+		return nil
+	}
 
 	var local LocalAvailability
 	if len(availability) > 0 {
@@ -440,6 +453,9 @@ func selectSiteSearchCandidates(results []SearchResult, sub *model.Subscription,
 		return candidates[:1]
 	}
 
+	if local.HasSeriesPack {
+		return nil
+	}
 	if local.LocalMediaCount > 0 {
 		if local.TotalEpisodes > 0 && len(local.MissingEpisodes) == 0 {
 			return nil
@@ -809,19 +825,95 @@ func (s *SubscriptionService) pendingDownloadAvailability(ctx context.Context, s
 	if sub != nil {
 		out.TotalEpisodes = sub.TotalEpisodes
 	}
-	root := s.subscriptionBaseSavePath(ctx, sub)
 	query := availabilityQuery(subscriptionName(sub), subscriptionFilter(sub))
-	if root == "" || query == "" {
-		return out
+	if query == "" {
+		return s.finalizePendingAvailability(sub, out)
 	}
-	_ = scanDownloadPath(ctx, root, query, func(_ string, season, episode int) bool {
-		out.LocalMediaCount++
-		out.InLibrary = true
-		if episode > 0 {
-			out.ExistingEpisodeKeys[episodeKey(season, episode)] = struct{}{}
+	root := s.subscriptionBaseSavePath(ctx, sub)
+	if root != "" {
+		_ = scanDownloadPath(ctx, root, query, func(_ string, season, episode int) bool {
+			out.LocalMediaCount++
+			out.InLibrary = true
+			if episode > 0 {
+				out.ExistingEpisodeKeys[episodeKey(season, episode)] = struct{}{}
+			}
+			return true
+		})
+	}
+	s.addDownloadTaskAvailability(ctx, sub, query, &out)
+	s.addLiveTorrentAvailability(ctx, query, &out)
+	return s.finalizePendingAvailability(sub, out)
+}
+
+func (s *SubscriptionService) addDownloadTaskAvailability(ctx context.Context, sub *model.Subscription, query string, out *LocalAvailability) {
+	if s == nil || s.repo == nil || s.repo.Download == nil || out == nil {
+		return
+	}
+	rows, err := s.repo.Download.List(ctx)
+	if err != nil {
+		return
+	}
+	baseSavePath := s.subscriptionBaseSavePath(ctx, sub)
+	for _, row := range rows {
+		if !downloadTaskBlocksReadd(row.Status) {
+			continue
 		}
+		if baseSavePath != "" && row.SavePath != "" && !sameOrChildPath(row.SavePath, baseSavePath) && !sameOrChildPath(baseSavePath, row.SavePath) {
+			continue
+		}
+		addAvailabilityTitle(row.Title, query, out)
+	}
+}
+
+func (s *SubscriptionService) addLiveTorrentAvailability(ctx context.Context, query string, out *LocalAvailability) {
+	if s == nil || s.downloads == nil || s.downloads.qb == nil || out == nil {
+		return
+	}
+	live, err := s.downloads.qb.List(ctx, "")
+	if err != nil {
+		return
+	}
+	for _, torrent := range live {
+		addAvailabilityTitle(torrent.Name, query, out)
+	}
+}
+
+func addAvailabilityTitle(title, query string, out *LocalAvailability) {
+	if out == nil || strings.TrimSpace(title) == "" || strings.TrimSpace(query) == "" {
+		return
+	}
+	if !strings.Contains(normalizeAvailabilityComparable(title), normalizeAvailabilityComparable(query)) {
+		return
+	}
+	out.LocalMediaCount++
+	out.InLibrary = true
+	season, episode := ParseEpisode(title)
+	if episode > 0 {
+		out.ExistingEpisodeKeys[episodeKey(season, episode)] = struct{}{}
+		return
+	}
+	if isSeriesPackTitle(title) {
+		out.HasSeriesPack = true
+	}
+}
+
+func sameOrChildPath(pathValue, root string) bool {
+	pathValue = filepath.Clean(strings.TrimSpace(pathValue))
+	root = filepath.Clean(strings.TrimSpace(root))
+	if pathValue == "" || root == "" || pathValue == "." || root == "." {
+		return false
+	}
+	if strings.EqualFold(pathValue, root) {
 		return true
-	})
+	}
+	rel, err := filepath.Rel(root, pathValue)
+	if err != nil {
+		return false
+	}
+	return rel != "." && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
+}
+
+func (s *SubscriptionService) finalizePendingAvailability(sub *model.Subscription, out LocalAvailability) LocalAvailability {
 	mediaType := ""
 	if sub != nil {
 		mediaType = sub.MediaType
@@ -877,6 +969,7 @@ func mergeLocalAvailability(values ...LocalAvailability) LocalAvailability {
 		}
 		out.LocalMediaCount += value.LocalMediaCount
 		out.InLibrary = out.InLibrary || value.InLibrary
+		out.HasSeriesPack = out.HasSeriesPack || value.HasSeriesPack
 		for key := range value.ExistingEpisodeKeys {
 			out.ExistingEpisodeKeys[key] = struct{}{}
 		}
@@ -900,10 +993,13 @@ func mergeLocalAvailability(values ...LocalAvailability) LocalAvailability {
 // subscriptionItemAlreadyAvailable 判断某个订阅条目（按其标题解析出的季/集）是否已在媒体库存在。
 // 电影/无集号条目：媒体库已有该片即视为已存在；剧集条目：对应季集已入库即视为已存在。
 func subscriptionItemAlreadyAvailable(sub *model.Subscription, avail LocalAvailability, title string) bool {
-	if avail.LocalMediaCount == 0 {
+	if avail.LocalMediaCount == 0 && !avail.HasSeriesPack {
 		return false
 	}
 	if !isSubscriptionSeriesType(subscriptionMediaType(sub)) {
+		return true
+	}
+	if avail.HasSeriesPack {
 		return true
 	}
 	wantSeason, wantEpisode := ParseEpisode(title)

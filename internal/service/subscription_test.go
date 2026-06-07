@@ -167,6 +167,55 @@ func TestSelectSiteSearchCandidatesWithUnknownTotalSkipsExistingEpisodes(t *test
 	}
 }
 
+func TestSelectSiteSearchCandidatesSingleExistingEpisodeIsSkipped(t *testing.T) {
+	sub := &model.Subscription{Name: "葬送的芙莉莲 自动订阅", Filter: "葬送的芙莉莲", MediaType: "anime", TotalEpisodes: 3}
+	results := []SearchResult{
+		{Title: "葬送的芙莉莲 S01E01 1080p", DownloadURL: "https://pt/download/1", Seeders: 90},
+	}
+	availability := LocalAvailability{
+		TotalEpisodes:       3,
+		LocalMediaCount:     1,
+		MissingEpisodes:     []int{2, 3},
+		ExistingEpisodeKeys: map[string]struct{}{episodeKey(1, 1): {}},
+	}
+
+	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{}, availability)
+	if len(got) != 0 {
+		t.Fatalf("selected %#v, want none because E01 already exists", got)
+	}
+}
+
+func TestSelectSiteSearchCandidatesSinglePackIsSkippedWhenLibraryPartiallyExists(t *testing.T) {
+	sub := &model.Subscription{Name: "间谍过家家 自动订阅", Filter: "间谍过家家", MediaType: "tv", TotalEpisodes: 3}
+	results := []SearchResult{
+		{Title: "间谍过家家 S01 Complete 1080p", DownloadURL: "https://pt/download/pack", Seeders: 100},
+	}
+	availability := LocalAvailability{
+		TotalEpisodes:       3,
+		LocalMediaCount:     2,
+		MissingEpisodes:     []int{3},
+		ExistingEpisodeKeys: map[string]struct{}{episodeKey(1, 1): {}, episodeKey(1, 2): {}},
+	}
+
+	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{}, availability)
+	if len(got) != 0 {
+		t.Fatalf("selected %#v, want none because a full pack would redownload existing episodes", got)
+	}
+}
+
+func TestSelectSiteSearchCandidatesSingleExistingMovieIsSkippedWhenNotWashing(t *testing.T) {
+	sub := &model.Subscription{Name: "Inception 自动订阅", Filter: "Inception 2010", MediaType: "movie"}
+	results := []SearchResult{
+		{Title: "Inception 2010 1080p WEB-DL", DownloadURL: "https://pt/download/web", Seeders: 90},
+	}
+	availability := LocalAvailability{LocalMediaCount: 1, InLibrary: true, DownloadedEpisodes: 1, TotalEpisodes: 1}
+
+	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{}, availability)
+	if len(got) != 0 {
+		t.Fatalf("selected %#v, want none because movie already exists and wash is disabled", got)
+	}
+}
+
 func TestSubscriptionPendingDownloadAvailabilitySkipsUnorganizedEpisodes(t *testing.T) {
 	root := t.TempDir()
 	seasonDir := filepath.Join(root, "间谍过家家", "Season 01")
@@ -216,6 +265,92 @@ func TestSubscriptionPendingDownloadAvailabilitySkipsUnorganizedEpisodes(t *test
 	}
 	if svc.downloadPathHasCandidate(t.Context(), sub, "间谍过家家 S01E03 1080p", root) {
 		t.Fatal("did not expect missing E03 to be detected")
+	}
+}
+
+func TestSubscriptionPendingDownloadAvailabilityIncludesQueuedTasks(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.DownloadTask{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	if err := repos.Download.Create(t.Context(), &model.DownloadTask{
+		Source:   "qbittorrent",
+		URL:      "magnet:?xt=urn:btih:2222222222222222222222222222222222222222",
+		Title:    "间谍过家家 S01E02 1080p",
+		SavePath: "/downloads/tv",
+		Status:   "queued",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewSubscriptionService(nil, nil, repos, nil, nil, nil)
+	sub := &model.Subscription{
+		Name:          "间谍过家家 自动订阅",
+		Filter:        "间谍过家家",
+		MediaType:     "tv",
+		SavePath:      "/downloads/tv",
+		TotalEpisodes: 3,
+	}
+
+	availability := svc.pendingDownloadAvailability(t.Context(), sub)
+	if availability.DownloadedEpisodes != 1 {
+		t.Fatalf("downloaded episodes = %d, want 1", availability.DownloadedEpisodes)
+	}
+	if _, ok := availability.ExistingEpisodeKeys[episodeKey(1, 2)]; !ok {
+		t.Fatalf("missing queued E02 key: %#v", availability.ExistingEpisodeKeys)
+	}
+
+	results := []SearchResult{
+		{Title: "间谍过家家 S01E02 1080p WEB-DL", DownloadURL: "https://pt/download/2", Seeders: 80},
+		{Title: "间谍过家家 S01E03 1080p WEB-DL", DownloadURL: "https://pt/download/3", Seeders: 70},
+	}
+	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{}, availability)
+	if len(got) != 1 || got[0].Episode != 3 {
+		t.Fatalf("selected %#v, want only not-yet-downloaded episode 3", got)
+	}
+}
+
+func TestSubscriptionPendingDownloadAvailabilityIncludesLiveQBTorrents(t *testing.T) {
+	qb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			_, _ = w.Write([]byte("Ok."))
+		case "/api/v2/torrents/info":
+			_, _ = w.Write([]byte(`[{"hash":"abc123","name":"间谍过家家 S01E01 1080p","state":"downloading","progress":0.2}]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer qb.Close()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.DownloadTask{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	downloads := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	downloads.qb.Configure(QBitConfig{BaseURL: qb.URL, Username: "admin", Password: "admin"})
+	svc := NewSubscriptionService(nil, nil, repos, downloads, nil, nil)
+	sub := &model.Subscription{
+		Name:          "间谍过家家 自动订阅",
+		Filter:        "间谍过家家",
+		MediaType:     "tv",
+		SavePath:      "/downloads/tv",
+		TotalEpisodes: 2,
+	}
+
+	availability := svc.pendingDownloadAvailability(t.Context(), sub)
+	if availability.DownloadedEpisodes != 1 {
+		t.Fatalf("downloaded episodes = %d, want 1", availability.DownloadedEpisodes)
+	}
+	if _, ok := availability.ExistingEpisodeKeys[episodeKey(1, 1)]; !ok {
+		t.Fatalf("missing live qB E01 key: %#v", availability.ExistingEpisodeKeys)
 	}
 }
 
@@ -276,6 +411,87 @@ func TestSubscriptionRunOneDeduplicatesDuplicateRSSGUIDInSameFeed(t *testing.T) 
 		Filter:    "Some Show",
 		MediaType: "tv",
 		SavePath:  "/downloads/tv",
+	}
+	if err := repos.Subscription.Create(t.Context(), sub); err != nil {
+		t.Fatal(err)
+	}
+	queued, err := svc.runOne(t.Context(), sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued != 1 {
+		t.Fatalf("queued = %d, want 1", queued)
+	}
+	if got := atomic.LoadInt32(&addCalls); got != 1 {
+		t.Fatalf("qb add calls = %d, want 1", got)
+	}
+	rows, err := repos.Download.List(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("download rows = %d, want 1", len(rows))
+	}
+}
+
+func TestSubscriptionRunOneSkipsSameEpisodeAddedEarlierInFeed(t *testing.T) {
+	rss := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0"?>
+<rss><channel>
+  <item>
+    <title>Some Show S01E01 1080p</title>
+    <guid>episode-1-a</guid>
+    <link>magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&amp;dn=Some+Show+S01E01+1080p</link>
+  </item>
+  <item>
+    <title>Some Show S01E01 WEB-DL</title>
+    <guid>episode-1-b</guid>
+    <link>magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb&amp;dn=Some+Show+S01E01+WEB-DL</link>
+  </item>
+</channel></rss>`))
+	}))
+	defer rss.Close()
+
+	var addCalls int32
+	qb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			_, _ = w.Write([]byte("Ok."))
+		case "/api/v2/torrents/info":
+			if atomic.LoadInt32(&addCalls) > 0 {
+				_, _ = w.Write([]byte(`[{"hash":"abc123","name":"Some Show S01E01 1080p","state":"downloading","progress":0.1}]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[]`))
+		case "/api/v2/torrents/add":
+			atomic.AddInt32(&addCalls, 1)
+			_, _ = w.Write([]byte("Ok."))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer qb.Close()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Subscription{}, &model.Setting{}, &model.DownloadTask{}, &model.Media{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	downloads := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	downloads.qb.Configure(QBitConfig{BaseURL: qb.URL, Username: "admin", Password: "admin"})
+	svc := NewSubscriptionService(nil, zap.NewNop(), repos, downloads, nil, NewHub(zap.NewNop()))
+
+	sub := &model.Subscription{
+		Name:          "Some Show 自动订阅",
+		FeedURL:       rss.URL,
+		Filter:        "Some Show",
+		MediaType:     "tv",
+		SavePath:      "/downloads/tv",
+		TotalEpisodes: 12,
 	}
 	if err := repos.Subscription.Create(t.Context(), sub); err != nil {
 		t.Fatal(err)

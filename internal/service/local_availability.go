@@ -19,6 +19,7 @@ type LocalAvailability struct {
 	LocalMediaCount     int
 	MissingEpisodes     []int
 	InLibrary           bool
+	HasSeriesPack       bool
 	ExistingEpisodeKeys map[string]struct{}
 	MissingEpisodeKeys  map[string]struct{}
 }
@@ -88,6 +89,9 @@ func LookupLocalAvailability(ctx context.Context, repo *repository.Container, ti
 	seriesLike := isSubscriptionSeriesType(mediaType)
 	for _, row := range rows {
 		if row.EpisodeNum <= 0 {
+			if seriesLike {
+				out.HasSeriesPack = true
+			}
 			continue
 		}
 		season := row.SeasonNum
