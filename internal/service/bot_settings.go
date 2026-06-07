@@ -9,8 +9,8 @@ import (
 	"github.com/ShukeBta/MediaStationGo/internal/repository"
 )
 
-// Bot / 设备管控相关的设置键。全部存储在 settings 表，可由管理员在 Bot 或
-// 系统设置页调整。带安全默认值：所有"自动删号"策略默认关闭。
+// Bot / 设备管控相关的设置键。全部存储在 settings 表，由管理员通过
+// Telegram Bot 命令调整。带安全默认值：所有"自动删号"策略默认关闭。
 const (
 	// 开放注册（开注名额）。
 	SettingOpenRegEnabled = "telegram.openreg_enabled" // 是否开放注册

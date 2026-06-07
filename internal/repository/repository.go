@@ -698,6 +698,30 @@ func (r *RefreshTokenRepository) RevokeByUserID(ctx context.Context, userID stri
 		Where("user_id = ?", userID).Update("revoked", true).Error
 }
 
+// RevokeOldestActiveByUserID keeps at most limit active refresh tokens for a
+// user by revoking the oldest non-expired, non-revoked tokens.
+func (r *RefreshTokenRepository) RevokeOldestActiveByUserID(ctx context.Context, userID string, limit int) error {
+	if limit < 1 {
+		limit = 1
+	}
+	var tokens []model.RefreshToken
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND revoked = ? AND expires_at > ?", userID, false, time.Now()).
+		Order("created_at desc, id desc").
+		Find(&tokens).Error; err != nil {
+		return err
+	}
+	if len(tokens) <= limit {
+		return nil
+	}
+	ids := make([]string, 0, len(tokens)-limit)
+	for _, token := range tokens[limit:] {
+		ids = append(ids, token.ID)
+	}
+	return r.db.WithContext(ctx).Model(&model.RefreshToken{}).
+		Where("id IN ?", ids).Update("revoked", true).Error
+}
+
 // DeleteExpired removes all expired refresh tokens.
 func (r *RefreshTokenRepository) DeleteExpired(ctx context.Context) error {
 	return r.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&model.RefreshToken{}).Error

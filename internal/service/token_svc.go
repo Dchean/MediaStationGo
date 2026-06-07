@@ -84,6 +84,9 @@ func (s *TokenService) IssuePair(ctx context.Context, userID, role, tier string)
 	if err := s.repo.RefreshToken.Create(ctx, rt); err != nil {
 		return nil, err
 	}
+	if err := s.repo.RefreshToken.RevokeOldestActiveByUserID(ctx, userID, s.maxActiveRefreshTokens(ctx)); err != nil {
+		s.log.Warn("failed to enforce refresh token session limit", zap.String("user_id", userID), zap.Error(err))
+	}
 
 	return &TokenPair{
 		AccessToken:  accessToken,
@@ -91,6 +94,14 @@ func (s *TokenService) IssuePair(ctx context.Context, userID, role, tier string)
 		ExpiresIn:    int64(AccessTokenDuration.Seconds()),
 		TokenType:    "Bearer",
 	}, nil
+}
+
+func (s *TokenService) maxActiveRefreshTokens(ctx context.Context) int {
+	cfg := loadBotConfig(ctx, s.repo)
+	if cfg.MaxLoggedClients < 1 {
+		return defaultBotConfig().MaxLoggedClients
+	}
+	return cfg.MaxLoggedClients
 }
 
 // issueAccessToken 签发 JWT Access Token（HS256，60分钟有效期）。

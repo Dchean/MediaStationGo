@@ -239,7 +239,7 @@ func (c *Container) Boot() {
 	// 启动调度器定时任务
 	c.Scheduler.Start(c.stopCtx)
 
-	// 账号删号/保号规则巡检：默认关闭，由管理员在 Bot 或运维工具开启。
+	// 账号删号/保号规则巡检：默认关闭，由管理员通过 Telegram Bot 命令开启。
 	// 每天触发一次评估；规则里的窗口可随机，不固定。
 	if c.Device != nil {
 		go c.runInactivitySweeper(c.stopCtx)

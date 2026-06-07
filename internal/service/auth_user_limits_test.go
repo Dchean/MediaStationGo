@@ -188,6 +188,34 @@ func TestAdminResetPasswordAllowsLoginWithNewPassword(t *testing.T) {
 	}
 }
 
+func TestLoginKeepsOnlyConfiguredActiveRefreshTokens(t *testing.T) {
+	ctx := context.Background()
+	repos, auth, _, _ := newAuthTestServices(t)
+	user, _, err := auth.Register(ctx, "viewer", "password")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if err := repos.Setting.Set(ctx, SettingMaxLoggedClients, "3"); err != nil {
+		t.Fatalf("set max clients: %v", err)
+	}
+
+	for i := 0; i < 5; i++ {
+		if _, err := auth.Login(ctx, "viewer", "password"); err != nil {
+			t.Fatalf("login %d: %v", i+1, err)
+		}
+	}
+
+	var active int64
+	if err := repos.DB.Model(&model.RefreshToken{}).
+		Where("user_id = ? AND revoked = ? AND expires_at > ?", user.ID, false, time.Now()).
+		Count(&active).Error; err != nil {
+		t.Fatalf("count active refresh tokens: %v", err)
+	}
+	if active != 3 {
+		t.Fatalf("active refresh tokens should be capped at 3, got %d", active)
+	}
+}
+
 func TestDefaultPermissionsAreViewerOnly(t *testing.T) {
 	perms := DefaultPermissions("user-1")
 	if !perms.CanViewDashboard || !perms.CanPlayMedia || !perms.CanExternalPlayer {

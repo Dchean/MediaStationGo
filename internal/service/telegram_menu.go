@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -215,6 +216,63 @@ func (s *TelegramBotService) handlePendingText(ctx context.Context, channel *mod
 }
 
 // ── 用户自助 ──────────────────────────────────────────────────────────────
+
+func (s *TelegramBotService) cmdKick(ctx context.Context, msg *TelegramMessage, args []string) telegramCommandReply {
+	user := s.boundUser(ctx, msg.From.ID)
+	if user == nil {
+		return telegramCommandReply{Text: "请先绑定账号：<code>/start 用户名 密码</code>"}
+	}
+	if len(args) == 0 {
+		return telegramCommandReply{Text: "请指定要踢下线的设备：<code>/kick all</code> 或 <code>/kick 设备编号</code>。先用 <code>/devices</code> 查看编号。"}
+	}
+	target := strings.TrimSpace(args[0])
+	if strings.EqualFold(target, "all") || target == "全部" {
+		if s.device != nil {
+			if err := s.device.KickAllDevices(ctx, user.ID); err != nil {
+				return telegramCommandReply{Text: "踢下线失败：" + err.Error()}
+			}
+		} else if err := s.repo.UserDevice.SetKickedByUser(ctx, user.ID, true); err != nil {
+			return telegramCommandReply{Text: "踢下线失败：" + err.Error()}
+		}
+		return telegramCommandReply{Text: "已踢下线此账号的全部设备。"}
+	}
+	devices, _ := s.repo.UserDevice.ListByUser(ctx, user.ID)
+	if len(devices) == 0 {
+		return telegramCommandReply{Text: "当前没有记录到登录设备。"}
+	}
+	var chosen *model.UserDevice
+	if n, err := strconv.Atoi(target); err == nil && n >= 1 && n <= len(devices) {
+		chosen = &devices[n-1]
+	} else {
+		for i := range devices {
+			if devices[i].ID == target || devices[i].DeviceID == target {
+				chosen = &devices[i]
+				break
+			}
+		}
+	}
+	if chosen == nil {
+		return telegramCommandReply{Text: "未找到该设备。请用 <code>/devices</code> 查看设备编号后重试。"}
+	}
+	if err := s.repo.UserDevice.SetKicked(ctx, chosen.ID, true); err != nil {
+		return telegramCommandReply{Text: "踢下线失败：" + err.Error()}
+	}
+	return telegramCommandReply{Text: fmt.Sprintf("已踢下线：<b>%s</b>。", deviceLabel(chosen.DeviceName, chosen.Client))}
+}
+
+func (s *TelegramBotService) cmdSetName(ctx context.Context, msg *TelegramMessage, args []string) telegramCommandReply {
+	if len(args) == 0 {
+		return telegramCommandReply{Text: "请发送：<code>/setname 新用户名</code>"}
+	}
+	return s.selfSetName(ctx, msg, strings.Join(args, " "))
+}
+
+func (s *TelegramBotService) cmdSetPass(ctx context.Context, msg *TelegramMessage, args []string) telegramCommandReply {
+	if len(args) == 0 {
+		return telegramCommandReply{Text: "请发送：<code>/setpass 新密码</code>"}
+	}
+	return s.selfSetPass(ctx, msg, strings.Join(args, " "))
+}
 
 func (s *TelegramBotService) replyAccount(ctx context.Context, msg *TelegramMessage) telegramCommandReply {
 	user := s.boundUser(ctx, msg.From.ID)
@@ -583,7 +641,7 @@ func (s *TelegramBotService) protectReason(ctx context.Context, userID string) s
 func (s *TelegramBotService) replyDevicePolicy(ctx context.Context) telegramCommandReply {
 	cfg := loadBotConfig(ctx, s.repo)
 	text := fmt.Sprintf(
-		"<b>设备策略</b>\n\n① 防共享：<b>%s</b>\n   并发播放上限 %d / 登录客户端上限 %d；超限会禁用账号，管理员可解禁。\n   设备指纹异常警告 %d 次后禁用账号。\n\n② 自定义删号规则：<b>%s</b>\n   保号模式：%s；需要满足 %d 条；启用规则 %d 条。\n\n策略默认关闭；删号前会先通过 Bot 通知用户；管理员/受保护账号永不自动处理。",
+		"<b>设备策略</b>\n\n① 防共享：<b>%s</b>\n   并发播放上限 %d / 登录客户端上限 %d；超限会禁用账号，管理员可解禁。\n   设备指纹异常警告 %d 次后禁用账号。\n\n② 自定义删号规则：<b>%s</b>\n   保号模式：%s；需要满足 %d 条；启用规则 %d 条。\n\n<b>命令：</b>\n<code>/antishare on play=3 login=3 warn=2</code>\n<code>/cleanup on|off|run</code>\n<code>/cleanup_mode any|all|count 2</code>\n<code>/cleanup_rule list|add|del|enable|disable</code>\n\n策略默认关闭；删号前会先通过 Bot 通知用户；管理员/受保护账号永不自动处理。",
 		onOff(cfg.AntiShareEnabled), cfg.MaxConcurrentPlay, cfg.MaxLoggedClients, cfg.WarnThreshold,
 		onOff(cfg.AccountCleanupEnabled), cleanupModeLabel(cfg.AccountCleanupKeepMode), cfg.AccountCleanupRequiredCount, countEnabledCleanupRules(cfg.AccountCleanupRules))
 	return telegramCommandReply{
@@ -596,6 +654,168 @@ func (s *TelegramBotService) replyDevicePolicy(ctx context.Context) telegramComm
 	}
 }
 
+func (s *TelegramBotService) cmdDevicePolicy(ctx context.Context, args []string) telegramCommandReply {
+	if len(args) == 0 || strings.EqualFold(args[0], "status") {
+		return s.replyDevicePolicy(ctx)
+	}
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "run", "sweep":
+		return s.cmdCleanup(ctx, []string{"run"})
+	default:
+		return telegramCommandReply{Text: "用法：<code>/devicepolicy</code> 查看策略，或使用 <code>/antishare</code>、<code>/cleanup</code>、<code>/cleanup_rule</code> 管理。"}
+	}
+}
+
+func (s *TelegramBotService) cmdAntiShare(ctx context.Context, args []string) telegramCommandReply {
+	if len(args) == 0 || strings.EqualFold(args[0], "status") {
+		return s.replyDevicePolicy(ctx)
+	}
+	enabled, ok := parseCommandBool(args[0])
+	if !ok {
+		return telegramCommandReply{Text: "用法：<code>/antishare on|off [play=3] [login=3] [warn=2]</code>"}
+	}
+	if err := s.repo.Setting.Set(ctx, SettingAntiShareEnabled, strconv.FormatBool(enabled)); err != nil {
+		return telegramCommandReply{Text: "更新失败：" + err.Error()}
+	}
+	for _, arg := range args[1:] {
+		key, value, ok := strings.Cut(arg, "=")
+		if !ok {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || n < 1 {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "play", "maxplay", "播放":
+			_ = s.repo.Setting.Set(ctx, SettingMaxConcurrentPlay, strconv.Itoa(n))
+		case "login", "client", "clients", "登录":
+			_ = s.repo.Setting.Set(ctx, SettingMaxLoggedClients, strconv.Itoa(n))
+		case "warn", "warnings", "警告":
+			_ = s.repo.Setting.Set(ctx, SettingWarnThreshold, strconv.Itoa(n))
+		}
+	}
+	return s.replyDevicePolicy(ctx)
+}
+
+func (s *TelegramBotService) cmdCleanup(ctx context.Context, args []string) telegramCommandReply {
+	if len(args) == 0 || strings.EqualFold(args[0], "status") {
+		return s.replyDevicePolicy(ctx)
+	}
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "on", "true", "1", "开启", "enable":
+		if err := s.repo.Setting.Set(ctx, SettingAccountCleanupEnabled, "true"); err != nil {
+			return telegramCommandReply{Text: "开启失败：" + err.Error()}
+		}
+		return s.replyDevicePolicy(ctx)
+	case "off", "false", "0", "关闭", "disable":
+		if err := s.repo.Setting.Set(ctx, SettingAccountCleanupEnabled, "false"); err != nil {
+			return telegramCommandReply{Text: "关闭失败：" + err.Error()}
+		}
+		return s.replyDevicePolicy(ctx)
+	case "run", "sweep", "巡检":
+		device := s.device
+		if device == nil {
+			device = NewDeviceService(s.log, s.repo)
+		}
+		removed, err := device.SweepAccountCleanup(ctx)
+		if err != nil {
+			return telegramCommandReply{Text: "巡检失败：" + err.Error()}
+		}
+		return telegramCommandReply{Text: fmt.Sprintf("删号规则巡检完成，清理 <b>%d</b> 个账号。", removed)}
+	default:
+		return telegramCommandReply{Text: "用法：<code>/cleanup on|off|run</code>"}
+	}
+}
+
+func (s *TelegramBotService) cmdCleanupMode(ctx context.Context, args []string) telegramCommandReply {
+	if len(args) == 0 {
+		return telegramCommandReply{Text: "用法：<code>/cleanup_mode any</code>、<code>/cleanup_mode all</code> 或 <code>/cleanup_mode count 2</code>"}
+	}
+	mode := strings.ToLower(strings.TrimSpace(args[0]))
+	if mode != "any" && mode != "all" && mode != "count" {
+		return telegramCommandReply{Text: "保号模式无效，只支持 any / all / count。"}
+	}
+	if err := s.repo.Setting.Set(ctx, SettingAccountCleanupKeepMode, mode); err != nil {
+		return telegramCommandReply{Text: "更新失败：" + err.Error()}
+	}
+	if mode == "count" && len(args) > 1 {
+		n, err := strconv.Atoi(args[1])
+		if err == nil && n > 0 {
+			_ = s.repo.Setting.Set(ctx, SettingAccountCleanupRequiredCount, strconv.Itoa(n))
+		}
+	}
+	return s.replyDevicePolicy(ctx)
+}
+
+func (s *TelegramBotService) cmdCleanupRule(ctx context.Context, args []string) telegramCommandReply {
+	if len(args) == 0 {
+		return telegramCommandReply{Text: cleanupRuleHelp()}
+	}
+	rules := s.currentCleanupRules(ctx)
+	action := strings.ToLower(strings.TrimSpace(args[0]))
+	switch action {
+	case "list", "ls", "status":
+		return telegramCommandReply{Text: formatCleanupRules(rules)}
+	case "del", "delete", "rm":
+		if len(args) < 2 {
+			return telegramCommandReply{Text: "用法：<code>/cleanup_rule del 规则ID</code>"}
+		}
+		next := make([]accountCleanupRule, 0, len(rules))
+		removed := false
+		for _, r := range rules {
+			if r.ID == args[1] {
+				removed = true
+				continue
+			}
+			next = append(next, r)
+		}
+		if !removed {
+			return telegramCommandReply{Text: "未找到该规则。"}
+		}
+		if err := s.saveCleanupRules(ctx, next); err != nil {
+			return telegramCommandReply{Text: "保存失败：" + err.Error()}
+		}
+		return telegramCommandReply{Text: "已删除规则。\n\n" + formatCleanupRules(next)}
+	case "enable", "on", "disable", "off":
+		if len(args) < 2 {
+			return telegramCommandReply{Text: "用法：<code>/cleanup_rule enable|disable 规则ID</code>"}
+		}
+		enable := action == "enable" || action == "on"
+		changed := false
+		for i := range rules {
+			if rules[i].ID == args[1] {
+				rules[i].Enabled = enable
+				changed = true
+			}
+		}
+		if !changed {
+			return telegramCommandReply{Text: "未找到该规则。"}
+		}
+		if err := s.saveCleanupRules(ctx, rules); err != nil {
+			return telegramCommandReply{Text: "保存失败：" + err.Error()}
+		}
+		return telegramCommandReply{Text: "已更新规则状态。\n\n" + formatCleanupRules(rules)}
+	case "add":
+		rule, err := parseCleanupRuleCommand(args[1:])
+		if err != nil {
+			return telegramCommandReply{Text: err.Error() + "\n\n" + cleanupRuleHelp()}
+		}
+		for _, r := range rules {
+			if r.ID == rule.ID {
+				return telegramCommandReply{Text: "规则 ID 已存在，请换一个 ID。"}
+			}
+		}
+		rules = normalizeCleanupRules(append(rules, rule))
+		if err := s.saveCleanupRules(ctx, rules); err != nil {
+			return telegramCommandReply{Text: "保存失败：" + err.Error()}
+		}
+		return telegramCommandReply{Text: "已新增规则。\n\n" + formatCleanupRules(rules)}
+	default:
+		return telegramCommandReply{Text: cleanupRuleHelp()}
+	}
+}
+
 func (s *TelegramBotService) replyDevicePolicyToggle(ctx context.Context, which string) telegramCommandReply {
 	cfg := loadBotConfig(ctx, s.repo)
 	switch which {
@@ -605,6 +825,139 @@ func (s *TelegramBotService) replyDevicePolicyToggle(ctx context.Context, which 
 		_ = s.repo.Setting.Set(ctx, SettingAccountCleanupEnabled, strconv.FormatBool(!cfg.AccountCleanupEnabled))
 	}
 	return s.replyDevicePolicy(ctx)
+}
+
+func (s *TelegramBotService) cmdUserBan(ctx context.Context, args []string, unban bool) telegramCommandReply {
+	if len(args) == 0 {
+		if unban {
+			return telegramCommandReply{Text: "用法：<code>/unban 用户名</code>"}
+		}
+		return telegramCommandReply{Text: "用法：<code>/ban 用户名</code>"}
+	}
+	user, _ := s.repo.User.FindByUsername(ctx, args[0])
+	if user == nil {
+		user, _ = s.repo.User.FindByID(ctx, args[0])
+	}
+	if user == nil {
+		return telegramCommandReply{Text: "未找到用户。"}
+	}
+	return s.replyUserBan(ctx, user.ID, unban)
+}
+
+func (s *TelegramBotService) currentCleanupRules(ctx context.Context) []accountCleanupRule {
+	cfg := loadBotConfig(ctx, s.repo)
+	return cfg.AccountCleanupRules
+}
+
+func (s *TelegramBotService) saveCleanupRules(ctx context.Context, rules []accountCleanupRule) error {
+	raw, err := json.Marshal(normalizeCleanupRules(rules))
+	if err != nil {
+		return err
+	}
+	return s.repo.Setting.Set(ctx, SettingAccountCleanupRules, string(raw))
+}
+
+func parseCommandBool(value string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "on", "true", "1", "yes", "enable", "enabled", "开启", "开":
+		return true, true
+	case "off", "false", "0", "no", "disable", "disabled", "关闭", "关":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func parseCleanupRuleCommand(args []string) (accountCleanupRule, error) {
+	if len(args) < 2 {
+		return accountCleanupRule{}, fmt.Errorf("新增规则参数不足")
+	}
+	rule := accountCleanupRule{
+		Type:          strings.ToLower(strings.TrimSpace(args[0])),
+		ID:            strings.TrimSpace(args[1]),
+		Name:          strings.TrimSpace(args[1]),
+		Enabled:       true,
+		WindowDaysMin: 3,
+		WindowDaysMax: 5,
+		MinHours:      6,
+		MinCount:      1,
+	}
+	if len(args) > 2 {
+		rule.Name = strings.TrimSpace(args[2])
+	}
+	switch rule.Type {
+	case "watch_hours":
+		if len(args) >= 6 {
+			rule.WindowDaysMin, _ = strconv.Atoi(args[3])
+			rule.WindowDaysMax, _ = strconv.Atoi(args[4])
+			rule.MinHours, _ = strconv.ParseFloat(args[5], 64)
+		}
+	case "recent_login":
+		if len(args) >= 4 {
+			rule.WindowDaysMax, _ = strconv.Atoi(args[3])
+		}
+	case "signin_streak", "account_age_grace":
+		if len(args) >= 4 {
+			rule.MinCount, _ = strconv.Atoi(args[3])
+		}
+	default:
+		return accountCleanupRule{}, fmt.Errorf("不支持的规则类型：%s", rule.Type)
+	}
+	normalized := normalizeCleanupRules([]accountCleanupRule{rule})
+	if len(normalized) == 0 {
+		return accountCleanupRule{}, fmt.Errorf("规则无效")
+	}
+	return normalized[0], nil
+}
+
+func formatCleanupRules(rules []accountCleanupRule) string {
+	if len(rules) == 0 {
+		return "<b>保号规则</b>\n\n暂无规则。"
+	}
+	var sb strings.Builder
+	sb.WriteString("<b>保号规则</b>\n")
+	for i, r := range rules {
+		state := map[bool]string{true: "启用", false: "停用"}[r.Enabled]
+		sb.WriteString(fmt.Sprintf("\n%d. <code>%s</code> · %s · %s · %s", i+1, r.ID, r.Name, cleanupRuleTypeLabel(r.Type), state))
+		switch r.Type {
+		case "watch_hours":
+			sb.WriteString(fmt.Sprintf(" · %d~%d 天 %.1f 小时", r.WindowDaysMin, r.WindowDaysMax, r.MinHours))
+		case "recent_login":
+			sb.WriteString(fmt.Sprintf(" · %d 天内登录", r.WindowDaysMax))
+		case "signin_streak":
+			sb.WriteString(fmt.Sprintf(" · 连续签到 %d 天", r.MinCount))
+		case "account_age_grace":
+			sb.WriteString(fmt.Sprintf(" · 新号宽限 %d 天", r.MinCount))
+		}
+	}
+	return sb.String()
+}
+
+func cleanupRuleTypeLabel(t string) string {
+	switch t {
+	case "watch_hours":
+		return "观看时长"
+	case "recent_login":
+		return "最近登录"
+	case "signin_streak":
+		return "连续签到"
+	case "account_age_grace":
+		return "新号宽限"
+	default:
+		return t
+	}
+}
+
+func cleanupRuleHelp() string {
+	return "<b>删号/保号规则命令</b>\n\n" +
+		"<code>/cleanup_rule list</code> — 查看规则\n" +
+		"<code>/cleanup_rule add watch_hours watch_3_5d_6h 观看3到5天满6小时 3 5 6</code>\n" +
+		"<code>/cleanup_rule add recent_login login_7d 七天内登录 7</code>\n" +
+		"<code>/cleanup_rule add signin_streak sign_3 连续签到3天 3</code>\n" +
+		"<code>/cleanup_rule add account_age_grace new_7d 新号宽限7天 7</code>\n" +
+		"<code>/cleanup_rule enable 规则ID</code> / <code>disable 规则ID</code>\n" +
+		"<code>/cleanup_rule del 规则ID</code>\n\n" +
+		"保号模式：<code>/cleanup_mode any|all|count 2</code>"
 }
 
 func onOff(b bool) string {

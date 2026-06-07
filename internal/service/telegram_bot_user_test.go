@@ -161,3 +161,48 @@ func TestTelegramStartClearsStaleUserBinding(t *testing.T) {
 		t.Fatalf("stale binding should be removed, got %d", count)
 	}
 }
+
+func TestTelegramStartRejectsAccountAlreadyBoundToAnotherTelegram(t *testing.T) {
+	ctx := t.Context()
+	repos, auth, _, _ := newAuthTestServices(t)
+	user, _, err := auth.Register(ctx, "viewer", "secret-pass")
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if err := repos.DB.Create(&model.TelegramBinding{
+		TelegramUserID: 20001,
+		TelegramName:   "@viewer-one",
+		ChatID:         20001,
+		UserID:         user.ID,
+	}).Error; err != nil {
+		t.Fatalf("create binding: %v", err)
+	}
+
+	bot := NewTelegramBotService(zap.NewNop(), repos, nil, auth)
+	cfgJSON, _ := json.Marshal(map[string]string{"admin_user_ids": "20002"})
+	if err := repos.DB.AutoMigrate(&model.NotifyChannel{}); err != nil {
+		t.Fatalf("migrate notify channel: %v", err)
+	}
+	if err := repos.DB.Create(&model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: string(cfgJSON)}).Error; err != nil {
+		t.Fatalf("create notify channel: %v", err)
+	}
+	msg := &TelegramMessage{
+		From: TelegramUser{ID: 20002, Username: "viewer-two", FirstName: "Viewer Two"},
+		Chat: TelegramChat{ID: 20002, Type: "private"},
+	}
+	reply := bot.cmdStart(ctx, msg, []string{"viewer", "secret-pass"})
+
+	if !strings.Contains(reply.Text, "已绑定其他 Telegram") {
+		t.Fatalf("expected already-bound rejection, got %q", reply.Text)
+	}
+	var accountBindings int64
+	if err := repos.DB.Model(&model.TelegramBinding{}).Where("user_id = ?", user.ID).Count(&accountBindings).Error; err != nil {
+		t.Fatalf("count account bindings: %v", err)
+	}
+	if accountBindings != 1 {
+		t.Fatalf("account should keep exactly one telegram binding, got %d", accountBindings)
+	}
+	if binding := bot.telegramBinding(ctx, 20002); binding != nil {
+		t.Fatal("second telegram account must not be bound")
+	}
+}

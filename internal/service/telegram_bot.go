@@ -134,6 +134,8 @@ func NewTelegramBotService(log *zap.Logger, repo *repository.Container, crypto *
 // 默认关闭，只有管理员在系统设置 / Bot 管理命令中显式开启后才允许注册。
 const TelegramRegistrationSettingKey = "telegram.registration_enabled"
 
+var errTelegramAccountAlreadyBound = errors.New("该媒体账号已绑定其他 Telegram，请联系管理员解绑")
+
 // registrationEnabled 读取注册开关；默认关闭。
 func (s *TelegramBotService) registrationEnabled(ctx context.Context) bool {
 	v, err := s.repo.Setting.Get(ctx, TelegramRegistrationSettingKey)
@@ -251,13 +253,58 @@ func (s *TelegramBotService) executeCommand(ctx context.Context, channel *model.
 		return telegramCommandReply{Text: s.cmdHelp(ctx, msg)}, nil
 	case "/hideadult", "/hide_adult", "/adult":
 		return s.cmdHideAdult(ctx, msg, args), nil
+	case "/account", "/me":
+		return s.replyAccount(ctx, msg), nil
+	case "/devices":
+		return s.replyDevices(ctx, msg), nil
+	case "/kick":
+		return s.cmdKick(ctx, msg, args), nil
+	case "/setname", "/rename":
+		return s.cmdSetName(ctx, msg, args), nil
+	case "/setpass", "/passwd", "/password":
+		return s.cmdSetPass(ctx, msg, args), nil
 	case "/register", "/reg", "/signup":
 		return s.cmdRegister(ctx, channel, msg, args), nil
-	case "/registration", "/reg_switch":
+	case "/registration", "/reg_switch", "/openreg":
 		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
 			return telegramCommandReply{Text: "此命令仅管理员可用。"}, nil
 		}
 		return s.cmdRegistrationToggle(ctx, args), nil
+	case "/devicepolicy", "/policy":
+		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
+			return telegramCommandReply{Text: "此命令仅管理员可用。"}, nil
+		}
+		return s.cmdDevicePolicy(ctx, args), nil
+	case "/antishare":
+		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
+			return telegramCommandReply{Text: "此命令仅管理员可用。"}, nil
+		}
+		return s.cmdAntiShare(ctx, args), nil
+	case "/cleanup":
+		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
+			return telegramCommandReply{Text: "此命令仅管理员可用。"}, nil
+		}
+		return s.cmdCleanup(ctx, args), nil
+	case "/cleanup_mode":
+		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
+			return telegramCommandReply{Text: "此命令仅管理员可用。"}, nil
+		}
+		return s.cmdCleanupMode(ctx, args), nil
+	case "/cleanup_rule":
+		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
+			return telegramCommandReply{Text: "此命令仅管理员可用。"}, nil
+		}
+		return s.cmdCleanupRule(ctx, args), nil
+	case "/ban":
+		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
+			return telegramCommandReply{Text: "此命令仅管理员可用。"}, nil
+		}
+		return s.cmdUserBan(ctx, args, false), nil
+	case "/unban":
+		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
+			return telegramCommandReply{Text: "此命令仅管理员可用。"}, nil
+		}
+		return s.cmdUserBan(ctx, args, true), nil
 	case "/status":
 		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
 			return telegramCommandReply{Text: "此命令仅管理员可用。普通用户只能使用 /start 绑定账号，并通过按钮隐藏成人目录。"}, nil
@@ -305,8 +352,10 @@ func telegramCommandName(text string) string {
 func telegramSupportedCommand(cmd string) bool {
 	switch cmd {
 	case "/start", "/menu", "/cancel", "/help", "/hideadult", "/hide_adult", "/adult",
-		"/register", "/reg", "/signup", "/registration", "/reg_switch",
-		"/status", "/search", "/downloads", "/stats":
+		"/account", "/me", "/devices", "/kick", "/setname", "/rename", "/setpass", "/passwd", "/password",
+		"/register", "/reg", "/signup", "/registration", "/reg_switch", "/openreg",
+		"/devicepolicy", "/policy", "/antishare", "/cleanup", "/cleanup_mode", "/cleanup_rule",
+		"/ban", "/unban", "/status", "/search", "/downloads", "/stats":
 		return true
 	default:
 		return false
@@ -461,14 +510,26 @@ func (s *TelegramBotService) cmdHelp(ctx context.Context, msg *TelegramMessage) 
 		return "<b>MediaStationGo 用户命令</b>\n\n" +
 			register +
 			"<b>/start 用户名 密码</b> — 绑定账号\n" +
+			"<b>/account</b> — 查看账号状态\n" +
+			"<b>/devices</b> — 查看登录设备\n" +
+			"<b>/kick all|编号</b> — 踢下线设备\n" +
+			"<b>/setname 新用户名</b> — 修改用户名\n" +
+			"<b>/setpass 新密码</b> — 修改密码\n" +
 			"<b>/hideadult on|off</b> — 隐藏或显示成人目录\n\n" +
 			"系统状态、搜索、下载列表与统计命令仅管理员可用。"
 	}
 	return "<b>MediaStationGo 命令列表</b>\n\n" +
 		"<b>/start</b> — 开始使用\n" +
 		"<b>/help</b> — 帮助信息\n" +
+		"<b>/account</b> / <b>/devices</b> / <b>/kick all|编号</b> — 用户自助设备管理\n" +
+		"<b>/setname 新用户名</b> / <b>/setpass 新密码</b> — 用户自助改名改密\n" +
 		"<b>/register 用户名 密码</b> — 注册新账号（需管理员开启）\n" +
 		"<b>/registration on|off</b> — 开启/关闭普通用户注册（管理员）\n" +
+		"<b>/antishare on play=3 login=3 warn=2</b> — 防共享策略（管理员）\n" +
+		"<b>/cleanup on|off|run</b> — 删号规则开关/巡检（管理员）\n" +
+		"<b>/cleanup_mode any|all|count 2</b> — 保号模式（管理员）\n" +
+		"<b>/cleanup_rule list|add|del|enable|disable</b> — 保号规则（管理员）\n" +
+		"<b>/ban 用户名</b> / <b>/unban 用户名</b> — 禁用/解禁用户（管理员）\n" +
 		"<b>/hideadult on|off</b> — 隐藏/显示当前绑定账号的成人目录\n" +
 		"<b>/status</b> — 系统运行状态\n" +
 		"<b>/search 关键词</b> — 搜索媒体库\n" +
@@ -1102,6 +1163,11 @@ func (s *TelegramBotService) upsertTelegramBinding(ctx context.Context, msg *Tel
 	var existing model.TelegramBinding
 	err := s.repo.DB.WithContext(ctx).Where("telegram_user_id = ?", int64(msg.From.ID)).First(&existing).Error
 	if err == nil {
+		if existing.UserID != userID {
+			if err := s.ensureTelegramAccountBindingAvailable(ctx, userID, int64(msg.From.ID)); err != nil {
+				return err
+			}
+		}
 		return s.repo.DB.WithContext(ctx).Model(&existing).Updates(map[string]any{
 			"telegram_name": name,
 			"chat_id":       int64(msg.Chat.ID),
@@ -1114,12 +1180,33 @@ func (s *TelegramBotService) upsertTelegramBinding(ctx context.Context, msg *Tel
 	if err := s.repo.DB.WithContext(ctx).Unscoped().Where("telegram_user_id = ?", int64(msg.From.ID)).Delete(&model.TelegramBinding{}).Error; err != nil {
 		return err
 	}
+	if err := s.ensureTelegramAccountBindingAvailable(ctx, userID, int64(msg.From.ID)); err != nil {
+		return err
+	}
 	return s.repo.DB.WithContext(ctx).Create(&model.TelegramBinding{
 		TelegramUserID: int64(msg.From.ID),
 		TelegramName:   name,
 		ChatID:         int64(msg.Chat.ID),
 		UserID:         userID,
 	}).Error
+}
+
+func (s *TelegramBotService) ensureTelegramAccountBindingAvailable(ctx context.Context, userID string, telegramUserID int64) error {
+	var bound model.TelegramBinding
+	err := s.repo.DB.WithContext(ctx).
+		Where("user_id = ? AND telegram_user_id <> ?", userID, telegramUserID).
+		First(&bound).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if user, _ := s.repo.User.FindByID(ctx, bound.UserID); user == nil {
+		_ = s.repo.DB.WithContext(ctx).Unscoped().Delete(&model.TelegramBinding{}, "id = ?", bound.ID).Error
+		return nil
+	}
+	return errTelegramAccountAlreadyBound
 }
 
 func parseStartCredentials(args []string) (string, string) {

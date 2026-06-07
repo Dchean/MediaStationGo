@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -260,5 +261,115 @@ func TestProtectedAdminNeverViolated(t *testing.T) {
 	}
 	if got.ShareWarnings != 0 {
 		t.Fatalf("admin should accrue no warnings, got %d", got.ShareWarnings)
+	}
+}
+
+func TestBotAdminCommandsManageDevicePolicy(t *testing.T) {
+	ctx := context.Background()
+	repos, bot := newBotTestService(t)
+	admin := &model.User{Username: "root", PasswordHash: "x", Role: "admin", IsActive: true}
+	if err := repos.User.Create(ctx, admin); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.DB.Create(&model.TelegramBinding{
+		TelegramUserID: 9001,
+		TelegramName:   "@root",
+		ChatID:         9001,
+		UserID:         admin.ID,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"admin_user_ids":"9001"}`}
+	msg := &TelegramMessage{From: TelegramUser{ID: 9001, Username: "root"}, Chat: TelegramChat{ID: 9001, Type: "private"}}
+
+	reply, err := bot.executeCommand(ctx, channel, msg, "/antishare on play=4 login=5 warn=3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reply.Text, "防共享：<b>已开启</b>") {
+		t.Fatalf("expected antishare enabled reply, got %q", reply.Text)
+	}
+	cfg := loadBotConfig(ctx, repos)
+	if !cfg.AntiShareEnabled || cfg.MaxConcurrentPlay != 4 || cfg.MaxLoggedClients != 5 || cfg.WarnThreshold != 3 {
+		t.Fatalf("unexpected device policy: %+v", cfg)
+	}
+
+	reply, err = bot.executeCommand(ctx, channel, msg, "/cleanup_mode count 2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg = loadBotConfig(ctx, repos)
+	if cfg.AccountCleanupKeepMode != "count" || cfg.AccountCleanupRequiredCount != 2 {
+		t.Fatalf("unexpected cleanup mode: %+v; reply=%q", cfg, reply.Text)
+	}
+
+	reply, err = bot.executeCommand(ctx, channel, msg, "/cleanup_rule add recent_login login_7d 七天内登录 7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg = loadBotConfig(ctx, repos)
+	found := false
+	for _, rule := range cfg.AccountCleanupRules {
+		if rule.ID == "login_7d" && rule.Type == "recent_login" && rule.WindowDaysMax == 7 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("cleanup rule not added; reply=%q rules=%+v", reply.Text, cfg.AccountCleanupRules)
+	}
+}
+
+func TestBotUserCommandsAndAdminGate(t *testing.T) {
+	ctx := context.Background()
+	repos, bot := newBotTestService(t)
+	user := &model.User{Username: "viewer", PasswordHash: "x", Role: "user", IsActive: true}
+	if err := repos.User.Create(ctx, user); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.DB.Create(&model.TelegramBinding{
+		TelegramUserID: 9101,
+		TelegramName:   "@viewer",
+		ChatID:         9101,
+		UserID:         user.ID,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := repos.UserDevice.Create(ctx, &model.UserDevice{
+		UserID: user.ID, DeviceID: "dev-1", DeviceName: "iPhone", Client: "Infuse", FirstSeenAt: now, LastSeenAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"admin_user_ids":"9001"}`}
+	msg := &TelegramMessage{From: TelegramUser{ID: 9101, Username: "viewer"}, Chat: TelegramChat{ID: 9101, Type: "private"}}
+
+	reply, err := bot.executeCommand(ctx, channel, msg, "/antishare on")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reply.Text, "仅管理员") {
+		t.Fatalf("regular user should not manage policy, got %q", reply.Text)
+	}
+
+	reply, err = bot.executeCommand(ctx, channel, msg, "/devices")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reply.Text, "我的登录设备") {
+		t.Fatalf("expected device list, got %q", reply.Text)
+	}
+
+	reply, err = bot.executeCommand(ctx, channel, msg, "/kick 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reply.Text, "已踢下线") {
+		t.Fatalf("expected kick feedback, got %q", reply.Text)
+	}
+	if kicked := bot.device; kicked != nil {
+		t.Fatal("test should not require wired device service")
+	}
+	if ok := NewDeviceService(zap.NewNop(), repos).IsDeviceKicked(ctx, user.ID, "dev-1"); !ok {
+		t.Fatal("device should be marked kicked")
 	}
 }
