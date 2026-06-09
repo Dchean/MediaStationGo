@@ -189,41 +189,9 @@ The current base license is `GPL-3.0`, and contributions are welcome under that 
 
 ### Docker Compose (Recommended)
 
-Docker is the most stable and portable deployment option. The default compose file creates four main mounts:
+The default deployment is now **beginner-friendly**: download `docker-compose.yml`, create one `.env`, and edit only two paths.
 
-| Host path | Container path | Purpose |
-| --- | --- | --- |
-| `./data` | `/data` | Database, JWT secret, runtime settings. Back this up. |
-| `./cache` | `/cache` | Posters, backdrops, scraping cache, transcoding cache |
-| `./media` | `/media` | Media library root, mounted read-only by default |
-| `./downloads` | `/downloads` | Subscription/site download target |
-
-#### Linux / NAS Zero-to-One Deployment Without Cloning Source
-
-This path is friendly for Ubuntu, Debian, CentOS, AlmaLinux, Rocky Linux, and most Linux-based NAS hosts.
-
-1. Install Docker:
-
-```bash
-bash <(curl -sSL https://cdn.jsdelivr.net/gh/SuperManito/LinuxMirrors@main/DockerInstallation.sh)
-
-docker --version
-```
-
-2. Install Docker Compose:
-
-```bash
-curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-
-docker-compose version
-```
-
-> If writing to `/usr/local/bin/docker-compose` fails with a permission error, prefix the `curl` and `chmod` commands with `sudo`.
-
-> If your system already supports `docker compose version`, keep using `docker compose`. If you installed only the standalone binary above, replace later `docker compose` commands with `docker-compose`.
-
-3. Create the deployment directory:
+#### 1. Create a deployment directory
 
 ```bash
 mkdir -p ~/MediaStationGo
@@ -231,81 +199,51 @@ cd ~/MediaStationGo
 mkdir -p data cache media downloads
 ```
 
-4. Create `.env`. For NAS deployments, the recommended mode is mapping the host absolute path to the exact same container path, so the web UI can use `/your-nas/...` directly:
+#### 2. Download compose
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ShukeBta/MediaStationGo/main/docker-compose.yml -o docker-compose.yml
+```
+
+If GitHub Raw is slow, create `docker-compose.yml` manually and paste the template from the repository root.
+
+#### 3. Create `.env`
+
+Only change these two directories:
 
 ```bash
 cat > .env <<'EOF'
-MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.32
-MEDIASTATION_HTTP_PORT=18080
-MEDIASTATION_DATA_DIR=./data
-MEDIASTATION_CACHE_DIR=./cache
 MEDIASTATION_MEDIA_DIR=/your-nas/media
-MEDIASTATION_MEDIA_CONTAINER_DIR=/your-nas/media
 MEDIASTATION_DOWNLOAD_DIR=/your-nas/downloads
-MEDIASTATION_DOWNLOAD_CONTAINER_DIR=/your-nas/downloads
-# If the NAS already uses v2rayA redirect / transparent proxy, do not add HTTP_PROXY here.
+MEDIASTATION_HTTP_PORT=18080
 TZ=Asia/Shanghai
 PUID=1000
 PGID=1000
 EOF
 ```
 
-> Important: do not write NAS absolute paths as relative paths (e.g. `./media`). A relative path means a subdirectory under the current compose project, which can become a wrong path such as `/your-nas/MediaStationGo/media/...`. Correct NAS paths must start with `/` (absolute), e.g. `/your-nas/media`.
+| Variable | Meaning |
+| --- | --- |
+| `MEDIASTATION_MEDIA_DIR` | Real host/NAS media directory, e.g. `/volume1/media`, `/mnt/media` |
+| `MEDIASTATION_DOWNLOAD_DIR` | Real host/NAS download directory, e.g. `/volume1/downloads`, `/mnt/downloads` |
 
-For local testing without existing NAS folders, use the deploy-directory mounts instead:
+> Do not write NAS absolute paths as `./vol1/...`. A leading `./` means a directory under the current compose project.
 
-```env
-MEDIASTATION_MEDIA_DIR=./media
-MEDIASTATION_MEDIA_CONTAINER_DIR=/media
-MEDIASTATION_DOWNLOAD_DIR=./downloads
-MEDIASTATION_DOWNLOAD_CONTAINER_DIR=/downloads
-```
-
-5. Download the default compose file:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ShukeBta/MediaStationGo/main/docker-compose.yml -o docker-compose.yml
-```
-
-If GitHub Raw is unavailable, create it manually and paste the template from `docker-compose.yml` in this repository:
-
-```bash
-vi docker-compose.yml
-# or
-vim docker-compose.yml
-```
-
-6. Start MediaStationGo:
+#### 4. Start
 
 ```bash
 docker compose pull
 docker compose up -d
-
-# If only docker-compose is available:
-# docker-compose pull
-# docker-compose up -d
 ```
 
-For existing deployments, use the update helper. It pulls and recreates the service, then removes old unused `ghcr.io/shukebta/mediastation-go` images and dangling layers so NAS disks do not fill up with historical images:
+If your system only has the legacy command:
 
 ```bash
-curl -fsSL https://cdn.jsdelivr.net/gh/ShukeBta/MediaStationGo@main/scripts/docker-compose-update.sh -o docker-compose-update.sh
-chmod +x docker-compose-update.sh
-./docker-compose-update.sh
+docker-compose pull
+docker-compose up -d
 ```
 
-7. Check status and logs:
-
-```bash
-docker compose ps
-docker compose logs -f mediastation-go
-
-# Or:
-# docker-compose ps
-# docker-compose logs -f mediastation-go
-```
-
-Open:
+#### 5. Open the app
 
 ```text
 http://<server-ip>:18080
@@ -314,204 +252,78 @@ http://<server-ip>:18080
 Default account:
 
 ```text
-Username: admin
-Password: admin123
+admin / admin123
 ```
 
-> Change the administrator password immediately after first login. If LAN access fails, check the server firewall, NAS firewall, security group, and the `18080:8080` port mapping.
+Change the admin password immediately after first login.
 
-#### Quick Start from Source Checkout
+#### 6. Paths inside the web UI
 
-Developers or users who already cloned the repository can use the built-in compose file directly:
+The simple compose maps host directories to stable container paths:
+
+| Host directory | Container path | Use in the web UI |
+| --- | --- | --- |
+| `MEDIASTATION_MEDIA_DIR` | `/media` | `/media/Movies`, `/media/TV`, `/media/TV/CDrama` |
+| `MEDIASTATION_DOWNLOAD_DIR` | `/downloads` | Downloader save root: `/downloads` |
+
+This is a Docker bind mount. It does not copy files and does not consume double disk space.
+
+#### 7. Update
+
+Use the update helper to pull the new image and remove old MediaStationGo image layers:
 
 ```bash
-git clone https://github.com/ShukeBta/MediaStationGo.git
-cd MediaStationGo
-
-docker compose pull
-docker compose up -d
-```
-
-For later upgrades, run this from the deployment directory:
-
-```bash
+curl -fsSL https://cdn.jsdelivr.net/gh/ShukeBta/MediaStationGo@main/scripts/docker-compose-update.sh -o docker-compose-update.sh
+chmod +x docker-compose-update.sh
 ./docker-compose-update.sh
 ```
 
-### Pin a Release Version
+#### Advanced options
 
-For production, pin a specific release tag instead of using `latest`. Recommended NAS `.env`:
+The default compose intentionally stays small. For host-path direct mode, Telegram proxy variables, hardware acceleration, and additional transcoding options, see:
+
+```text
+docker-compose.advanced.yml
+```
+
+### Fixed Version Deployment
+
+For production, pin a release tag in `.env`:
+
+```env
+MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.32
+```
+
+Then run:
 
 ```bash
-cat > .env <<'EOF'
-MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.32
-MEDIASTATION_HTTP_PORT=18080
-MEDIASTATION_DATA_DIR=./data
-MEDIASTATION_CACHE_DIR=./cache
-MEDIASTATION_MEDIA_DIR=/your-nas/media
-MEDIASTATION_MEDIA_CONTAINER_DIR=/your-nas/media
-MEDIASTATION_DOWNLOAD_DIR=/your-nas/downloads
-MEDIASTATION_DOWNLOAD_CONTAINER_DIR=/your-nas/downloads
-TZ=Asia/Shanghai
-PUID=1000
-PGID=1000
-EOF
-
 docker compose pull
 docker compose up -d
 ```
 
-### Media Library Paths
+### External Network and v2rayA
 
-#### Host Paths vs Container Paths
+If your NAS already uses v2rayA redirect / transparent proxy with routing rules, MediaStationGo usually does not need extra `HTTP_PROXY` / `HTTPS_PROXY` variables.
 
-The left side of a Docker Compose volume is the real host directory, and the right side is the path inside the container. Absolute NAS host paths are read directly; they are not copied into the deployment folder and will not be nested under the compose project directory.
+Avoid stacking proxy variables in `.env`, `docker-compose.yml`, or the Docker daemon unless you intentionally use an application-level proxy. Stacked proxies can break GHCR pulls and site APIs.
 
-```yaml
-# Real host path                         # Container path
-- /your-nas/media:/media:ro
-- /your-nas/downloads:/downloads
-```
+### qBittorrent URL
 
-Inside the app, use only `/media` and `/downloads`. If you see `/your-nas/MediaStationGo/your-nas/...`, your `.env` or compose file probably uses `./your-nas/...`; remove the dot and use `/your-nas/...`.
-
-> If adding `/your-nas/media/电视剧/国产剧` as a library reports inaccessible, the app is running inside the container and normally sees `/media/电视剧/国产剧`. The updated compose passes host-path hints so the backend can auto-convert common mistakes, but `/media/...` remains the recommended and most stable input.
-
-If you prefer entering the NAS absolute path directly in the web UI, map the host path to the exact same container path. This does not copy files or use extra disk space:
-
-```env
-MEDIASTATION_MEDIA_DIR=/your-nas/media
-MEDIASTATION_MEDIA_CONTAINER_DIR=/your-nas/media
-MEDIASTATION_DOWNLOAD_DIR=/your-nas/downloads
-MEDIASTATION_DOWNLOAD_CONTAINER_DIR=/your-nas/downloads
-```
-
-Equivalent compose mounts:
-
-```yaml
-- /your-nas/media:/your-nas/media:ro
-- /your-nas/downloads:/your-nas/downloads
-```
-
-With this mode, add libraries using paths such as `/your-nas/media/电视剧/国产剧`.
-
-> Safety policy: scanning and playback read the original directory. “Organize entire library” no longer moves files already inside the library root, protecting local NFO, posters, subtitles, and other sidecar metadata. Auto-organize after downloads remains disabled by default.
-
-If your compose mounts are:
-
-```yaml
-- /mnt/nas/media:/media:ro
-- /mnt/nas/downloads:/downloads
-```
-
-then add libraries in the web UI using container paths:
-
-| Type | Recommended path |
-| --- | --- |
-| Movie library | `/media/电影` |
-| TV / anime / variety library | `/media/电视剧` |
-| Adult | `/media/Adult` |
-| Download root | `/downloads` |
-
-#### NAS Absolute Path Syntax
-
-On NAS systems, media folders are usually absolute host paths. In compose, use paths starting from the filesystem root, such as `/your-nas/...`, `/volume1/...`, or `/mnt/...`; do not use `./your-nas/...` unless that directory really exists under the compose project directory.
-
-```yaml
-# Correct: absolute host paths
-- /your-nas/media:/media:ro
-- /your-nas/downloads:/downloads
-
-# Wrong: relative to the compose directory
-- ./your-nas/media:/media:ro
-- ./your-nas/downloads:/downloads
-```
-
-You can also keep the paths in `.env`:
-
-```env
-MEDIASTATION_MEDIA_DIR=/your-nas/media
-MEDIASTATION_DOWNLOAD_DIR=/your-nas/downloads
-```
-
-Inside MediaStationGo, add `/media/电影` and `/media/电视剧` as media library roots. Organized files will land in category folders such as `/media/电影/动画电影` and `/media/电视剧/国产剧`. Use `/downloads` as the download root; subscriptions will save to folders such as `/downloads/动画电影` and `/downloads/国产剧`.
-
-### External Access and v2rayA
-
-If the NAS already uses v2rayA `redirect` / transparent proxy with routing rules, MediaStationGo usually does not need explicit `HTTP_PROXY` / `HTTPS_PROXY` variables.
-
-Avoid stacking proxy variables in `.env`, `docker-compose.yml`, or the Docker daemon unless you intentionally use an application-level HTTP proxy. Stacked proxies can break GHCR pulls and site APIs.
-
-Test from inside the container first:
-
-```bash
-docker exec -it mediastation-go sh -lc 'wget -S -O- --timeout=20 https://api.m-team.cc/api/torrent/search'
-```
-
-If it still hangs during TLS, check v2rayA redirect rules and whether Docker bridge traffic is covered by the transparent proxy instead of adding another `HTTP_PROXY` layer.
-
-### qBittorrent Connection
-
-If qBittorrent runs on the same NAS/host, do not use `127.0.0.1` from MediaStationGo; inside the container it means the MediaStationGo container itself. In Download Clients, use:
+If qBittorrent runs on the same NAS/host, do not use `127.0.0.1` from inside MediaStationGo. Use:
 
 ```text
 http://host.docker.internal:8085
 ```
 
-The default `docker-compose.yml` includes:
+If qBittorrent also runs in Docker, mount the same host download directory as `/downloads` in both containers. Use `/downloads` as the subscription save root.
 
-```yaml
-extra_hosts:
-  - "host.docker.internal:host-gateway"
-```
-
-If `http://192.168.1.125:8085` times out but `http://172.17.0.1:8085` returns 403, the container can reach qBittorrent but the WebUI rejects login. Check username/password, IP bans, CSRF/Host Header validation, and allowed subnets/domains.
-
-Quick test from the MediaStationGo container:
-
-```bash
-docker exec -it mediastation-go sh -lc 'wget -S -O- --post-data="username=YOUR_USER&password=YOUR_PASS" http://host.docker.internal:8085/api/v2/auth/login'
-```
-
-`Ok.` means the connection is healthy. `Forbidden` / `403` means qBittorrent WebUI security settings or credentials still need adjustment.
-
-### Download Client Paths
-
-If qBittorrent also runs in Docker, make sure qBittorrent and MediaStationGo share the same host directory and use consistent container paths.
-
-Recommended mapping:
-
-```text
-Host: /mnt/nas/downloads
-MediaStationGo container: /downloads
-qBittorrent container: /downloads
-```
-
-Recommended subscription save root:
-
-```text
-/downloads
-```
-
-With smart classification enabled, subscription and site-search downloads are saved to category folders such as:
-
-```text
-/downloads/动画电影
-/downloads/华语电影
-/downloads/外语电影
-/downloads/国产剧
-/downloads/国漫
-/downloads/日番
-/downloads/欧美剧
-/downloads/日韩剧
-/downloads/综艺
-```
+With smart classification enabled, downloads are saved to folders such as `/downloads/动画电影`, `/downloads/国产剧`, and `/downloads/综艺`.
 
 ---
 
 ## 🐳 Docker Compose Configuration
 
-The repository includes a heavily commented `docker-compose.yml`. Common variables:
+The default repository `docker-compose.yml` is intentionally simple. Most users only need these variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -520,9 +332,7 @@ The repository includes a heavily commented `docker-compose.yml`. Common variabl
 | `MEDIASTATION_DATA_DIR` | `./data` | Persistent data directory |
 | `MEDIASTATION_CACHE_DIR` | `./cache` | Image and transcoding cache |
 | `MEDIASTATION_MEDIA_DIR` | `./media` | Host media library root; on NAS use an absolute path such as `/your-nas/media` |
-| `MEDIASTATION_MEDIA_CONTAINER_DIR` | `/media` | Container media path; set it equal to `MEDIASTATION_MEDIA_DIR` if you want to enter `/your-nas/...` directly in the web UI |
 | `MEDIASTATION_DOWNLOAD_DIR` | `./downloads` | Host download target; on NAS use an absolute path such as `/your-nas/downloads` |
-| `MEDIASTATION_DOWNLOAD_CONTAINER_DIR` | `/downloads` | Container download path; set it equal to `MEDIASTATION_DOWNLOAD_DIR` if your downloader save path should also be `/your-nas/...` |
 | `PUID` / `PGID` | `1000` / `1000` | Linux/NAS file permission mapping |
 | `TZ` | `Asia/Shanghai` | Container timezone |
 
