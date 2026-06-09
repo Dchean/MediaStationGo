@@ -251,6 +251,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("organizer.smart_classify", false)
 	v.SetDefault("organizer.auto_after_download", false)
 	v.SetDefault("organize.scrape_after", false)
+	v.SetDefault("scrape.delay_min_ms", 250)
+	v.SetDefault("scrape.delay_max_ms", 500)
 	v.SetDefault("organizer.categories.chinese_movie", "华语电影")
 	v.SetDefault("organizer.categories.animation_movie", "动画电影")
 	v.SetDefault("organizer.categories.foreign_movie", "外语电影")

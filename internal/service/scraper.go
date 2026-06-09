@@ -13,6 +13,7 @@ package service
 
 import (
 	"context"
+	"math/rand"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -109,6 +110,12 @@ var multiWordNoise = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\berai[\s._-]*raws\b`),
 	regexp.MustCompile(`(?i)\bohys[\s._-]*raws\b`),
 }
+
+const (
+	defaultScrapeDelayMinMS = 250
+	defaultScrapeDelayMaxMS = 500
+	maxScrapeDelayMS        = 5 * 60 * 1000
+)
 
 // CleanQuery converts a filename like "Inception.2010.1080p.BluRay.x264.mkv"
 // into a TMDb-friendly title plus an optional year hint.
@@ -628,7 +635,15 @@ func (s *ScraperService) EnrichLibrary(ctx context.Context, libraryID string, re
 		if s.mediaIsMatched(ctx, rows[i].ID) {
 			matched++
 		}
-		time.Sleep(250 * time.Millisecond) // ~4 RPS
+		if i < len(rows)-1 {
+			if delay := s.scrapeDelay(ctx); delay > 0 {
+				select {
+				case <-ctx.Done():
+					return matched, ctx.Err()
+				case <-time.After(delay):
+				}
+			}
+		}
 	}
 	s.hub.Publish("scrape", map[string]any{
 		"library_id": libraryID,
@@ -637,6 +652,44 @@ func (s *ScraperService) EnrichLibrary(ctx context.Context, libraryID string, re
 		"processed":  processed,
 	})
 	return matched, nil
+}
+
+func (s *ScraperService) scrapeDelay(ctx context.Context) time.Duration {
+	minMS := s.scrapeDelaySetting(ctx, "scrape.delay_min_ms", defaultScrapeDelayMinMS)
+	maxMS := s.scrapeDelaySetting(ctx, "scrape.delay_max_ms", defaultScrapeDelayMaxMS)
+	if minMS < 0 {
+		minMS = 0
+	}
+	if maxMS < 0 {
+		maxMS = 0
+	}
+	if minMS > maxScrapeDelayMS {
+		minMS = maxScrapeDelayMS
+	}
+	if maxMS > maxScrapeDelayMS {
+		maxMS = maxScrapeDelayMS
+	}
+	if maxMS < minMS {
+		maxMS = minMS
+	}
+	if maxMS == 0 {
+		return 0
+	}
+	if maxMS == minMS {
+		return time.Duration(minMS) * time.Millisecond
+	}
+	return time.Duration(minMS+rand.Intn(maxMS-minMS+1)) * time.Millisecond
+}
+
+func (s *ScraperService) scrapeDelaySetting(ctx context.Context, key string, fallback int) int {
+	if s == nil || s.repo == nil || s.repo.Setting == nil {
+		return fallback
+	}
+	value, err := s.repo.Setting.Get(ctx, key)
+	if err != nil || strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return parseIntSettingDefault(strings.TrimSpace(value), fallback)
 }
 
 func (s *ScraperService) mediaIsMatched(ctx context.Context, mediaID string) bool {

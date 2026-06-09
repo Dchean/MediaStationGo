@@ -258,6 +258,22 @@ const GROUPS: SettingGroup[] = [
         placeholder: 'zh-CN',
       },
       {
+        key: 'scrape.delay_min_ms',
+        label: '刮削最小间隔毫秒',
+        type: 'number',
+        hint: '参考 nowen-video 的随机节流策略。批量刮削时两条媒体之间会随机等待，避免 TMDb / Bangumi / JavBus / JavDB 等源请求过快。',
+        defaultValue: '250',
+        placeholder: '250',
+      },
+      {
+        key: 'scrape.delay_max_ms',
+        label: '刮削最大间隔毫秒',
+        type: 'number',
+        hint: '如遇到站点限速、超时或 403，可提高到 2000-5000；填 0 可关闭批量刮削间隔。',
+        defaultValue: '500',
+        placeholder: '500',
+      },
+      {
         key: 'scan.periodic_enabled',
         label: '周期性整库重扫',
         type: 'toggle',

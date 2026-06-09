@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
@@ -197,6 +198,38 @@ func TestManualEnrichLibraryRetriesNoMatchAndCountsRealMatches(t *testing.T) {
 	}
 	if matched, err := scraper.EnrichLibrary(t.Context(), lib.ID, true); err != nil || matched != 1 {
 		t.Fatalf("manual EnrichLibrary matched=%d err=%v, want one real match", matched, err)
+	}
+}
+
+func TestScrapeDelayUsesSettings(t *testing.T) {
+	scraper, repos, closeServer := newTestScraper(t)
+	defer closeServer()
+	if err := repos.DB.AutoMigrate(&model.Setting{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := scraper.scrapeDelay(t.Context()); got < 250*time.Millisecond || got > 500*time.Millisecond {
+		t.Fatalf("default scrapeDelay = %s, want 250-500ms", got)
+	}
+
+	if err := repos.Setting.Set(t.Context(), "scrape.delay_min_ms", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Setting.Set(t.Context(), "scrape.delay_max_ms", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := scraper.scrapeDelay(t.Context()); got != 0 {
+		t.Fatalf("disabled scrapeDelay = %s, want 0", got)
+	}
+
+	if err := repos.Setting.Set(t.Context(), "scrape.delay_min_ms", "800"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Setting.Set(t.Context(), "scrape.delay_max_ms", "200"); err != nil {
+		t.Fatal(err)
+	}
+	if got := scraper.scrapeDelay(t.Context()); got != 800*time.Millisecond {
+		t.Fatalf("normalized scrapeDelay = %s, want 800ms", got)
 	}
 }
 

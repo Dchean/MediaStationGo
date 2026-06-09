@@ -94,6 +94,8 @@ func schemaHandler(_ *service.Container) gin.HandlerFunc {
 						{"key": "scrape.auto_on_scan", "type": "toggle"},
 						{"key": "scrape.providers", "type": "text"},
 						{"key": "scrape.language", "type": "text"},
+						{"key": "scrape.delay_min_ms", "type": "number", "label": "刮削最小间隔毫秒"},
+						{"key": "scrape.delay_max_ms", "type": "number", "label": "刮削最大间隔毫秒"},
 					},
 				},
 				{
