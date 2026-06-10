@@ -450,6 +450,18 @@ func TestOpenListRootURLDefaultsToDAV(t *testing.T) {
 	}
 }
 
+func TestOpenListURLForKeepsNonASCIIPathSingleEncoded(t *testing.T) {
+	p := newOpenList(map[string]any{"url": "http://example.test:5244/dav/"}, nil)
+	got := p.urlFor("/动画电影/爱宠大机密2 (2019) {tmdb-412117}")
+	if strings.Contains(got, "%25E") {
+		t.Fatalf("url is double-escaped: %s", got)
+	}
+	want := "http://example.test:5244/dav/%E5%8A%A8%E7%94%BB%E7%94%B5%E5%BD%B1/%E7%88%B1%E5%AE%A0%E5%A4%A7%E6%9C%BA%E5%AF%862%20%282019%29%20%7Btmdb-412117%7D"
+	if got != want {
+		t.Fatalf("url = %s, want %s", got, want)
+	}
+}
+
 func TestOpenListDAVStatusErrorIncludesBodyHint(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)

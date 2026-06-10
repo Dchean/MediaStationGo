@@ -173,12 +173,15 @@ func (s *ScraperService) EnrichOne(ctx context.Context, m *model.Media) error {
 	}
 
 	seriesLike := mediaIsEpisodic(m, lib)
+	cloudMedia := isCloudMediaPath(m.Path) || (lib != nil && isCloudMediaPath(lib.Path))
 	var local *LocalMetadata
-	if found, err := ReadLocalMetadata(m.Path, lib.Path, seriesLike); err == nil && found != nil {
-		local = found
-		applyLocalMetadata(m, local)
-	} else if err != nil {
-		s.log.Warn("read local metadata before scrape failed", zap.String("media_id", m.ID), zap.Error(err))
+	if !cloudMedia {
+		if found, err := ReadLocalMetadata(m.Path, lib.Path, seriesLike); err == nil && found != nil {
+			local = found
+			applyLocalMetadata(m, local)
+		} else if err != nil {
+			s.log.Warn("read local metadata before scrape failed", zap.String("media_id", m.ID), zap.Error(err))
+		}
 	}
 
 	year := m.Year
@@ -351,11 +354,14 @@ func (s *ScraperService) applyProviderMatch(ctx context.Context, m *model.Media,
 		Updates(updates).Error; err != nil {
 		return err
 	}
-	if refreshed, err := s.repo.Media.FindByID(ctx, m.ID); err == nil && refreshed != nil {
-		if path, err := WriteMediaNFO(refreshed); err != nil {
-			s.log.Warn("write nfo after scrape failed", zap.String("media_id", m.ID), zap.Error(err))
-		} else {
-			s.log.Debug("write nfo after scrape", zap.String("media_id", m.ID), zap.String("path", path))
+	cloudMedia := isCloudMediaPath(m.Path) || (lib != nil && isCloudMediaPath(lib.Path))
+	if !cloudMedia {
+		if refreshed, err := s.repo.Media.FindByID(ctx, m.ID); err == nil && refreshed != nil {
+			if path, err := WriteMediaNFO(refreshed); err != nil {
+				s.log.Warn("write nfo after scrape failed", zap.String("media_id", m.ID), zap.Error(err))
+			} else {
+				s.log.Debug("write nfo after scrape", zap.String("media_id", m.ID), zap.String("path", path))
+			}
 		}
 	}
 	s.hub.Publish("scrape", map[string]any{
@@ -366,6 +372,10 @@ func (s *ScraperService) applyProviderMatch(ctx context.Context, m *model.Media,
 		"source":     map[bool]string{true: "adult"}[match.NSFW],
 	})
 	return nil
+}
+
+func isCloudMediaPath(value string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(value)), "cloud://")
 }
 
 func (s *ScraperService) applyLocalMetadataMatch(ctx context.Context, m *model.Media, local *LocalMetadata) error {

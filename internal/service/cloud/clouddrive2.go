@@ -251,18 +251,21 @@ func decorateDAVTransportError(name, target string, err error) error {
 
 func (p *cloudDrive2Provider) urlFor(remotePath string) string {
 	u := *p.base
-	basePath := strings.TrimRight(u.EscapedPath(), "/")
-	segments := make([]string, 0)
-	if basePath != "" && basePath != "/" {
-		segments = append(segments, strings.Trim(basePath, "/"))
-	}
-	for _, part := range strings.Split(strings.Trim(normalizeCloudDAVPath(remotePath), "/"), "/") {
-		if part != "" {
-			segments = append(segments, url.PathEscape(part))
-		}
-	}
 	u.RawPath = ""
-	u.Path = "/" + strings.Join(segments, "/")
+	basePath := strings.TrimRight(u.Path, "/")
+	remote := strings.Trim(normalizeCloudDAVPath(remotePath), "/")
+	switch {
+	case basePath == "" || basePath == "/":
+		if remote == "" {
+			u.Path = "/"
+		} else {
+			u.Path = "/" + remote
+		}
+	case remote == "":
+		u.Path = basePath
+	default:
+		u.Path = basePath + "/" + remote
+	}
 	return u.String()
 }
 
