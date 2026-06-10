@@ -152,6 +152,12 @@ export interface ScanResult {
   probed: number
   local_metadata?: number
   removed?: number
+  skipped?: number
+  discovered?: number
+  queued?: boolean
+  cloud?: boolean
+  message?: string
+  estimate_message?: string
 }
 
 export interface Setting {

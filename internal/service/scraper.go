@@ -82,14 +82,14 @@ var noiseTokens = []string{
 	"netflix", "nf", "amzn", "hulu", "disney", "max", "hbo",
 	"linetv", "ourtv", "iqiyi", "youku", "bilibili", "qiyi", "krj",
 	"crunchyroll", "funimation", "anidb", "horriblesubs", "subsplease",
-	"erai-raws", "judas", "asw", "smcat", "leopard-raws", "ohys-raws",
+	"erai-raws", "judas", "asw", "smcat", "leopard-raws", "ohys-raws", "colortv",
 
 	// 中文字幕标记
 	"zm", "zw", "ch", "chs", "cht", "cn", "tc", "sc",
 	"中字", "繁字", "简中", "繁中", "国语", "粤语", "日语",
 
 	// 季数前缀残留 — ParseEpisode 已抽取过
-	"season",
+	"season", "264", "265",
 }
 
 var noiseTokenSet = func() map[string]struct{} {
@@ -101,8 +101,8 @@ var noiseTokenSet = func() map[string]struct{} {
 	return set
 }()
 
-// bracketedTag matches "[anything]" or "(anything)" segments.
-var bracketedTag = regexp.MustCompile(`[\[\(][^\]\)]*[\]\)]`)
+// bracketedTag matches "[anything]", "(anything)" or "{anything}" segments.
+var bracketedTag = regexp.MustCompile(`[\[\(\{][^\]\)\}]*[\]\)\}]`)
 var multiWordNoise = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bweb[\s._-]*dl\b`),
 	regexp.MustCompile(`(?i)\bblu[\s._-]*ray\b`),

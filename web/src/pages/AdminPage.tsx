@@ -155,7 +155,8 @@ function LibraryPanel() {
                     className="rounded-lg border border-primary-400/40 px-2 py-1 text-xs text-brand-500 hover:bg-primary-400/10"
                     onClick={async () => {
                       const r = await libraryAPI.scan(l.id)
-                      toast.success(`扫描完成，新增 ${r.added}，更新 ${r.updated ?? 0}`)
+                      if (r.queued) toast.success('云盘扫描已加入后台队列，会自动入库')
+                      else toast.success(`扫描完成，新增 ${r.added}，更新 ${r.updated ?? 0}`)
                     }}
                   >
                     扫描

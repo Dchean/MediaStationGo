@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
@@ -11,6 +11,7 @@ import { ExternalPlayerButton } from '../components/ExternalPlayerButton'
 import { imageURL } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { getSeriesKey, groupSeries, isEpisodeLike, seriesTitle, type SeriesCard } from '../utils/groupSeries'
+import { useWebSocket } from '../hooks/useWebSocket'
 
 export function LibraryPage() {
   const { id = '' } = useParams()
@@ -22,6 +23,7 @@ export function LibraryPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
+  const [scanProgress, setScanProgress] = useState('')
   const [scraping, setScraping] = useState(false)
 
   // 剧集模式：选中某个剧集后展开详情
@@ -71,17 +73,72 @@ export function LibraryPage() {
 
   useEffect(() => {
     if (!id || !library) return
+    let cancelled = false
     setLoading(true)
-    // 所有库都可能包含季集型内容（综艺/纪录片/课程等），统一拉取较大页数用于前端分组。
-    const limit = 2000
-    libraryAPI
-      .listMedia(id, 1, limit)
-      .then((d) => {
-        setItems(d.items)
-        setTotal(d.total)
-      })
-      .finally(() => setLoading(false))
+    setItems([])
+    const loadAll = async () => {
+      const pageSize = 2000
+      let page = 1
+      let collected: Media[] = []
+      try {
+        for (;;) {
+          const d = await libraryAPI.listMedia(id, page, pageSize)
+          if (cancelled) return
+          collected = collected.concat(d.items)
+          setItems(collected)
+          setTotal(d.total)
+          if (collected.length >= d.total || d.items.length < pageSize) break
+          page += 1
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    loadAll().catch(() => {
+      if (!cancelled) {
+        toast.error('媒体库加载失败')
+        setLoading(false)
+      }
+    })
+    return () => { cancelled = true }
   }, [id, library])
+
+  const reloadCurrentLibrary = useCallback(() => {
+    setLibrary((l) => (l ? { ...l } : l))
+  }, [])
+
+  const onRealtimeEvent = useCallback((topic: string, payload: unknown) => {
+    if (topic !== 'scan' || !payload || typeof payload !== 'object') return
+    const p = payload as Record<string, unknown>
+    if (p.library_id !== id) return
+    if (p.error) {
+      setScanning(false)
+      setScanProgress(`扫描失败：${String(p.error)}`)
+      return
+    }
+    if (p.finished) {
+      setScanning(false)
+      const elapsed = Number(p.elapsed_seconds ?? p.elapsed ?? 0)
+      const elapsedText = elapsed > 0 ? ` · 耗时 ${formatDuration(elapsed)}` : ''
+      setScanProgress(`扫描完成：发现 ${p.discovered ?? p.visited ?? 0} · 新增 ${p.added ?? 0} · 更新 ${p.updated ?? 0} · 跳过 ${p.skipped ?? 0}${elapsedText}`)
+      reloadCurrentLibrary()
+      return
+    }
+    if (p.queued) {
+      setScanning(true)
+      setScanProgress(String(p.message ?? '扫描已排队，后台会自动入库'))
+      return
+    }
+    if (p.cloud && p.stage) {
+      const stage = p.stage === 'importing' ? '正在入库' : '正在遍历目录'
+      const speed = Number(p.files_per_second ?? 0)
+      const speedText = speed > 0 ? ` · ${speed.toFixed(speed >= 10 ? 0 : 1)} 个/秒` : ''
+      setScanning(true)
+      setScanProgress(`${stage}：目录 ${p.dirs ?? 0} · 已发现 ${p.discovered ?? 0} · 已入库 ${p.visited ?? 0}${speedText}`)
+    }
+  }, [id, reloadCurrentLibrary])
+
+  useWebSocket(onRealtimeEvent)
 
   useEffect(() => {
     if (loading) return
@@ -113,13 +170,27 @@ export function LibraryPage() {
 
   const handleScan = async () => {
     setScanning(true)
+    setScanProgress('正在提交扫描任务…')
+    let keepScanning = false
     try {
       const r = await libraryAPI.scan(id)
-      toast.success(`扫描完成:新增 ${r.added} 项，更新 ${r.updated ?? 0} 项`)
-      setLibrary((l) => (l ? { ...l } : l))
+      if (r.queued) {
+        keepScanning = true
+        setScanProgress(`${r.message ?? '云盘扫描已在后台运行，发现的媒体会自动加入当前媒体库'}；${r.estimate_message ?? '大目录耗时取决于网盘接口速度'}`)
+        toast.success('云盘扫描已加入后台队列')
+      } else {
+        toast.success(`扫描完成:新增 ${r.added} 项，更新 ${r.updated ?? 0} 项`)
+        setScanProgress(`扫描完成：新增 ${r.added} · 更新 ${r.updated ?? 0}`)
+        reloadCurrentLibrary()
+        setScanning(false)
+      }
     } catch {
       toast.error('扫描失败')
-    } finally { setScanning(false) }
+      setScanProgress('扫描失败，请查看日志或稍后重试')
+      setScanning(false)
+    } finally {
+      if (!keepScanning) setScanning(false)
+    }
   }
 
   const handleScrape = async () => {
@@ -168,6 +239,7 @@ export function LibraryPage() {
             <span className="text-sand-500"> ({isSeries ? seriesCards.length : total})</span>
           </h1>
           {library && <p className="text-sm text-ink-50">{library.type} · {library.path}</p>}
+          {scanProgress && <p className="mt-1 text-xs text-brand-500">{scanProgress}</p>}
         </div>
         {role === 'admin' && (
           <div className="flex flex-wrap gap-2">
@@ -325,6 +397,16 @@ export function LibraryPage() {
       )}
     </div>
   )
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return ''
+  if (seconds < 60) return `${Math.round(seconds)}秒`
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.round(seconds % 60)
+  if (minutes < 60) return `${minutes}分${rest}秒`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}小时${minutes % 60}分`
 }
 
 function formatSize(bytes: number): string {

@@ -6,8 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"github.com/ShukeBta/MediaStationGo/internal/middleware"
 	"github.com/ShukeBta/MediaStationGo/internal/service"
@@ -29,6 +31,7 @@ func listLibrariesHandler(svc *service.Container) gin.HandlerFunc {
 		role, _ := c.Get(middleware.CtxUserRole)
 		includeHidden := role == "admin" && (c.Query("include_hidden") == "1" || c.Query("all") == "1")
 		if !includeHidden {
+			libs = service.FilterShadowedCloudLibraries(libs)
 			visibility := mediaVisibilityForRequest(c, svc)
 			filtered := libs[:0]
 			for _, lib := range libs {
@@ -79,9 +82,56 @@ func deleteLibraryHandler(svc *service.Container) gin.HandlerFunc {
 func scanLibraryHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		// Run synchronously: small libraries return immediately, big ones can
-		// hit the (configurable) HTTP timeout. A future task queue can move
-		// this to a background worker.
+		lib, err := svc.Repo.Library.FindByID(c.Request.Context(), id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if lib == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "library not found"})
+			return
+		}
+		if _, ok := service.ParseCloudLibraryMount(lib.Path); ok {
+			if svc.WSHub != nil {
+				svc.WSHub.Publish("scan", gin.H{
+					"library_id":       id,
+					"cloud":            true,
+					"queued":           true,
+					"stage":            "queued",
+					"message":          "云盘扫描已加入后台队列，会递归扫描并自动加入媒体库",
+					"estimate_message": "小目录通常几十秒；几万文件的大目录可能需要数分钟到数小时，取决于网盘接口速度",
+				})
+			}
+			go func(libraryID string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
+				defer cancel()
+				if _, err := svc.Scan.ScanLibraryWithoutAutoScrape(ctx, libraryID); err != nil {
+					if svc.Log != nil {
+						svc.Log.Warn("cloud library async scan failed", zap.String("library_id", libraryID), zap.Error(err))
+					}
+					if svc.WSHub != nil {
+						svc.WSHub.Publish("scan", gin.H{
+							"library_id": libraryID,
+							"cloud":      true,
+							"finished":   true,
+							"error":      err.Error(),
+						})
+					}
+				}
+			}(id)
+			c.JSON(http.StatusAccepted, gin.H{
+				"library_id":       id,
+				"visited":          0,
+				"added":            0,
+				"updated":          0,
+				"probed":           0,
+				"queued":           true,
+				"cloud":            true,
+				"message":          "云盘扫描已在后台运行，发现的媒体会自动加入当前媒体库",
+				"estimate_message": "小目录通常几十秒；几万文件的大目录可能需要数分钟到数小时，取决于网盘接口速度",
+			})
+			return
+		}
 		res, err := svc.Scan.ScanLibrary(c.Request.Context(), id)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

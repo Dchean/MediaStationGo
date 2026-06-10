@@ -186,6 +186,7 @@ func (e *EmbyService) Views(ctx context.Context, userID string) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
+	libs = FilterShadowedCloudLibraries(libs)
 	visibility := UserDefaultMediaVisibility(ctx, e.repo, userID)
 	items := make([]map[string]any, 0, len(libs))
 	for _, l := range libs {
@@ -1149,9 +1150,10 @@ func (e *EmbyService) hiddenLibraryIDs(ctx context.Context, visibility MediaVisi
 	if err != nil {
 		return nil
 	}
+	shadowed := ShadowedCloudLibraryIDSet(libs)
 	ids := make([]string, 0)
 	for _, lib := range libs {
-		if !LibraryVisibleForUser(ctx, e.repo, lib, visibility) {
+		if shadowed[lib.ID] || !LibraryVisibleForUser(ctx, e.repo, lib, visibility) {
 			ids = append(ids, lib.ID)
 		}
 	}

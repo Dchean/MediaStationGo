@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ShukeBta/MediaStationGo/internal/config"
+	"github.com/ShukeBta/MediaStationGo/internal/model"
 	"github.com/ShukeBta/MediaStationGo/internal/repository"
 )
 
@@ -232,6 +233,9 @@ func (c *Container) Boot() {
 	if err := c.APIConfig.SeedDefaults(c.stopCtx); err != nil {
 		c.Log.Warn("api config seed failed", zap.Error(err))
 	}
+	if err := c.NormalizeCloudLibraryTypes(c.stopCtx); err != nil {
+		c.Log.Warn("normalize cloud library types failed", zap.Error(err))
+	}
 
 	// 加载所有已配置的下载客户端
 	if err := c.DownloadMgr.LoadAll(c.stopCtx); err != nil {
@@ -246,6 +250,33 @@ func (c *Container) Boot() {
 	if c.Device != nil {
 		go c.runInactivitySweeper(c.stopCtx)
 	}
+}
+
+func (c *Container) NormalizeCloudLibraryTypes(ctx context.Context) error {
+	if c == nil || c.Repo == nil || c.Repo.Library == nil || c.Repo.DB == nil {
+		return nil
+	}
+	libs, err := c.Repo.Library.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, lib := range libs {
+		info, ok := ParseCloudLibraryMount(lib.Path)
+		if !ok {
+			continue
+		}
+		want := InferCloudMountMediaType(info.DisplayDir, lib.Name)
+		if want == "" || want == lib.Type {
+			continue
+		}
+		if err := c.Repo.DB.WithContext(ctx).
+			Model(&model.Library{}).
+			Where("id = ?", lib.ID).
+			Update("type", want).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // runInactivitySweeper periodically runs the account-cleanup policy. Kept with

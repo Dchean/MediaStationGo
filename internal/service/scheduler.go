@@ -334,7 +334,7 @@ func (s *SchedulerService) jobSyncCloudLibraries(ctx context.Context) error {
 		if _, _, ok := parseCloudLibraryPath(l.Path); !ok {
 			continue
 		}
-		if _, err := s.scanner.ScanLibrary(ctx, l.ID); err != nil {
+		if _, err := s.scanner.ScanLibraryWithoutAutoScrape(ctx, l.ID); err != nil {
 			s.log.Warn("cloud sync failed", zap.String("library", l.ID), zap.Error(err))
 		}
 	}

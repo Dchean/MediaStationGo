@@ -3,12 +3,14 @@
 package handler
 
 import (
+	"context"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 	"github.com/ShukeBta/MediaStationGo/internal/service"
@@ -52,13 +54,14 @@ func cloudImportHandler(svc *service.Container) gin.HandlerFunc {
 }
 
 // cloudMountHandler creates or reuses a cloud:// media library for a cloud
-// directory, then scans it recursively so cloud files become playable STRM/302
-// media rows without copying bytes to local disk.
+// directory, then queues a recursive import scan. The scan runs outside the
+// request so large 115/OpenList folders do not make the UI report a timeout.
 func cloudMountHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		typ := c.Param("type")
 		var in struct {
 			Dir       string `json:"dir"`
+			DirPath   string `json:"dir_path"`
 			Name      string `json:"name"`
 			MediaType string `json:"media_type"`
 		}
@@ -71,17 +74,18 @@ func cloudMountHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		path := "cloud://" + typ
-		if dir := strings.TrimSpace(in.Dir); dir != "" {
-			path += "/" + url.PathEscape(dir)
-		}
+		path := service.BuildCloudLibraryPath(typ, in.Dir, in.DirPath)
 		name := strings.TrimSpace(in.Name)
 		if name == "" {
 			name = cloudMountLibraryName(typ, strings.TrimSpace(in.Dir))
 		}
 		mediaType := strings.TrimSpace(in.MediaType)
 		if mediaType == "" || strings.EqualFold(mediaType, "auto") {
-			mediaType = cloudMountMediaType(strings.TrimSpace(in.Dir), name)
+			displayDir := strings.TrimSpace(in.DirPath)
+			if displayDir == "" {
+				displayDir = strings.TrimSpace(in.Dir)
+			}
+			mediaType = service.InferCloudMountMediaType(displayDir, name)
 		}
 		libs, err := svc.Repo.Library.List(c.Request.Context())
 		if err != nil {
@@ -89,10 +93,18 @@ func cloudMountHandler(svc *service.Container) gin.HandlerFunc {
 			return
 		}
 		var lib *model.Library
-		for i := range libs {
-			if libs[i].Path == path {
-				lib = &libs[i]
-				break
+		alreadyMounted := false
+		if conflict := service.FindCloudMountConflict(libs, typ, in.Dir, in.DirPath); conflict != nil {
+			lib = &conflict.Library
+			alreadyMounted = conflict.Exact
+			if conflict.Nested {
+				c.JSON(http.StatusOK, gin.H{
+					"library":          lib,
+					"skipped":          true,
+					"reason":           "cloud mount overlaps an existing mounted parent/child directory",
+					"conflict_library": conflict.Library,
+				})
+				return
 			}
 		}
 		if lib == nil {
@@ -101,17 +113,75 @@ func cloudMountHandler(svc *service.Container) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-		}
-		var scan any
-		if svc.Scan != nil {
-			res, err := svc.Scan.ScanLibrary(c.Request.Context(), lib.ID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "library": lib})
-				return
+		} else if alreadyMounted {
+			updates := map[string]any{}
+			if path != "" && path != lib.Path {
+				updates["path"] = path
+				lib.Path = path
 			}
-			scan = res
+			if mediaType != "" && mediaType != lib.Type {
+				updates["type"] = mediaType
+				lib.Type = mediaType
+			}
+			if name != "" && name != lib.Name && !strings.Contains(lib.Name, " · ") {
+				updates["name"] = name
+				lib.Name = name
+			}
+			if len(updates) > 0 {
+				if err := svc.Repo.DB.WithContext(c.Request.Context()).Model(&model.Library{}).Where("id = ?", lib.ID).Updates(updates).Error; err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+			}
 		}
-		c.JSON(http.StatusOK, gin.H{"library": lib, "scan": scan})
+		if svc.Scan != nil {
+			libID := lib.ID
+			if svc.WSHub != nil {
+				svc.WSHub.Publish("scan", gin.H{
+					"library_id":       libID,
+					"cloud":            true,
+					"queued":           true,
+					"stage":            "queued",
+					"message":          "云盘扫描已加入后台队列，会递归扫描并自动加入媒体库",
+					"estimate_message": "小目录通常几十秒；几万文件的大目录可能需要数分钟到数小时，取决于网盘接口速度",
+				})
+			}
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
+				defer cancel()
+				res, err := svc.Scan.ScanLibraryWithoutAutoScrape(ctx, libID)
+				if err != nil {
+					if svc.Log != nil {
+						svc.Log.Warn("cloud mount background scan failed", zap.String("library_id", libID), zap.Error(err))
+					}
+					if svc.WSHub != nil {
+						svc.WSHub.Publish("scan", gin.H{
+							"library_id": libID,
+							"cloud":      true,
+							"finished":   true,
+							"error":      err.Error(),
+						})
+					}
+					return
+				}
+				if svc.Log != nil {
+					svc.Log.Info("cloud mount background scan finished",
+						zap.String("library_id", libID),
+						zap.Int("visited", res.Visited),
+						zap.Int("added", res.Added),
+						zap.Int("updated", res.Updated),
+						zap.Int("skipped", res.Skipped),
+						zap.Int64("removed", res.Removed))
+				}
+			}()
+		}
+		c.JSON(http.StatusAccepted, gin.H{
+			"library":          lib,
+			"already_mounted":  alreadyMounted,
+			"scan_queued":      svc.Scan != nil,
+			"message":          "挂载后会后台递归扫描，发现的媒体会自动加入当前媒体库",
+			"estimate_message": "小目录通常几十秒；几万文件的大目录可能需要数分钟到数小时，取决于网盘接口速度",
+		})
 	}
 }
 
@@ -131,22 +201,6 @@ func cloudMountLibraryName(typ, dir string) string {
 		return base
 	}
 	return base + " · " + dir
-}
-
-func cloudMountMediaType(dir, name string) string {
-	text := strings.ToLower(dir + " " + name)
-	switch {
-	case strings.Contains(text, "成人") || strings.Contains(text, "adult") || strings.Contains(text, "jav") || strings.Contains(text, "9kg"):
-		return "adult"
-	case strings.Contains(text, "动漫") || strings.Contains(text, "动画") || strings.Contains(text, "国漫") || strings.Contains(text, "日番") || strings.Contains(text, "anime"):
-		return "anime"
-	case strings.Contains(text, "综艺") || strings.Contains(text, "variety") || strings.Contains(text, "show"):
-		return "variety"
-	case strings.Contains(text, "剧") || strings.Contains(text, "series") || strings.Contains(text, "tv"):
-		return "tv"
-	default:
-		return "movie"
-	}
 }
 
 // cloud115QRStartHandler begins a 115 QR-code login and returns the session +

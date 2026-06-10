@@ -99,9 +99,9 @@ export const cloudAPI = {
       .post(`/admin/cloud/${type}/import`, { ref, name, size })
       .then((r) => r.data),
 
-  mount: (type: StorageType, dir = '', name = '', media_type = 'movie') =>
+  mount: (type: StorageType, dir = '', name = '', media_type = 'movie', dir_path = '') =>
     api
-      .post(`/admin/cloud/${type}/mount`, { dir, name, media_type })
+      .post(`/admin/cloud/${type}/mount`, { dir, dir_path, name, media_type })
       .then((r) => r.data),
 
   qrStart: (type: StorageType) =>

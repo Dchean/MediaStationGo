@@ -299,7 +299,11 @@ func (r *MediaRepository) Upsert(ctx context.Context, m *model.Media) error {
 		if m.ScrapeStatus == "" {
 			m.ScrapeStatus = "pending"
 		}
-		return r.db.WithContext(ctx).Create(m).Error
+		if createErr := r.db.WithContext(ctx).Create(m).Error; createErr == nil {
+			return nil
+		} else if retryErr := r.db.WithContext(ctx).Unscoped().Where("path = ?", m.Path).First(&existing).Error; retryErr != nil {
+			return createErr
+		}
 	}
 	if err != nil {
 		return err

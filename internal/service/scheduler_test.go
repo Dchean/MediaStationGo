@@ -154,7 +154,7 @@ func TestSchedulerCloudSyncImportsMountedCloudLibrary(t *testing.T) {
 		t.Fatalf("cloud sync: %v", err)
 	}
 	var media model.Media
-	if err := repos.DB.First(&media, "path = ?", "cloud://quark/f1").Error; err != nil {
+	if err := repos.DB.First(&media, "path = ?", "cloud://quark/Cloud.Movie.2026.mkv").Error; err != nil {
 		t.Fatalf("cloud media not imported: %v", err)
 	}
 	if media.STRMURL != "/api/cloud/play/quark?ref=f1" {

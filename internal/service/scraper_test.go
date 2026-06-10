@@ -31,6 +31,8 @@ func TestCleanQuery(t *testing.T) {
 		{"My Movie 2022 [HDR] (1080p) [TGx].mp4", "my movie", 2022},
 		{"NoYearOrTags.mkv", "noyearortags", 0},
 		{"亏成首富从游戏开始 The Richest in Game - S01E11 - 4K.mp4", "亏成首富从游戏开始 the richest in game", 0},
+		{"紫川.2024.S02E24.第24集.2160p.WEB-DL.H.265-ColorTV.mkv", "紫川", 2024},
+		{"紫川 (2024) {tmdb-247590}", "紫川", 2024},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {

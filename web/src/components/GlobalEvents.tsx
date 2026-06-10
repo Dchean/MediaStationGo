@@ -10,8 +10,28 @@ export function GlobalEvents() {
   const onEvent = useCallback((topic: string, payload: unknown) => {
     if (!payload || typeof payload !== 'object') return
     const p = payload as Record<string, unknown>
-    if (topic === 'scan' && p.finished) {
-      toast.success(`扫描完成:已添加 ${p.added ?? 0} 项,已探测 ${p.probed ?? 0} 项`)
+    if (topic === 'scan') {
+      const id = `scan-${String(p.library_id ?? 'global')}`
+      if (p.error) {
+        toast.error(`扫描失败：${String(p.error)}`, { id })
+        return
+      }
+      if (p.finished) {
+        const elapsed = Number(p.elapsed_seconds ?? p.elapsed ?? 0)
+        const elapsedText = elapsed > 0 ? ` · 耗时 ${formatDuration(elapsed)}` : ''
+        toast.success(`扫描完成：发现 ${p.discovered ?? p.visited ?? 0} · 新增 ${p.added ?? 0} · 更新 ${p.updated ?? 0} · 跳过 ${p.skipped ?? 0}${elapsedText}`, { id })
+        return
+      }
+      if (p.queued) {
+        toast.loading(String(p.message ?? '云盘扫描已加入后台队列，会自动入库'), { id })
+        return
+      }
+      if (p.cloud && p.stage) {
+        const stage = p.stage === 'importing' ? '正在入库' : '正在遍历目录'
+        const speed = Number(p.files_per_second ?? 0)
+        const speedText = speed > 0 ? ` · ${speed.toFixed(speed >= 10 ? 0 : 1)} 个/秒` : ''
+        toast.loading(`${stage}：目录 ${p.dirs ?? 0} · 已发现 ${p.discovered ?? 0} · 已入库 ${p.visited ?? 0}${speedText}`, { id })
+      }
     }
     if (topic === 'scrape' && p.finished) {
       toast.success(`刮削完成:成功匹配 ${p.matched ?? 0} 项`)
@@ -24,4 +44,14 @@ export function GlobalEvents() {
 
   useWebSocket(onEvent)
   return null
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return ''
+  if (seconds < 60) return `${Math.round(seconds)}秒`
+  const minutes = Math.floor(seconds / 60)
+  const rest = Math.round(seconds % 60)
+  if (minutes < 60) return `${minutes}分${rest}秒`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}小时${minutes % 60}分`
 }
