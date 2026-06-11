@@ -13,7 +13,7 @@ package service
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -41,6 +41,11 @@ const embyServerID = "mediastation-go-001"
 // clients reject Jellyfin-style 10.x identities as unsupported/too old during
 // the login handshake, even when the API shape is compatible enough for us.
 const embyCompatVersion = "4.8.10.0"
+
+const (
+	embyLocalAuthenticationProviderID = "Emby.Server.Implementations.LocalAuthenticationProvider" // #nosec G101 -- Emby provider identifier, not a credential.
+	embyLocalPasswordResetProviderID  = "Emby.Server.Implementations.LocalPasswordResetProvider"  // #nosec G101 -- Emby provider identifier, not a credential.
+)
 
 // PlaybackDirectOnlySettingKey 控制「客户端直连解码」模式：开启后宿主机
 // 不再提供转码，所有播放交给第三方客户端本地解码（direct play / 302 直链），
@@ -181,8 +186,8 @@ func (e *EmbyService) userPayload(u *model.User) map[string]any {
 			"EnableAllChannels":              true,
 			"EnableAllFolders":               true,
 			"EnableAllDevices":               true,
-			"AuthenticationProviderId":       "Emby.Server.Implementations.LocalAuthenticationProvider",
-			"PasswordResetProviderId":        "Emby.Server.Implementations.LocalPasswordResetProvider",
+			"AuthenticationProviderId":       embyLocalAuthenticationProviderID,
+			"PasswordResetProviderId":        embyLocalPasswordResetProviderID,
 		},
 	}
 }
@@ -1209,7 +1214,7 @@ func inferSeriesNameFromPath(path string) string {
 }
 
 func stableEmbyID(prefix string, parts ...string) string {
-	h := sha1.New()
+	h := sha256.New()
 	for _, part := range parts {
 		_, _ = h.Write([]byte(strings.ToLower(strings.TrimSpace(part))))
 		_, _ = h.Write([]byte{0})

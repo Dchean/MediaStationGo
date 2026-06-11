@@ -24,7 +24,7 @@ import (
 
 const (
 	licenseServerURLSetting  = "license.server_url"
-	licenseHMACSecretSetting = "license.hmac_secret"
+	licenseHMACSecretSetting = "license.hmac_secret" // #nosec G101 -- setting key name, not the HMAC secret value.
 	licenseDeviceIDSetting   = "license.device_id"
 	licenseDeviceNameSetting = "license.device_name"
 )

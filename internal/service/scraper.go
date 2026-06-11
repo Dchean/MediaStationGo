@@ -13,7 +13,6 @@ package service
 
 import (
 	"context"
-	"math/rand"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -688,7 +687,7 @@ func (s *ScraperService) scrapeDelay(ctx context.Context) time.Duration {
 	if maxMS == minMS {
 		return time.Duration(minMS) * time.Millisecond
 	}
-	return time.Duration(minMS+rand.Intn(maxMS-minMS+1)) * time.Millisecond
+	return time.Duration(minMS+secureRandomIntn(maxMS-minMS+1)) * time.Millisecond
 }
 
 func (s *ScraperService) scrapeDelaySetting(ctx context.Context, key string, fallback int) int {

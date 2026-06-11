@@ -6,10 +6,10 @@
 //
 // External-subtitle discovery rules (matching MediaStation Python defaults):
 //
-//   1. Same directory, same basename, different extension.
-//   2. Same directory, ".sub/" or "subs/" subdirectory.
-//   3. Sibling languages e.g. movie.zh.srt / movie.en.srt → exposed as
-//      ?lang=zh / ?lang=en.
+//  1. Same directory, same basename, different extension.
+//  2. Same directory, ".sub/" or "subs/" subdirectory.
+//  3. Sibling languages e.g. movie.zh.srt / movie.en.srt → exposed as
+//     ?lang=zh / ?lang=en.
 //
 // Supported extensions: .srt, .ass, .ssa, .vtt.
 package service
@@ -139,11 +139,11 @@ func (s *SubtitleService) Serve(ctx context.Context, mediaID, sub string, w io.W
 		return err
 	}
 	mediaDir, _ := filepath.Abs(filepath.Dir(m.Path))
-	if !strings.HasPrefix(abs, mediaDir) {
+	if !pathWithin(abs, mediaDir) {
 		return fmt.Errorf("path escape")
 	}
 
-	f, err := os.Open(abs)
+	f, err := os.Open(abs) // #nosec G304 -- abs is constrained to the media file directory with pathWithin.
 	if err != nil {
 		return err
 	}

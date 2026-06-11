@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"strconv"
 	"strings"
@@ -238,13 +237,7 @@ const codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // no ambiguous 0/O/1/I
 
 func randomCode(n int) string {
 	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand failure is extremely unlikely; fall back to time noise.
-		seed := time.Now().UnixNano()
-		for i := range b {
-			b[i] = byte(seed >> (uint(i%8) * 8))
-		}
-	}
+	secureRandomBytes(b)
 	out := make([]byte, n)
 	for i := range b {
 		out[i] = codeAlphabet[int(b[i])%len(codeAlphabet)]

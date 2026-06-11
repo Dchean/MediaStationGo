@@ -309,7 +309,7 @@ func (c *Config) normalize() error {
 	if c.Secrets.JWTSecret == "" {
 		// 持久化自动生成的密钥以在操作员忘记配置时保持会话稳定。
 		path := filepath.Join(c.App.DataDir, ".jwt_secret")
-		if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
+		if data, err := os.ReadFile(path); err == nil && len(data) > 0 { // #nosec G304 -- path is fixed to .jwt_secret under configured DataDir.
 			c.Secrets.JWTSecret = strings.TrimSpace(string(data))
 		} else {
 			buf := make([]byte, 32)
@@ -317,7 +317,7 @@ func (c *Config) normalize() error {
 				return fmt.Errorf("generate jwt secret: %w", err)
 			}
 			c.Secrets.JWTSecret = hex.EncodeToString(buf)
-			_ = os.MkdirAll(c.App.DataDir, 0o755)
+			_ = os.MkdirAll(c.App.DataDir, 0o750)
 			_ = os.WriteFile(path, []byte(c.Secrets.JWTSecret), 0o600)
 		}
 	}

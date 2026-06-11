@@ -59,7 +59,7 @@ func main() {
 
 	// Ensure data / cache / web dirs exist.
 	for _, d := range []string{cfg.App.DataDir, cfg.Cache.CacheDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
+		if err := os.MkdirAll(d, 0o750); err != nil {
 			logger.Fatal("create dir failed", zap.String("dir", d), zap.Error(err))
 		}
 	}

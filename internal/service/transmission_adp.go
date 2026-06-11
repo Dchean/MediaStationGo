@@ -84,7 +84,7 @@ func (a *TransmissionAdapter) pingLocked(ctx context.Context) error {
 		return err
 	}
 	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode == 409 {
 		// 正常：需要 CSRF token
 		a.sessionID = resp.Header.Get("X-Transmission-Session-Id")

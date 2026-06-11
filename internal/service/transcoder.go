@@ -124,7 +124,7 @@ func (t *TranscoderService) EnsureJob(ctx context.Context, mediaID string) (stri
 	}
 
 	outDir := t.HLSDir(mediaID)
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
+	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		t.mu.Unlock()
 		return "", err
 	}
@@ -294,7 +294,7 @@ func (t *TranscoderService) runFFmpeg(ctx context.Context, job *hlsJob, source s
 
 	args := buildFFmpegArgs(t.cfg, source, playlist, segments)
 
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- bin is resolved by resolveFFmpegPath and args are passed without a shell.
 	cmd.Stderr = os.Stderr
 
 	t.log.Info("transcode started",

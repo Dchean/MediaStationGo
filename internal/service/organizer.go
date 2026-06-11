@@ -162,7 +162,7 @@ func (o *OrganizerService) OrganizeMediaWithOptions(ctx context.Context, mediaID
 	}
 
 	// Create directories.
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { // #nosec G301 -- organized media directories must remain readable by NAS/player users.
 		return "", err
 	}
 
@@ -360,19 +360,19 @@ func moveFile(src, dst string) error {
 	// Cross-device: stream copy → remove. This can temporarily consume the
 	// destination file size while copying, but the source is removed after the
 	// copy succeeds.
-	in, err := os.Open(src)
+	in, err := os.Open(src) // #nosec G304 -- src is selected from configured media/download roots by the organizer.
 	if err != nil {
 		return err
 	}
 	defer in.Close()
 	// O_EXCL 保证不会覆盖已存在的目标。
-	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) // #nosec G304,G302 -- dst is organizer-generated; media files must remain readable by local players.
 	if err != nil {
 		return err
 	}
 	if _, werr := io.Copy(f, in); werr != nil {
-		f.Close()
-		os.Remove(dst)
+		_ = f.Close()
+		_ = os.Remove(dst)
 		return werr
 	}
 	if cerr := f.Close(); cerr != nil {
@@ -398,7 +398,7 @@ func transferSidecarNFO(srcMedia, dstMedia string, mode TransferMode) error {
 	if _, err := os.Stat(dst); err == nil {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { // #nosec G301 -- sidecar media directories must remain readable by NAS/player users.
 		return err
 	}
 	return transferFile(src, dst, mode)

@@ -197,7 +197,7 @@ func (t *TMDbProvider) SearchMovie(ctx context.Context, query string, year int) 
 		m.BackdropURL = t.imgCDN + "/w1280" + r.BackdropPath
 	}
 	if len(r.ReleaseDate) >= 4 {
-		fmt.Sscanf(r.ReleaseDate[:4], "%d", &m.Year)
+		_, _ = fmt.Sscanf(r.ReleaseDate[:4], "%d", &m.Year)
 	}
 	return m, nil
 }
@@ -263,7 +263,7 @@ func (t *TMDbProvider) SearchTV(ctx context.Context, query string, year int) (*M
 		m.BackdropURL = t.imgCDN + "/w1280" + r.BackdropPath
 	}
 	if len(r.FirstAirDate) >= 4 {
-		fmt.Sscanf(r.FirstAirDate[:4], "%d", &m.Year)
+		_, _ = fmt.Sscanf(r.FirstAirDate[:4], "%d", &m.Year)
 	}
 	return m, nil
 }

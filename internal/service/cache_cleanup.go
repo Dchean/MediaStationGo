@@ -32,7 +32,7 @@ func walkAndPrune(root string, cutoff time.Time) error {
 			return nil
 		}
 		if info.ModTime().Before(cutoff) {
-			_ = os.Remove(path)
+			_ = os.Remove(path) // #nosec G122 -- cache pruning is best-effort under the configured cache root.
 		}
 		return nil
 	})

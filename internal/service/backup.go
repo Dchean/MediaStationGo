@@ -46,10 +46,29 @@ func (b *BackupService) backupDir() string {
 	return filepath.Join(b.cfg.App.DataDir, "backups")
 }
 
+func (b *BackupService) backupFilePath(filename string) (string, error) {
+	if !isValidBackupFilename(filename) {
+		return "", errors.New("invalid filename")
+	}
+	dir, err := filepath.Abs(b.backupDir())
+	if err != nil {
+		return "", err
+	}
+	path, err := filepath.Abs(filepath.Join(dir, filename))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(dir, path)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return "", errors.New("invalid filename")
+	}
+	return path, nil
+}
+
 // Create produces a new hot backup via "VACUUM INTO".
 func (b *BackupService) Create(ctx context.Context) (*BackupInfo, error) {
 	dir := b.backupDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
 	ts := time.Now().Format("20060102_150405")
@@ -106,10 +125,10 @@ func (b *BackupService) List() ([]BackupInfo, error) {
 
 // Delete removes a single backup file.
 func (b *BackupService) Delete(filename string) error {
-	if !isValidBackupFilename(filename) {
-		return errors.New("invalid filename")
+	path, err := b.backupFilePath(filename)
+	if err != nil {
+		return err
 	}
-	path := filepath.Join(b.backupDir(), filename)
 	return os.Remove(path)
 }
 
@@ -117,26 +136,29 @@ func (b *BackupService) Delete(filename string) error {
 // reverse. WARNING: this is destructive — the live DB will be replaced.
 // Callers should shut down the server after this call.
 func (b *BackupService) Restore(ctx context.Context, filename string) error {
-	if !isValidBackupFilename(filename) {
-		return errors.New("invalid filename")
+	src, err := b.backupFilePath(filename)
+	if err != nil {
+		return err
 	}
-	src := filepath.Join(b.backupDir(), filename)
 	if _, err := os.Stat(src); err != nil {
 		return fmt.Errorf("backup not found: %s", filename)
 	}
-	dbPath := b.cfg.Database.DBPath
+	dbPath, err := filepath.Abs(b.cfg.Database.DBPath)
+	if err != nil || dbPath == "" {
+		return errors.New("invalid database path")
+	}
 	// Strategy: rename live → live.old, copy backup → live, delete old.
 	old := dbPath + ".before_restore"
 	if err := os.Rename(dbPath, old); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	data, err := os.ReadFile(src)
+	data, err := os.ReadFile(src) // #nosec G304 -- src is constrained by backupFilePath to the configured backups directory.
 	if err != nil {
 		// Revert
 		_ = os.Rename(old, dbPath)
 		return err
 	}
-	if err := os.WriteFile(dbPath, data, 0o644); err != nil {
+	if err := os.WriteFile(dbPath, data, 0o600); err != nil { // #nosec G703 -- database path is trusted process config and normalized before restore.
 		_ = os.Rename(old, dbPath)
 		return err
 	}

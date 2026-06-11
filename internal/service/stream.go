@@ -245,7 +245,7 @@ func (s *StreamService) ServeHLSPlaylist(w http.ResponseWriter, r *http.Request,
 		return errors.New("hls playlist not ready")
 	}
 	playlist := s.transcoder.PlaylistPath(mediaID)
-	f, err := os.Open(playlist)
+	f, err := os.Open(playlist) // #nosec G304 -- playlist path is generated under the transcoder cache directory for this media ID.
 	if err != nil {
 		return err
 	}
@@ -304,10 +304,10 @@ func (s *StreamService) ServeHLSSegment(w http.ResponseWriter, r *http.Request, 
 		return err
 	}
 	dir, _ := filepath.Abs(s.transcoder.HLSDir(mediaID))
-	if !strings.HasPrefix(abs, dir) {
+	if !pathWithin(abs, dir) {
 		return errors.New("path escape")
 	}
-	f, err := os.Open(abs)
+	f, err := os.Open(abs) // #nosec G304 -- abs is constrained to the HLS cache directory with pathWithin.
 	if err != nil {
 		return err
 	}

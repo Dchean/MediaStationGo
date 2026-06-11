@@ -224,7 +224,7 @@ func telegramPostJSONDecode(ctx context.Context, cfg map[string]string, method s
 			continue
 		}
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode >= 400 {
 			lastErr = fmt.Errorf("telegram api error %d: %s", resp.StatusCode, sanitizeTelegramText(string(respBody)))
 			continue
@@ -257,7 +257,7 @@ func telegramGetJSONDecode(ctx context.Context, cfg map[string]string, method st
 			continue
 		}
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode >= 400 {
 			lastErr = fmt.Errorf("telegram api error %d: %s", resp.StatusCode, sanitizeTelegramText(string(respBody)))
 			continue

@@ -4,8 +4,8 @@
 // source video. We export a minimal subset that those scrapers consume
 // happily:
 //
-//   movie.mkv    -> movie.nfo            (<movie>...</movie>)
-//   tvshow/      -> tvshow.nfo           (<tvshow>...</tvshow>)  [future]
+//	movie.mkv    -> movie.nfo            (<movie>...</movie>)
+//	tvshow/      -> tvshow.nfo           (<tvshow>...</tvshow>)  [future]
 //
 // Today only the per-movie writer is implemented; the per-show / per-episode
 // writers are stubbed with TODO markers.
@@ -168,7 +168,7 @@ func WriteMediaNFO(m *model.Media) (string, error) {
 		return "", err
 	}
 	dst := nfoPath(m.Path)
-	if err := os.WriteFile(dst, []byte(xml.Header+string(out)+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(dst, []byte(xml.Header+string(out)+"\n"), 0o644); err != nil { // #nosec G306 -- NFO sidecars must remain readable by media players.
 		return "", err
 	}
 	return dst, nil

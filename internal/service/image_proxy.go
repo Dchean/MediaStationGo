@@ -15,7 +15,7 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -241,14 +241,14 @@ func (p *ImageProxy) cloudImageCachePaths(stableKey string) (string, string, str
 	if stableKey == "" {
 		stableKey = "unknown"
 	}
-	sum := sha1.Sum([]byte("cloud-image:" + stableKey))
+	sum := sha256.Sum256([]byte("cloud-image:" + stableKey))
 	key := "cloud-" + hex.EncodeToString(sum[:])
 	cachePath := filepath.Join(p.cacheDir, key)
 	return key, cachePath, cachePath + ".fail"
 }
 
 func serveCachedImageFile(w http.ResponseWriter, r *http.Request, key, cachePath string) bool {
-	data, err := os.ReadFile(cachePath)
+	data, err := os.ReadFile(cachePath) // #nosec G304 -- cachePath is derived from a SHA-256 cache key under the configured cache directory.
 	if err != nil || len(data) == 0 {
 		return false
 	}
@@ -342,14 +342,14 @@ func (p *ImageProxy) Serve(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 	host := strings.ToLower(u.Host)
 
-	// Cache key = sha1(url)
-	sum := sha1.Sum([]byte(raw))
+	// Cache key = sha256(url)
+	sum := sha256.Sum256([]byte(raw))
 	key := hex.EncodeToString(sum[:])
 	cachePath := filepath.Join(p.cacheDir, key)
 	failPath := cachePath + ".fail"
 
 	// Cache hit.
-	if data, err := os.ReadFile(cachePath); err == nil && len(data) > 0 {
+	if data, err := os.ReadFile(cachePath); err == nil && len(data) > 0 { // #nosec G304 -- cachePath is derived from a SHA-256 cache key under the configured cache directory.
 		w.Header().Set("Content-Type", detectContentType(data))
 		w.Header().Set("Cache-Control", imageBrowserCacheControl)
 		stat, _ := os.Stat(cachePath)
@@ -368,7 +368,7 @@ func (p *ImageProxy) Serve(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	// Cache miss → fetch upstream.
-	if err := os.MkdirAll(p.cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(p.cacheDir, 0o750); err != nil {
 		p.log.Warn("imageproxy: mkdir failed", zap.String("dir", p.cacheDir), zap.Error(err))
 		servePlaceholder(w)
 		return nil
@@ -417,14 +417,14 @@ func (p *ImageProxy) Serve(ctx context.Context, w http.ResponseWriter, r *http.R
 	tmp, tmpErr := os.CreateTemp(p.cacheDir, "img-*.tmp")
 	if tmpErr == nil {
 		if _, werr := tmp.Write(data); werr == nil {
-			tmp.Close()
+			_ = tmp.Close()
 			if rerr := os.Rename(tmp.Name(), cachePath); rerr != nil {
 				_ = os.Remove(tmp.Name())
 			} else {
 				_ = os.Remove(failPath)
 			}
 		} else {
-			tmp.Close()
+			_ = tmp.Close()
 			_ = os.Remove(tmp.Name())
 		}
 	}
@@ -502,7 +502,7 @@ func (p *ImageProxy) PrefetchCloudResolved(ctx context.Context, stableKey string
 }
 
 func (p *ImageProxy) fetchAndCacheCloudImage(ctx context.Context, stableKey string, link *cloud.DirectLink, userAgent string) ([]byte, string, error) {
-	if err := os.MkdirAll(p.cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(p.cacheDir, 0o750); err != nil {
 		return nil, "", err
 	}
 	_, cachePath, failPath := p.cloudImageCachePaths(stableKey)
@@ -547,14 +547,14 @@ func (p *ImageProxy) fetchAndCacheCloudImage(ctx context.Context, stableKey stri
 	tmp, tmpErr := os.CreateTemp(p.cacheDir, "img-cloud-*.tmp")
 	if tmpErr == nil {
 		if _, werr := tmp.Write(data); werr == nil {
-			tmp.Close()
+			_ = tmp.Close()
 			if rerr := os.Rename(tmp.Name(), cachePath); rerr != nil {
 				_ = os.Remove(tmp.Name())
 			} else {
 				_ = os.Remove(failPath)
 			}
 		} else {
-			tmp.Close()
+			_ = tmp.Close()
 			_ = os.Remove(tmp.Name())
 		}
 	}
@@ -568,12 +568,12 @@ func (p *ImageProxy) fetchAndCacheCloudImage(ctx context.Context, stableKey stri
 }
 
 func (p *ImageProxy) markImageFetchFailed(failPath string) {
-	if err := os.MkdirAll(filepath.Dir(failPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(failPath), 0o750); err != nil {
 		return
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	_ = os.WriteFile(failPath, []byte(time.Now().Format(time.RFC3339Nano)), 0o644)
+	_ = os.WriteFile(failPath, []byte(time.Now().Format(time.RFC3339Nano)), 0o600)
 }
 
 // Fetch 拉取远程图片并返回字节和 Content-Type（带缓存）。
@@ -584,16 +584,16 @@ func (p *ImageProxy) Fetch(ctx context.Context, raw string) ([]byte, string, err
 	}
 
 	// Cache lookup
-	sum := sha1.Sum([]byte(raw))
+	sum := sha256.Sum256([]byte(raw))
 	key := hex.EncodeToString(sum[:])
 	cachePath := filepath.Join(p.cacheDir, key)
 
-	if data, err := os.ReadFile(cachePath); err == nil && len(data) > 0 {
+	if data, err := os.ReadFile(cachePath); err == nil && len(data) > 0 { // #nosec G304 -- cachePath is derived from a SHA-256 cache key under the configured cache directory.
 		return data, detectContentType(data), nil
 	}
 
 	// Fetch upstream
-	if err := os.MkdirAll(p.cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(p.cacheDir, 0o750); err != nil {
 		return nil, "", err
 	}
 
@@ -622,12 +622,12 @@ func (p *ImageProxy) Fetch(ctx context.Context, raw string) ([]byte, string, err
 	tmp, terr := os.CreateTemp(p.cacheDir, "img-*.tmp")
 	if terr == nil {
 		if _, werr := tmp.Write(data); werr == nil {
-			tmp.Close()
+			_ = tmp.Close()
 			if rerr := os.Rename(tmp.Name(), cachePath); rerr != nil {
 				_ = os.Remove(tmp.Name())
 			}
 		} else {
-			tmp.Close()
+			_ = tmp.Close()
 			_ = os.Remove(tmp.Name())
 		}
 	}

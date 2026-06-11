@@ -202,7 +202,7 @@ func readSeriesMetadata(mediaPath, libraryRoot string) (*LocalMetadata, error) {
 }
 
 func readNFO(path string) (*nfoDocument, string, error) {
-	body, err := os.ReadFile(path)
+	body, err := os.ReadFile(path) // #nosec G304 -- path is a discovered NFO sidecar under the configured library root.
 	if err != nil {
 		return nil, "", err
 	}
@@ -647,7 +647,7 @@ func isRejectedPosterName(name string) bool {
 }
 
 func likelyPosterImage(path string) bool {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path is a discovered artwork sidecar under the configured library root.
 	if err != nil {
 		return false
 	}

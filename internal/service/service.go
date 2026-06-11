@@ -249,6 +249,9 @@ func (c *Container) Boot() {
 	// 启动调度器定时任务
 	c.Scheduler.Start(c.stopCtx)
 
+	// 自动扫描云盘媒体库，使内容对所有用户立即可见
+	c.BootCloudLibraries(c.stopCtx)
+
 	// 账号删号/保号规则巡检：默认关闭，由管理员通过 Telegram Bot 命令开启。
 	// 每天触发一次评估；规则里的窗口可随机，不固定。
 	if c.Device != nil {
@@ -335,3 +338,4 @@ func (c *Container) Close() {
 
 // unused guard
 var _ = time.Now
+

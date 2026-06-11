@@ -301,7 +301,7 @@ func (a *alistUploader) exists(ctx context.Context, remotePath string) (bool, er
 }
 
 func (a *alistUploader) upload(ctx context.Context, localPath, remotePath string, size int64) error {
-	f, err := os.Open(localPath)
+	f, err := os.Open(localPath) // #nosec G304 -- localPath is selected from configured local media files before upload.
 	if err != nil {
 		return err
 	}
@@ -418,7 +418,7 @@ func (w *webDAVUploader) exists(ctx context.Context, remotePath string) (bool, e
 }
 
 func (w *webDAVUploader) upload(ctx context.Context, localPath, remotePath string, size int64) error {
-	f, err := os.Open(localPath)
+	f, err := os.Open(localPath) // #nosec G304 -- localPath is selected from configured local media files before upload.
 	if err != nil {
 		return err
 	}

@@ -16,7 +16,7 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- BitTorrent v1 info-hash is SHA-1 by protocol.
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -335,7 +335,7 @@ func torrentInfoHash(data []byte) string {
 	if !ok {
 		return ""
 	}
-	sum := sha1.Sum(data[start:end])
+	sum := sha1.Sum(data[start:end]) // #nosec G401 -- BitTorrent v1 info-hash is SHA-1 by protocol, not a security hash.
 	return hex.EncodeToString(sum[:])
 }
 

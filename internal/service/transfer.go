@@ -79,18 +79,18 @@ func transferFile(src, dst string, mode TransferMode) error {
 
 // copyFile 流式复制 src 到 dst（保留源文件）。O_EXCL 保证不覆盖已存在目标。
 func copyFile(src, dst string) error {
-	in, err := os.Open(src)
+	in, err := os.Open(src) // #nosec G304 -- src is selected from configured media/download roots by the organizer.
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) // #nosec G304,G302 -- dst is organizer-generated; media files must remain readable by local players.
 	if err != nil {
 		return err
 	}
 	if _, werr := io.Copy(f, in); werr != nil {
-		f.Close()
-		os.Remove(dst)
+		_ = f.Close()
+		_ = os.Remove(dst)
 		return werr
 	}
 	return f.Close()

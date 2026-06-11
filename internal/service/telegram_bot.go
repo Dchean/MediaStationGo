@@ -518,7 +518,9 @@ func (s *TelegramBotService) cmdStatus(ctx context.Context) (telegramCommandRepl
 	s.mediaStatsQuery(libraryIDs).Count(&mediaCount)
 
 	var totalSize int64
-	s.mediaStatsQuery(libraryIDs).Select("COALESCE(SUM(size_bytes), 0)").Row().Scan(&totalSize)
+	if err := s.mediaStatsQuery(libraryIDs).Select("COALESCE(SUM(size_bytes), 0)").Row().Scan(&totalSize); err != nil {
+		return telegramCommandReply{}, err
+	}
 	totalSizeGB := float64(totalSize) / 1024 / 1024 / 1024
 
 	return telegramCommandReply{Text: fmt.Sprintf(
@@ -621,7 +623,9 @@ func (s *TelegramBotService) cmdStats(ctx context.Context) (telegramCommandReply
 	s.mediaStatsQuery(libraryIDs).Count(&totalMedia)
 
 	var totalSize int64
-	s.mediaStatsQuery(libraryIDs).Select("COALESCE(SUM(size_bytes), 0)").Row().Scan(&totalSize)
+	if err := s.mediaStatsQuery(libraryIDs).Select("COALESCE(SUM(size_bytes), 0)").Row().Scan(&totalSize); err != nil {
+		return telegramCommandReply{}, err
+	}
 
 	type LibStat struct {
 		Name  string
@@ -799,8 +803,10 @@ func (s *TelegramBotService) pollLoop(ctx context.Context, cfg map[string]string
 				continue
 			}
 			go func(u TelegramUpdate) {
+				handlerCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+				defer cancel()
 				raw, _ := json.Marshal(u)
-				_ = s.HandleWebhook(context.Background(), raw)
+				_ = s.HandleWebhook(handlerCtx, raw)
 			}(upd)
 		}
 	}
@@ -830,7 +836,7 @@ func telegramPollingRequest(ctx context.Context, clients []*http.Client, pollURL
 			continue
 		}
 		respBody, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode >= 400 {
 			lastErr = fmt.Errorf("telegram api error %d: %s", resp.StatusCode, sanitizeTelegramText(string(respBody)))
 			continue
@@ -965,7 +971,9 @@ func (s *TelegramBotService) findChannelByChatID(ctx context.Context, chatID int
 			configStr = s.crypto.Decrypt(configStr)
 		}
 		var cfg map[string]string
-		json.Unmarshal([]byte(configStr), &cfg)
+		if err := json.Unmarshal([]byte(configStr), &cfg); err != nil {
+			continue
+		}
 		if cfg["chat_id"] == target || cfg["command_chat_id"] == target ||
 			cfg["group_chat_id"] == target || cfg["channel_chat_id"] == target {
 			return &ch

@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -117,7 +116,7 @@ func (d *DoubanProvider) Search(ctx context.Context, query string) (*DoubanMatch
 }
 
 func (d *DoubanProvider) setHeaders(req *http.Request) {
-	req.Header.Set("User-Agent", userAgents[rand.Intn(len(userAgents))])
+	req.Header.Set("User-Agent", userAgents[secureRandomIntn(len(userAgents))])
 	req.Header.Set("Referer", "https://movie.douban.com/")
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")

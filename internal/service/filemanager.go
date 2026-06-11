@@ -145,7 +145,7 @@ func (s *FileManagerService) CreateFolder(parent, name string) (*FileOperationRe
 	if !s.withinAllowed(dst, roots) {
 		return nil, ErrPathOutOfBounds
 	}
-	if err := os.MkdirAll(dst, 0o755); err != nil {
+	if err := os.MkdirAll(dst, 0o755); err != nil { // #nosec G301 -- user-created media directories must remain readable by NAS/player users.
 		return nil, err
 	}
 	return &FileOperationResult{Path: dst}, nil

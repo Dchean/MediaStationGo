@@ -3,9 +3,9 @@
 // TheTVDBProvider implements two methods used by the scraper for TV /
 // anime libraries:
 //
-//   Login()                    -> exchanges secrets.thetvdb_api_key for
-//                                  a JWT (cached for 24h).
-//   SearchSeries(query)        -> /search?query=...&type=series
+//	Login()                    -> exchanges secrets.thetvdb_api_key for
+//	                               a JWT (cached for 24h).
+//	SearchSeries(query)        -> /search?query=...&type=series
 //
 // The provider is enabled iff secrets.thetvdb_api_key is non-empty. When
 // disabled every method returns nil, nil so the scraper orchestrator can
@@ -133,7 +133,7 @@ func (t *TheTVDBProvider) SearchSeries(ctx context.Context, query string) (*Matc
 		PosterURL: r.Image,
 	}
 	if len(r.Year) >= 4 {
-		fmt.Sscanf(r.Year[:4], "%d", &m.Year)
+		_, _ = fmt.Sscanf(r.Year[:4], "%d", &m.Year)
 	}
 	return m, nil
 }

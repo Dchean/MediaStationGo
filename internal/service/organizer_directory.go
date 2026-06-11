@@ -294,7 +294,7 @@ func (o *OrganizerService) organizeSourceFile(ctx context.Context, src, sourceRo
 		res.Organized++
 		return nil
 	}
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil { // #nosec G301 -- organized media directories must remain readable by NAS/player users.
 		return err
 	}
 	if _, err := os.Stat(dst); err == nil {
@@ -591,7 +591,7 @@ func (o *OrganizerService) replaceVersions(ctx context.Context, src string, exis
 			_ = o.repo.DB.WithContext(ctx).Where("path = ?", e).Delete(&model.Media{}).Error
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { // #nosec G301 -- organized media directories must remain readable by NAS/player users.
 		return err
 	}
 	if err := transferFile(src, dst, mode); err != nil {

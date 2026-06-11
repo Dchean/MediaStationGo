@@ -159,7 +159,7 @@ func (d *DiscoverService) Fetch(ctx context.Context, path string) ([]Match, erro
 			date = r.FirstAirDate
 		}
 		if len(date) >= 4 {
-			fmt.Sscanf(date[:4], "%d", &m.Year)
+			_, _ = fmt.Sscanf(date[:4], "%d", &m.Year)
 		}
 		out = append(out, m)
 	}

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -304,7 +303,7 @@ func randomWindowDays(min, max int) int {
 	if max == min {
 		return min
 	}
-	return min + rand.Intn(max-min+1)
+	return min + secureRandomIntn(max-min+1)
 }
 
 func (s *DeviceService) userMatchesCleanupPolicy(ctx context.Context, u *model.User, cfg botConfig) (bool, string) {

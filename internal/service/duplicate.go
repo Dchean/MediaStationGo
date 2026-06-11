@@ -1,6 +1,6 @@
 // Package service — duplicate-file finder.
 //
-// DuplicateService computes a sparse-sample MD5 (head + middle + tail,
+// DuplicateService computes a sparse-sample SHA-256 (head + middle + tail,
 // 1 MiB each, plus the file size to break collisions) for every media
 // file and groups identical hashes into "duplicate sets". The first row
 // (preferring scraped + larger files) is kept as the primary; the rest
@@ -13,7 +13,7 @@ package service
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -250,14 +250,14 @@ func pickPrimary(group []model.Media) model.Media {
 	return group[0]
 }
 
-// SparseFileHash computes the head+mid+tail MD5 of a file, suffixed with
+// SparseFileHash computes the head+mid+tail SHA-256 of a file, suffixed with
 // the file size so two files that happen to collide on the sample window
 // but differ in length are still distinguishable.
 func SparseFileHash(path string) (string, error) {
 	if path == "" {
 		return "", errors.New("empty path")
 	}
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path is selected from configured media library files for duplicate detection.
 	if err != nil {
 		return "", err
 	}
@@ -267,7 +267,7 @@ func SparseFileHash(path string) (string, error) {
 		return "", err
 	}
 	size := st.Size()
-	h := md5.New()
+	h := sha256.New()
 	if size <= int64(sampleSize)*3 {
 		if _, err := io.Copy(h, f); err != nil {
 			return "", err

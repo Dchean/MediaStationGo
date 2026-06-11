@@ -83,7 +83,7 @@ func (f *FFprobeService) Probe(ctx context.Context, path string) (*ProbeResult, 
 		probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		cmd := exec.CommandContext(probeCtx, bin,
+		cmd := exec.CommandContext(probeCtx, bin, // #nosec G204 -- bin is resolved by resolveLocalExecutable before execution.
 			"-v", "error",
 			"-print_format", "json",
 			"-show_format",

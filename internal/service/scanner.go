@@ -664,11 +664,7 @@ func (s *ScannerService) scanLibrary(ctx context.Context, libraryID string, auto
 	// Online enrichment is opt-in. Local NFO is always consumed first during
 	// the scan, and matched rows are excluded from EnrichLibrary's pending set.
 	if autoScrape && s.scraper != nil && s.scraper.AnyEnabled() && s.autoScrapeEnabled(ctx) {
-		go func(libID string) {
-			if _, err := s.scraper.EnrichLibrary(context.Background(), libID); err != nil {
-				s.log.Warn("scraper enrich failed", zap.Error(err))
-			}
-		}(lib.ID)
+		s.startAutoScrape(ctx, lib.ID)
 	}
 	return res, nil
 }
@@ -872,13 +868,19 @@ func (s *ScannerService) scanCloudLibrary(ctx context.Context, lib *model.Librar
 	})
 	s.maybeGenerateSTRMAfterScan(lib.ID)
 	if autoScrape && s.scraper != nil && s.scraper.AnyEnabled() && s.autoScrapeEnabled(ctx) {
-		go func(libID string) {
-			if _, err := s.scraper.EnrichLibrary(context.Background(), libID); err != nil {
-				s.log.Warn("scraper enrich failed", zap.Error(err))
-			}
-		}(lib.ID)
+		s.startAutoScrape(ctx, lib.ID)
 	}
 	return res, nil
+}
+
+func (s *ScannerService) startAutoScrape(ctx context.Context, libraryID string) {
+	scrapeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Minute)
+	go func() {
+		defer cancel()
+		if _, err := s.scraper.EnrichLibrary(scrapeCtx, libraryID); err != nil {
+			s.log.Warn("scraper enrich failed", zap.Error(err))
+		}
+	}()
 }
 
 func (s *ScannerService) existingCloudMediaPaths(ctx context.Context, libraryID string) (map[string]struct{}, error) {
@@ -1299,7 +1301,7 @@ func (s *ScannerService) resolveCloudSTRMTarget(ctx context.Context, typ, ref st
 }
 
 func readLocalSTRMTarget(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is a discovered .strm file under the configured library root.
 	if err != nil {
 		return "", err
 	}

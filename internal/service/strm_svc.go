@@ -102,7 +102,7 @@ func (s *STRMService) GenerateForLibrary(ctx context.Context, opts GenerateSTRMO
 		_ = s.repo.Setting.Set(ctx, "strm.auto_generate_enabled", strconv.FormatBool(opts.Enabled))
 		_ = s.repo.Setting.Set(ctx, "strm.output_dir", outputDir)
 	}
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil { // #nosec G301 -- STRM output directories must stay readable by NAS/player users.
 		return nil, err
 	}
 
@@ -175,12 +175,12 @@ func (s *STRMService) generateOne(ctx context.Context, lib model.Library, media 
 	if _, err := os.Stat(filePath); err == nil {
 		action = "updated"
 	}
-	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil { // #nosec G301 -- STRM output directories must stay readable by NAS/player users.
 		item.Action = "error"
 		item.Reason = err.Error()
 		return item
 	}
-	if err := os.WriteFile(filePath, []byte(playURL+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(playURL+"\n"), 0o644); err != nil { // #nosec G306 -- STRM files are media sidecars intended to be readable by players.
 		item.Action = "error"
 		item.Reason = err.Error()
 		return item
@@ -429,8 +429,13 @@ func (s *STRMService) ProxySTRM(ctx context.Context, id string, req *http.Reques
 		return ErrSTRMProtocolInvalid
 	}
 
+	targetURL, err := validateSTRMProxyURL(record.URL)
+	if err != nil {
+		return err
+	}
+
 	// 创建代理请求
-	proxyReq, err := http.NewRequestWithContext(ctx, req.Method, record.URL, nil)
+	proxyReq, err := http.NewRequestWithContext(ctx, req.Method, targetURL.String(), nil)
 	if err != nil {
 		return fmt.Errorf("create proxy request: %w", err)
 	}
@@ -452,7 +457,7 @@ func (s *STRMService) ProxySTRM(ctx context.Context, id string, req *http.Reques
 	}
 
 	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Do(proxyReq)
+	resp, err := client.Do(proxyReq) // #nosec G107,G704 -- STRM proxy target is validated by validateSTRMProxyURL before request creation.
 	if err != nil {
 		return fmt.Errorf("proxy request failed: %w", err)
 	}
@@ -472,6 +477,22 @@ func (s *STRMService) ProxySTRM(ctx context.Context, id string, req *http.Reques
 	w.WriteHeader(resp.StatusCode)
 	_, err = io.Copy(w, resp.Body)
 	return err
+}
+
+func validateSTRMProxyURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return nil, ErrSTRMURLInvalid
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+	default:
+		return nil, ErrSTRMProtocolInvalid
+	}
+	if isPrivateHost(u.Hostname()) {
+		return nil, ErrSTRMURLInvalid
+	}
+	return u, nil
 }
 
 // validateSTRM 验证 STRM 记录。

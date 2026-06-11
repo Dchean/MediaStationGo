@@ -110,7 +110,7 @@ func localExecutableCandidates(name string) []string {
 func commandOutput(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(cmdCtx, name, args...)
+	cmd := exec.CommandContext(cmdCtx, name, args...) // #nosec G204 -- callers pass paths resolved by resolveLocalExecutable.
 	out, err := cmd.CombinedOutput()
 	if cmdCtx.Err() != nil {
 		return out, cmdCtx.Err()

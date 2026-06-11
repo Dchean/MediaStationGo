@@ -6,8 +6,8 @@
 //
 // We implement the minimal subset needed to enrich anime libraries:
 //
-//   GET /search/subject/{keywords}?type=2&responseGroup=small
-//   GET /v0/subjects/{id}                                           (cover)
+//	GET /search/subject/{keywords}?type=2&responseGroup=small
+//	GET /v0/subjects/{id}                                           (cover)
 //
 // The provider gracefully no-ops when bangumi_access_token is empty.
 package service
@@ -100,7 +100,7 @@ func (b *BangumiProvider) Search(ctx context.Context, query string) (*Match, err
 		Rating:    r.Rating.Score,
 	}
 	if len(r.Air) >= 4 {
-		fmt.Sscanf(r.Air[:4], "%d", &m.Year)
+		_, _ = fmt.Sscanf(r.Air[:4], "%d", &m.Year)
 	}
 	return m, nil
 }
