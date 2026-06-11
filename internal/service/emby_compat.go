@@ -1493,6 +1493,7 @@ func (e *EmbyService) mediaSource(m *model.Media, asEmbedded, directOnly bool) m
 	if container == "" && strings.TrimSpace(m.STRMURL) != "" {
 		container = "strm"
 	}
+	isCloud := strings.TrimSpace(m.STRMURL) != ""
 	src := map[string]any{
 		"Id":                    m.ID,
 		"Name":                  m.Title,
@@ -1501,7 +1502,7 @@ func (e *EmbyService) mediaSource(m *model.Media, asEmbedded, directOnly bool) m
 		"Size":                  m.SizeBytes,
 		"Protocol":              "Http",
 		"Type":                  "Default",
-		"IsRemote":              false,
+		"IsRemote":              isCloud,
 		"RequiresOpening":       false,
 		"RequiresClosing":       false,
 		"ReadAtNativeFramerate": false,
@@ -1670,3 +1671,5 @@ func intToStr(v int) string {
 	}
 	return strconv.Itoa(v)
 }
+
+

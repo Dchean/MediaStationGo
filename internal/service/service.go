@@ -73,8 +73,7 @@ type Container struct {
 	Device          *DeviceService
 
 	stopCtx    context.Context
-	stopCancel context.CancelFunc
-}
+	stopCancel context.CancelFunc}
 
 // New 构建服务容器。
 func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Container {
@@ -338,4 +337,6 @@ func (c *Container) Close() {
 
 // unused guard
 var _ = time.Now
+
+
 
