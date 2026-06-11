@@ -699,7 +699,7 @@ func (s *ScannerService) scanCloudLibrary(ctx context.Context, lib *model.Librar
 	}
 	
 	// 验证存储配置是否存在且已启用
-	cfg, err := s.repo.StorageConfig.FindByID(ctx, mount.Provider)
+	cfg, err := s.repo.StorageConfig.Get(ctx, mount.Provider)
 	if err != nil || cfg == nil {
 		return res, fmt.Errorf("storage config not found: %s", mount.Provider)
 	}
