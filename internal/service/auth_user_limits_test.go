@@ -291,6 +291,79 @@ func TestLoginRetriesTransientSQLiteBusy(t *testing.T) {
 	}
 }
 
+func TestLoginReturnsTokensWhenSQLiteWriteLockPersists(t *testing.T) {
+	ctx := context.Background()
+	cfg := &config.Config{}
+	cfg.App.DataDir = t.TempDir()
+	cfg.Database.DBPath = filepath.Join(cfg.App.DataDir, "busy-login-degraded.db")
+	cfg.Database.WALMode = true
+	cfg.Database.BusyTimeout = 20
+	cfg.Database.MaxOpenConns = 4
+	cfg.Database.MaxIdleConns = 2
+	cfg.Secrets.JWTSecret = "test-secret"
+	log := zap.NewNop()
+	db, err := database.Open(cfg, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sqlDB.Close() }()
+	if err := database.AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	permissions := NewPermissionService(log, repos)
+	auth := NewAuthService(cfg, log, repos, NewTokenService(cfg, log, repos), permissions)
+	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := &model.User{
+		Username:     "viewer",
+		PasswordHash: string(hash),
+		Role:         "user",
+		Tier:         "free",
+		IsActive:     true,
+	}
+	if err := repos.User.Create(ctx, user); err != nil {
+		t.Fatal(err)
+	}
+
+	tx := repos.DB.Begin()
+	if err := tx.Exec("UPDATE users SET updated_at = updated_at WHERE username = ?", "viewer").Error; err != nil {
+		t.Fatal(err)
+	}
+	resp, err := auth.Login(ctx, "viewer", "password")
+	if err != nil {
+		t.Fatalf("login should return tokens while refresh token store is delayed: %v", err)
+	}
+	if resp == nil || resp.Tokens == nil || resp.Tokens.AccessToken == "" || resp.Tokens.RefreshToken == "" {
+		t.Fatalf("login returned incomplete token pair: %#v", resp)
+	}
+
+	if err := tx.Rollback().Error; err != nil {
+		t.Fatal(err)
+	}
+	wantHash := repository.HashToken(resp.Tokens.RefreshToken)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var count int64
+		if err := repos.DB.Model(&model.RefreshToken{}).Where("token_hash = ?", wantHash).Count(&count).Error; err != nil {
+			t.Fatal(err)
+		}
+		if count == 1 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("delayed refresh token store did not complete")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func TestDefaultPermissionsAreViewerOnly(t *testing.T) {
 	perms := DefaultPermissions("user-1")
 	if !perms.CanViewDashboard || !perms.CanPlayMedia || !perms.CanExternalPlayer {

@@ -25,6 +25,8 @@ const (
 	RefreshTokenLength = 32
 )
 
+const loginRefreshTokenStoreTimeout = 750 * time.Millisecond
+
 // Claims 是 JWT 载荷（复制自 middleware 以避免循环导入）。
 type Claims struct {
 	UserID string `json:"uid"`
@@ -62,6 +64,17 @@ var (
 
 // IssuePair 为用户签发新的令牌对。
 func (s *TokenService) IssuePair(ctx context.Context, userID, role, tier string) (*TokenPair, error) {
+	return s.issuePair(ctx, userID, role, tier, false)
+}
+
+// IssuePairBestEffort 为登录签发令牌。SQLite 被后台扫描长期写锁占用时，
+// 登录不能因为 refresh token 暂时无法落库而失败：先返回可用 access token，
+// 再在后台把 refresh token 补写进库。
+func (s *TokenService) IssuePairBestEffort(ctx context.Context, userID, role, tier string) (*TokenPair, error) {
+	return s.issuePair(ctx, userID, role, tier, true)
+}
+
+func (s *TokenService) issuePair(ctx context.Context, userID, role, tier string, bestEffort bool) (*TokenPair, error) {
 	// 生成 Access Token
 	accessToken, err := s.issueAccessToken(userID, role, tier)
 	if err != nil {
@@ -81,11 +94,23 @@ func (s *TokenService) IssuePair(ctx context.Context, userID, role, tier string)
 		TokenHash: tokenHash,
 		ExpiresAt: time.Now().Add(RefreshTokenDuration),
 	}
-	if err := s.repo.RefreshToken.Create(ctx, rt); err != nil {
-		return nil, err
+	storeCtx := ctx
+	cancel := func() {}
+	if bestEffort {
+		storeCtx, cancel = context.WithTimeout(context.Background(), loginRefreshTokenStoreTimeout)
 	}
-	if err := s.repo.RefreshToken.RevokeOldestActiveByUserID(ctx, userID, s.maxActiveRefreshTokens(ctx)); err != nil {
-		s.log.Warn("failed to enforce refresh token session limit", zap.String("user_id", userID), zap.Error(err))
+	err = s.storeRefreshToken(storeCtx, rt)
+	cancel()
+	if err != nil {
+		if !bestEffort {
+			return nil, err
+		}
+		if s.log != nil {
+			s.log.Warn("refresh token store delayed; login will continue",
+				zap.String("user_id", userID),
+				zap.Error(err))
+		}
+		go s.storeRefreshTokenEventually(userID, tokenHash, rt.ExpiresAt)
 	}
 
 	return &TokenPair{
@@ -94,6 +119,52 @@ func (s *TokenService) IssuePair(ctx context.Context, userID, role, tier string)
 		ExpiresIn:    int64(AccessTokenDuration.Seconds()),
 		TokenType:    "Bearer",
 	}, nil
+}
+
+func (s *TokenService) storeRefreshToken(ctx context.Context, rt *model.RefreshToken) error {
+	if err := s.repo.RefreshToken.Create(ctx, rt); err != nil {
+		return err
+	}
+	if err := s.repo.RefreshToken.RevokeOldestActiveByUserID(ctx, rt.UserID, s.maxActiveRefreshTokens(ctx)); err != nil && s.log != nil {
+		s.log.Warn("failed to enforce refresh token session limit", zap.String("user_id", rt.UserID), zap.Error(err))
+	}
+	return nil
+}
+
+func (s *TokenService) storeRefreshTokenEventually(userID, tokenHash string, expiresAt time.Time) {
+	delay := 500 * time.Millisecond
+	for attempt := 1; attempt <= 30; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := s.storeRefreshToken(ctx, &model.RefreshToken{
+			UserID:    userID,
+			TokenHash: tokenHash,
+			ExpiresAt: expiresAt,
+		})
+		cancel()
+		if err == nil {
+			return
+		}
+		if !repository.IsSQLiteBusyError(err) && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			if s.log != nil {
+				s.log.Warn("refresh token delayed store failed permanently", zap.String("user_id", userID), zap.Error(err))
+			}
+			return
+		}
+		if s.log != nil && (attempt == 1 || attempt%10 == 0) {
+			s.log.Warn("refresh token delayed store still waiting",
+				zap.String("user_id", userID),
+				zap.Int("attempt", attempt),
+				zap.Error(err))
+		}
+		timer := time.NewTimer(delay)
+		<-timer.C
+		if delay < 10*time.Second {
+			delay *= 2
+		}
+	}
+	if s.log != nil {
+		s.log.Warn("refresh token delayed store gave up", zap.String("user_id", userID))
+	}
 }
 
 func (s *TokenService) maxActiveRefreshTokens(ctx context.Context) int {

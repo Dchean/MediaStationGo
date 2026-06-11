@@ -47,6 +47,11 @@ func myPermissionsHandler(svc *service.Container) gin.HandlerFunc {
 		uid, _ := c.Get(middleware.CtxUserID)
 		row, err := svc.Permissions.Effective(c.Request.Context(), toString(uid))
 		if err != nil {
+			if service.IsTransientDatabaseLock(err) {
+				role, _ := c.Get(middleware.CtxUserRole)
+				c.JSON(http.StatusOK, service.FallbackPermissions(toString(uid), toString(role)))
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

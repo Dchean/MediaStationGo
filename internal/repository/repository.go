@@ -865,13 +865,18 @@ type PermissionRepository struct{ db *gorm.DB }
 
 // Create inserts a new permission record.
 func (r *PermissionRepository) Create(ctx context.Context, p *model.UserPermission) error {
-	return r.db.WithContext(ctx).Create(p).Error
+	return withSQLiteBusyRetry(ctx, func() error {
+		return r.db.WithContext(ctx).Create(p).Error
+	})
 }
 
 // FindByUserID returns the permission record for a user, or (nil, nil) when absent.
 func (r *PermissionRepository) FindByUserID(ctx context.Context, userID string) (*model.UserPermission, error) {
 	var p model.UserPermission
-	err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&p).Error
+	err := withSQLiteBusyRetry(ctx, func() error {
+		p = model.UserPermission{}
+		return r.db.WithContext(ctx).Where("user_id = ?", userID).First(&p).Error
+	})
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -883,19 +888,25 @@ func (r *PermissionRepository) FindByUserID(ctx context.Context, userID string) 
 
 // Update updates permission fields for a user.
 func (r *PermissionRepository) Update(ctx context.Context, userID string, updates map[string]bool) error {
-	return r.db.WithContext(ctx).Model(&model.UserPermission{}).
-		Where("user_id = ?", userID).Updates(updates).Error
+	return withSQLiteBusyRetry(ctx, func() error {
+		return r.db.WithContext(ctx).Model(&model.UserPermission{}).
+			Where("user_id = ?", userID).Updates(updates).Error
+	})
 }
 
 // Upsert creates or updates a permission record.
 func (r *PermissionRepository) Upsert(ctx context.Context, p *model.UserPermission) error {
-	return r.db.WithContext(ctx).Where("user_id = ?", p.UserID).
-		Assign(*p).FirstOrCreate(p).Error
+	return withSQLiteBusyRetry(ctx, func() error {
+		return r.db.WithContext(ctx).Where("user_id = ?", p.UserID).
+			Assign(*p).FirstOrCreate(p).Error
+	})
 }
 
 // Delete removes a permission record.
 func (r *PermissionRepository) Delete(ctx context.Context, userID string) error {
-	return r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&model.UserPermission{}).Error
+	return withSQLiteBusyRetry(ctx, func() error {
+		return r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&model.UserPermission{}).Error
+	})
 }
 
 // ─── Refresh Token ───────────────────────────────────────────────────────────

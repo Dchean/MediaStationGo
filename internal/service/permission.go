@@ -78,6 +78,13 @@ func adminGrant(userID string) *model.UserPermission {
 	}
 }
 
+func FallbackPermissions(userID, role string) *model.UserPermission {
+	if role == "admin" {
+		return adminGrant(userID)
+	}
+	return DefaultPermissions(userID)
+}
+
 // Effective returns the permission set the React UI should consume.
 // Admins skip the table entirely and get a synthetic all-grant row.
 func (s *PermissionService) Effective(ctx context.Context, userID string) (*model.UserPermission, error) {

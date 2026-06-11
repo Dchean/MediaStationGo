@@ -159,7 +159,7 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*Lo
 		return nil, ErrInvalidCredentials
 	}
 	// 签发令牌对
-	tokens, err := s.tokenSvc.IssuePair(ctx, u.ID, u.Role, u.Tier)
+	tokens, err := s.tokenSvc.IssuePairBestEffort(ctx, u.ID, u.Role, u.Tier)
 	if err != nil {
 		return nil, err
 	}

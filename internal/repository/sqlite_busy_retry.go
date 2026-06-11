@@ -13,7 +13,7 @@ func withSQLiteBusyRetry(ctx context.Context, op func() error) error {
 	deadline := time.Now().Add(sqliteBusyRetryMaxElapsed)
 	for {
 		err := op()
-		if !isSQLiteBusyError(err) {
+		if !IsSQLiteBusyError(err) {
 			return err
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -35,7 +35,7 @@ func withSQLiteBusyRetry(ctx context.Context, op func() error) error {
 	}
 }
 
-func isSQLiteBusyError(err error) bool {
+func IsSQLiteBusyError(err error) bool {
 	if err == nil {
 		return false
 	}

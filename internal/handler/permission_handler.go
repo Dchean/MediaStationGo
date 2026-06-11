@@ -116,6 +116,21 @@ func (h *PermissionHandler) GetMyPermissions(c *gin.Context) {
 
 	perms, err := h.svc.Permissions.Effective(c.Request.Context(), currentUserID)
 	if err != nil {
+		if service.IsTransientDatabaseLock(err) {
+			role := middleware.GetUserRole(c)
+			tier := middleware.GetUserTier(c)
+			c.JSON(http.StatusOK, gin.H{
+				"code":    0,
+				"message": "ok",
+				"data": gin.H{
+					"permissions": service.FallbackPermissions(currentUserID, role),
+					"role":        role,
+					"tier":        tier,
+					"is_super":    role == "admin" || tier == "plus",
+				},
+			})
+			return
+		}
 		h.log.Error("get my permissions failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 50001, "message": "internal error", "data": nil})
 		return
