@@ -30,7 +30,7 @@ func TestServeSPANoCachesIndexAndServesRoutes(t *testing.T) {
 	router := gin.New()
 	serveSPA(router, webDir)
 
-	for _, path := range []string{"/", "/login", "/media/abc"} {
+	for _, path := range []string{"/", "/login", "/library/e1c3507e-2878-40ae-a0e1-6b6e44b7fa7a", "/media/abc"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
@@ -76,6 +76,7 @@ func TestServeSPAServesAssetsImmutableAndBypassesAPIRoutes(t *testing.T) {
 		"/api/missing",
 		"/emby",
 		"/emby/missing",
+		"/Library/VirtualFolders",
 		"/Startup/Configuration",
 		"/QuickConnect/Enabled",
 		"/embywebsocket",

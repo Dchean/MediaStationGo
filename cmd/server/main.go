@@ -200,6 +200,9 @@ func setNoCacheHeaders(c *gin.Context) {
 }
 
 func shouldBypassSPAFallback(path string) bool {
+	if isFrontendLibraryRoute(path) {
+		return false
+	}
 	lower := strings.ToLower(path)
 	for _, exact := range []string{
 		"/emby",
@@ -231,6 +234,33 @@ func shouldBypassSPAFallback(path string) bool {
 		}
 	}
 	return false
+}
+
+func isFrontendLibraryRoute(path string) bool {
+	const prefix = "/library/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	id := strings.TrimPrefix(path, prefix)
+	if strings.Contains(id, "/") {
+		return false
+	}
+	if len(id) != 36 {
+		return false
+	}
+	for i, ch := range id {
+		switch i {
+		case 8, 13, 18, 23:
+			if ch != '-' {
+				return false
+			}
+		default:
+			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func newLogger(cfg *config.Config) (*zap.Logger, error) {

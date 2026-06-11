@@ -31,6 +31,7 @@ logs/
 .tmp-deploy-smoke-cache/
 .tmp-deploy-cache/
 .tmp-deploy-server.*
+.tmp-live-server.*
 .mediastation.pid
 *.log
 *.db
