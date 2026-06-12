@@ -268,6 +268,13 @@ func (c *Container) warmMediaSearchIndex(ctx context.Context) {
 	if c == nil || c.Repo == nil || c.Repo.Media == nil {
 		return
 	}
+	// 错峰：FTS 正常由 media 表触发器实时维护，回填只是升级或异常后的
+	// 兜底。先让登录、首页等关键路径跑起来，再开始后台补索引。
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(30 * time.Second):
+	}
 	const batchSize = 1000
 	const pause = 100 * time.Millisecond
 	total := int64(0)

@@ -323,7 +323,6 @@ func (r *MediaRepository) upsert(ctx context.Context, m *model.Media) error {
 			m.ScrapeStatus = "pending"
 		}
 		if createErr := r.db.WithContext(ctx).Create(m).Error; createErr == nil {
-			_ = r.refreshSearchIndex(ctx, m.ID)
 			return nil
 		} else if retryErr := r.db.WithContext(ctx).Unscoped().Where("path = ?", m.Path).First(&existing).Error; retryErr != nil {
 			return createErr
@@ -426,7 +425,6 @@ func (r *MediaRepository) upsert(ctx context.Context, m *model.Media) error {
 		Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 		return err
 	}
-	_ = r.refreshSearchIndex(ctx, existing.ID)
 	// 回写 ID / 不可变字段，让 caller 拿到完整的现有行。
 	*m = existing
 	return nil
@@ -518,7 +516,7 @@ func (r *MediaRepository) searchFilteredFTS(ctx context.Context, query string, o
 	var items []model.Media
 	q := r.db.WithContext(ctx).
 		Table("media").
-		Joins("JOIN media_search_fts ON media_search_fts.media_id = media.id").
+		Joins("JOIN media_search_fts ON media_search_fts.rowid = media.rowid").
 		Where("media.deleted_at IS NULL").
 		Where("media_search_fts MATCH ?", ftsQuery)
 	q = applyQualifiedMediaQueryFilter(q, filter)
@@ -625,23 +623,6 @@ func escapeLike(value string) string {
 	return value
 }
 
-func (r *MediaRepository) refreshSearchIndex(ctx context.Context, mediaID string) error {
-	if strings.TrimSpace(mediaID) == "" {
-		return nil
-	}
-	if !r.searchIndexEnabled(ctx) {
-		return nil
-	}
-	tx := r.db.WithContext(ctx)
-	_ = tx.Exec(`DELETE FROM media_search_fts WHERE media_id = ?`, mediaID).Error
-	return tx.Exec(`
-INSERT INTO media_search_fts(media_id, title, original_name, path, genres)
-SELECT id, COALESCE(title, ''), COALESCE(original_name, ''), COALESCE(path, ''), COALESCE(genres, '')
-FROM media
-WHERE id = ? AND deleted_at IS NULL
-`, mediaID).Error
-}
-
 func (r *MediaRepository) BackfillSearchIndex(ctx context.Context, batchLimit int) (int64, error) {
 	if batchLimit <= 0 {
 		batchLimit = 1000
@@ -649,15 +630,19 @@ func (r *MediaRepository) BackfillSearchIndex(ctx context.Context, batchLimit in
 	if !r.searchIndexEnabled(ctx) {
 		return 0, nil
 	}
+	// 关键性能点：FTS5 普通列（含 UNINDEXED）不支持索引查找，按
+	// media_id 做 NOT EXISTS 是对 FTS 表的整表扫描，再叠加 ORDER BY
+	// 后每个批次都要对全部 media 行探测一遍——大库一次启动回填等于
+	// 上百亿次行访问，曾把 CPU 钉满数小时。v2 布局下 FTS 行 rowid 与
+	// media.rowid 对齐，NOT EXISTS 走 rowid 点查，且无需排序。
 	res := r.db.WithContext(ctx).Exec(`
-INSERT INTO media_search_fts(media_id, title, original_name, path, genres)
-SELECT m.id, COALESCE(m.title, ''), COALESCE(m.original_name, ''), COALESCE(m.path, ''), COALESCE(m.genres, '')
+INSERT INTO media_search_fts(rowid, media_id, title, original_name, path, genres)
+SELECT m.rowid, m.id, COALESCE(m.title, ''), COALESCE(m.original_name, ''), COALESCE(m.path, ''), COALESCE(m.genres, '')
 FROM media AS m
 WHERE m.deleted_at IS NULL
   AND NOT EXISTS (
-    SELECT 1 FROM media_search_fts AS f WHERE f.media_id = m.id
+    SELECT 1 FROM media_search_fts AS f WHERE f.rowid = m.rowid
   )
-ORDER BY m.created_at DESC
 LIMIT ?
 `, batchLimit)
 	return res.RowsAffected, res.Error
@@ -679,18 +664,13 @@ func (r *MediaRepository) searchIndexEnabled(ctx context.Context) bool {
 
 // DeleteByLibrary purges all media tied to a library.
 func (r *MediaRepository) DeleteByLibrary(ctx context.Context, libraryID string) error {
-	if r.searchIndexEnabled(ctx) {
-		_ = r.db.WithContext(ctx).Exec(`DELETE FROM media_search_fts WHERE media_id IN (SELECT id FROM media WHERE library_id = ?)`, libraryID).Error
-	}
+	// FTS 行由 media 表上的触发器同步清理（软删/硬删都覆盖）。
 	return r.db.WithContext(ctx).Where("library_id = ?", libraryID).Delete(&model.Media{}).Error
 }
 
 // PurgeByLibrary permanently removes media tied to a library. Used for virtual
 // cloud mounts where "remove mount" must not populate the recycle bin.
 func (r *MediaRepository) PurgeByLibrary(ctx context.Context, libraryID string) error {
-	if r.searchIndexEnabled(ctx) {
-		_ = r.db.WithContext(ctx).Exec(`DELETE FROM media_search_fts WHERE media_id IN (SELECT id FROM media WHERE library_id = ?)`, libraryID).Error
-	}
 	return r.db.WithContext(ctx).Unscoped().Where("library_id = ?", libraryID).Delete(&model.Media{}).Error
 }
 

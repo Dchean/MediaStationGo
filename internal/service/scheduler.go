@@ -134,7 +134,14 @@ func (s *SchedulerService) Start(ctx context.Context) {
 		},
 	}
 	for _, j := range s.jobs {
-		go s.loop(ctx, j)
+		initialDelay := 15 * time.Second
+		if j.name == "library_scan" {
+			// 重启后不立即整库重扫：更新/重启窗口恰是登录高峰，启动
+			// 15 秒即全量扫描曾把 CPU/磁盘打满导致无法登录。首轮等满
+			// 一个完整周期再跑，平时的每小时节奏不变。
+			initialDelay = j.interval
+		}
+		go s.loopWithInitialDelay(ctx, j, initialDelay)
 	}
 }
 
@@ -257,6 +264,13 @@ func (s *SchedulerService) jobScanLibraries(ctx context.Context) error {
 	}
 	for _, l := range libs {
 		if !l.Enabled {
+			continue
+		}
+		if _, ok := ParseCloudLibraryMount(l.Path); ok {
+			// 云盘库由 cloud_sync 任务在夜间窗口低频同步；周期性整库
+			// 重扫只面向本地磁盘库。否则十几个云盘库每小时全量遍历
+			// 会把 CPU/网络长期吃满，还会占住唯一的云扫描槽位，让
+			// 手动扫描看起来一直"卡死"在排队。
 			continue
 		}
 		if _, err := s.scanner.ScanLibrary(ctx, l.ID); err != nil {

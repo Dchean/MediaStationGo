@@ -3,9 +3,9 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
-	"sync"
 
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
@@ -57,12 +57,23 @@ func installSQLiteWriteGate(db *gorm.DB) {
 	if db == nil {
 		return
 	}
-	gate := &sqliteWriteGate{}
+	const lockedKey = "mediastation:sqlite_write_locked"
+	gate := newSQLiteWriteGate()
 	lock := func(tx *gorm.DB) {
-		gate.Lock()
+		ctx := context.Background()
+		if tx.Statement != nil && tx.Statement.Context != nil {
+			ctx = tx.Statement.Context
+		}
+		if err := gate.Lock(ctx); err != nil {
+			_ = tx.AddError(err)
+			return
+		}
+		tx.InstanceSet(lockedKey, struct{}{})
 	}
 	unlock := func(tx *gorm.DB) {
-		gate.Unlock()
+		if _, ok := tx.InstanceGet(lockedKey); ok {
+			gate.Unlock()
+		}
 	}
 	_ = db.Callback().Create().Before("gorm:create").Register("mediastation:sqlite_write_lock", lock)
 	_ = db.Callback().Create().After("gorm:create").Register("mediastation:sqlite_write_unlock", unlock)
@@ -74,16 +85,41 @@ func installSQLiteWriteGate(db *gorm.DB) {
 	_ = db.Callback().Raw().After("gorm:raw").Register("mediastation:sqlite_write_unlock", unlock)
 }
 
+// sqliteWriteGate 串行化进程内的 SQLite 写操作，避免多连接写竞争触发
+// SQLITE_BUSY。Lock 尊重语句自身的 context：此前用 sync.Mutex 时，一条
+// 长写语句（如 FTS 回填批次）会让登录等关键写操作无限期排队——客户端
+// 早已超时断开，goroutine 还挂在互斥锁上。现在等待方可随 context 取消
+// 及时失败，不再把整个进程的写路径拖死。
 type sqliteWriteGate struct {
-	mu sync.Mutex
+	ch chan struct{}
 }
 
-func (g *sqliteWriteGate) Lock() {
-	g.mu.Lock()
+func newSQLiteWriteGate() *sqliteWriteGate {
+	return &sqliteWriteGate{ch: make(chan struct{}, 1)}
+}
+
+func (g *sqliteWriteGate) Lock(ctx context.Context) error {
+	select {
+	case g.ch <- struct{}{}:
+		return nil
+	default:
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case g.ch <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (g *sqliteWriteGate) Unlock() {
-	g.mu.Unlock()
+	select {
+	case <-g.ch:
+	default:
+	}
 }
 
 func buildDSN(cfg *config.Config) string {
@@ -139,9 +175,31 @@ func ensurePerformanceIndexes(db *gorm.DB) error {
 	return nil
 }
 
+// mediaSearchIndexSchemaVersion 标识 FTS 索引的物理布局版本。
+// v2：FTS 行的 rowid 与 media.rowid 对齐，并由触发器实时维护。
+const mediaSearchIndexSchemaVersion = 2
+
 func ensureMediaSearchIndex(db *gorm.DB) error {
-	if mediaSearchIndexNeedsRebuild(db) {
-		_ = db.Exec(`DROP TABLE IF EXISTS media_search_fts`).Error
+	if err := db.Exec(`CREATE TABLE IF NOT EXISTS media_search_meta (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)`).Error; err != nil {
+		return nil
+	}
+	var version int
+	_ = db.Raw(`SELECT version FROM media_search_meta WHERE id = 1`).Scan(&version).Error
+	if version != mediaSearchIndexSchemaVersion {
+		// 旧版（v1）FTS 表按 UNINDEXED 的 media_id 寻址。FTS5 的普通列
+		// 不支持索引查找，按 media_id 的 DELETE / NOT EXISTS 都是整表
+		// 扫描：十几万行的库每次启动回填要做上百亿次行访问，纯 Go
+		// sqlite 直接把 CPU 钉满数小时，并隔着全局写锁拖死登录。
+		// v2 起 FTS 行的 rowid 与 media.rowid 对齐，所有寻址走 rowid
+		// 点查，索引一致性交给下方触发器维护。
+		for _, stmt := range []string{
+			`DROP TRIGGER IF EXISTS media_search_fts_ai`,
+			`DROP TRIGGER IF EXISTS media_search_fts_au`,
+			`DROP TRIGGER IF EXISTS media_search_fts_ad`,
+			`DROP TABLE IF EXISTS media_search_fts`,
+		} {
+			_ = db.Exec(stmt).Error
+		}
 	}
 	if err := db.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS media_search_fts USING fts5(media_id UNINDEXED, title, original_name, path, genres, tokenize='trigram')`).Error; err != nil {
 		if fallbackErr := db.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS media_search_fts USING fts5(media_id UNINDEXED, title, original_name, path, genres, tokenize='unicode61')`).Error; fallbackErr != nil {
@@ -151,22 +209,35 @@ func ensureMediaSearchIndex(db *gorm.DB) error {
 			return nil
 		}
 	}
-	return nil
-}
-
-func mediaSearchIndexNeedsRebuild(db *gorm.DB) bool {
-	var cols []struct {
-		Name string
-	}
-	if err := db.Raw(`PRAGMA table_info(media_search_fts)`).Scan(&cols).Error; err != nil || len(cols) == 0 {
-		return false
-	}
-	for _, col := range cols {
-		if col.Name == "genres" {
-			return false
+	// 触发器让 FTS 与 media 行保持同步（新增/标题刮削改写/软删/恢复/
+	// 硬删全覆盖），应用层不再需要按 media_id 手工刷新索引——也顺带
+	// 修复了刮削直写 Updates() 后新标题搜不到的问题。
+	for _, stmt := range []string{
+		`CREATE TRIGGER IF NOT EXISTS media_search_fts_ai AFTER INSERT ON media WHEN new.deleted_at IS NULL BEGIN
+			DELETE FROM media_search_fts WHERE rowid = new.rowid;
+			INSERT INTO media_search_fts(rowid, media_id, title, original_name, path, genres)
+			VALUES (new.rowid, new.id, COALESCE(new.title, ''), COALESCE(new.original_name, ''), COALESCE(new.path, ''), COALESCE(new.genres, ''));
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS media_search_fts_au AFTER UPDATE OF title, original_name, path, genres, deleted_at ON media BEGIN
+			DELETE FROM media_search_fts WHERE rowid = old.rowid;
+			INSERT INTO media_search_fts(rowid, media_id, title, original_name, path, genres)
+			SELECT new.rowid, new.id, COALESCE(new.title, ''), COALESCE(new.original_name, ''), COALESCE(new.path, ''), COALESCE(new.genres, '')
+			WHERE new.deleted_at IS NULL;
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS media_search_fts_ad AFTER DELETE ON media BEGIN
+			DELETE FROM media_search_fts WHERE rowid = old.rowid;
+		END`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			return err
 		}
 	}
-	return true
+	if version != mediaSearchIndexSchemaVersion {
+		if err := db.Exec(`INSERT INTO media_search_meta(id, version) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET version = excluded.version`, mediaSearchIndexSchemaVersion).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func enforceTelegramBindingOneToOne(db *gorm.DB) error {

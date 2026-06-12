@@ -1491,13 +1491,20 @@ func (s *ScannerService) mediaPathExists(ctx context.Context, path string) bool 
 }
 
 func (s *ScannerService) pruneMissingMedia(ctx context.Context, libraryID string, seen map[string]struct{}) (int64, error) {
-	var rows []model.Media
+	// 只取 id/path，并把删除按批提交：此前整表载入完整 Media 结构体、
+	// 每行一条 DELETE，大库 prune 既费内存又长期占用写锁。
+	var rows []struct {
+		ID   string
+		Path string
+	}
 	if err := s.repo.DB.WithContext(ctx).
+		Model(&model.Media{}).
+		Select("id, path").
 		Where("library_id = ?", libraryID).
 		Find(&rows).Error; err != nil {
 		return 0, err
 	}
-	var removed int64
+	stale := make([]string, 0)
 	for _, row := range rows {
 		if row.Path == "" {
 			continue
@@ -1510,9 +1517,26 @@ func (s *ScannerService) pruneMissingMedia(ctx context.Context, libraryID string
 		} else if !os.IsNotExist(err) {
 			continue
 		}
-		res := s.repo.DB.WithContext(ctx).
-			Where("id = ?", row.ID).
-			Delete(&model.Media{})
+		stale = append(stale, row.ID)
+	}
+	return s.deleteMediaByIDs(ctx, stale, false)
+}
+
+// deleteMediaByIDs removes media rows in fixed-size batches so each write
+// transaction stays short and the global write gate is released frequently.
+func (s *ScannerService) deleteMediaByIDs(ctx context.Context, ids []string, hard bool) (int64, error) {
+	const batch = 500
+	var removed int64
+	for i := 0; i < len(ids); i += batch {
+		end := i + batch
+		if end > len(ids) {
+			end = len(ids)
+		}
+		q := s.repo.DB.WithContext(ctx)
+		if hard {
+			q = q.Unscoped()
+		}
+		res := q.Where("id IN ?", ids[i:end]).Delete(&model.Media{})
 		if res.Error != nil {
 			return removed, res.Error
 		}
@@ -1522,27 +1546,25 @@ func (s *ScannerService) pruneMissingMedia(ctx context.Context, libraryID string
 }
 
 func (s *ScannerService) pruneMissingCloudMedia(ctx context.Context, libraryID string, seen map[string]struct{}) (int64, error) {
-	var rows []model.Media
+	var rows []struct {
+		ID   string
+		Path string
+	}
 	if err := s.repo.DB.WithContext(ctx).
+		Model(&model.Media{}).
+		Select("id, path").
 		Where("library_id = ? AND path LIKE ?", libraryID, "cloud://%").
 		Find(&rows).Error; err != nil {
 		return 0, err
 	}
-	var removed int64
+	stale := make([]string, 0)
 	for _, row := range rows {
 		if _, ok := seen[row.Path]; ok {
 			continue
 		}
-		res := s.repo.DB.WithContext(ctx).
-			Unscoped().
-			Where("id = ?", row.ID).
-			Delete(&model.Media{})
-		if res.Error != nil {
-			return removed, res.Error
-		}
-		removed += res.RowsAffected
+		stale = append(stale, row.ID)
 	}
-	return removed, nil
+	return s.deleteMediaByIDs(ctx, stale, true)
 }
 
 func parseCloudLibraryPath(raw string) (typ, dirID string, ok bool) {

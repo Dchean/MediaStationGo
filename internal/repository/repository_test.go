@@ -153,12 +153,17 @@ func TestMediaSearchIndexBackfillRunsInBatches(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	var before int64
-	if err := repos.DB.Raw(`SELECT COUNT(*) FROM media_search_fts`).Scan(&before).Error; err != nil {
+	// 插入触发器应当同步维护 FTS 行。
+	var indexed int64
+	if err := repos.DB.Raw(`SELECT COUNT(*) FROM media_search_fts`).Scan(&indexed).Error; err != nil {
 		t.Fatal(err)
 	}
-	if before != 0 {
-		t.Fatalf("startup migrate should not synchronously backfill FTS, got %d rows", before)
+	if indexed != 1 {
+		t.Fatalf("insert trigger should index new media, got %d rows", indexed)
+	}
+	// 清空 FTS 模拟旧库升级后索引缺失，回填应按批补齐且 rowid 对齐。
+	if err := repos.DB.Exec(`DELETE FROM media_search_fts`).Error; err != nil {
+		t.Fatal(err)
 	}
 	n, err := repos.Media.BackfillSearchIndex(t.Context(), 1)
 	if err != nil {
@@ -167,11 +172,22 @@ func TestMediaSearchIndexBackfillRunsInBatches(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("backfilled rows = %d, want 1", n)
 	}
+	var aligned int64
+	if err := repos.DB.Raw(`SELECT COUNT(*) FROM media_search_fts f JOIN media m ON f.rowid = m.rowid AND f.media_id = m.id`).Scan(&aligned).Error; err != nil {
+		t.Fatal(err)
+	}
+	if aligned != 1 {
+		t.Fatalf("fts rows aligned with media rowid = %d, want 1", aligned)
+	}
+	// 软删除后触发器应清理对应 FTS 行，避免搜索命中已删媒体。
+	if err := repos.DB.Delete(&model.Media{}, "id = ?", "m-backfill").Error; err != nil {
+		t.Fatal(err)
+	}
 	var after int64
 	if err := repos.DB.Raw(`SELECT COUNT(*) FROM media_search_fts`).Scan(&after).Error; err != nil {
 		t.Fatal(err)
 	}
-	if after != 1 {
-		t.Fatalf("fts rows = %d, want 1", after)
+	if after != 0 {
+		t.Fatalf("soft delete should drop fts row, got %d", after)
 	}
 }
