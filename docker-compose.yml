@@ -76,3 +76,11 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+    # 限制容器日志体积：默认 json-file 驱动不设上限，
+    # 长期运行会持续吃宿主机磁盘与 IO。
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

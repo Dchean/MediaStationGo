@@ -60,3 +60,10 @@ config.yaml
 # Editor backups
 *~
 .tmp_*
+
+# Runtime / local-only artifacts (清理补充)
+.tmp-live-backups/
+.tmp-*
+downloads/
+media/
+*.pid
