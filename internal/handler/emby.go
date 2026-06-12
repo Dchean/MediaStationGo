@@ -573,6 +573,7 @@ func embyItemByIDHandler(svc *service.Container) gin.HandlerFunc {
 			embyError(c, http.StatusNotFound, "item not found")
 			return
 		}
+		embyAttachRequestTokenToPlaybackInfo(c, out)
 		c.JSON(http.StatusOK, out)
 	}
 }
@@ -1064,6 +1065,18 @@ func embyEmptyItemsHandler(_ *service.Container) gin.HandlerFunc {
 	}
 }
 
+func embyServerDomainsHandler(_ *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, []any{})
+	}
+}
+
+func embyDanmuRawHandler(_ *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", nil)
+	}
+}
+
 func embyBrandingConfigHandler(_ *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -1118,6 +1131,10 @@ func registerEmbyRoutes(r *gin.Engine, jwtSecret string, svc *service.Container)
 		}
 		for _, path := range []string{"/System/Endpoint", "/system/endpoint"} {
 			grp.GET(path, embySystemEndpointHandler(svc))
+		}
+		for _, path := range []string{"/System/Ext/ServerDomains", "/system/ext/serverdomains"} {
+			grp.GET(path, embyServerDomainsHandler(svc))
+			grp.HEAD(path, embyServerDomainsHandler(svc))
 		}
 		for _, path := range []string{"/System/Configuration/Public", "/system/configuration/public"} {
 			grp.GET(path, embyPublicServerConfigurationHandler(svc))
@@ -1193,6 +1210,8 @@ func registerEmbyRoutes(r *gin.Engine, jwtSecret string, svc *service.Container)
 		auth.GET("/Shows/NextUp", embyEmptyItemsHandler(svc))
 		auth.GET("/Users/:userId/Shows/NextUp", embyEmptyItemsHandler(svc))
 		auth.GET("/MediaSegments/:id", embyEmptyItemsHandler(svc))
+		auth.GET("/Items/:id/Similar", embyEmptyItemsHandler(svc))
+		auth.GET("/api/danmu/:id/raw", embyDanmuRawHandler(svc))
 
 		auth.GET("/Items/:id/PlaybackInfo", embyPlaybackInfoHandler(svc))
 		auth.POST("/Items/:id/PlaybackInfo", embyPlaybackInfoHandler(svc))
@@ -1257,6 +1276,7 @@ func registerLowercaseEmbyAuthRoutes(auth *gin.RouterGroup, svc *service.Contain
 	auth.GET("/shows/nextup", embyEmptyItemsHandler(svc))
 	auth.GET("/users/:userId/shows/nextup", embyEmptyItemsHandler(svc))
 	auth.GET("/mediasegments/:id", embyEmptyItemsHandler(svc))
+	auth.GET("/items/:id/similar", embyEmptyItemsHandler(svc))
 
 	auth.GET("/items/:id/playbackinfo", embyPlaybackInfoHandler(svc))
 	auth.POST("/items/:id/playbackinfo", embyPlaybackInfoHandler(svc))

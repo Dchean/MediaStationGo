@@ -375,11 +375,15 @@ func TestCloudDrive2WebDAVListAndResolve(t *testing.T) {
 func TestOpenListWebDAVListAndResolve(t *testing.T) {
 	var gotPath, gotDepth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/fs/get" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != "PROPFIND" || r.URL.Path != "/dav" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
 		gotPath = r.URL.Path
 		gotDepth = r.Header.Get("Depth")
-		if r.Method != "PROPFIND" {
-			t.Fatalf("unexpected method %s", r.Method)
-		}
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusMultiStatus)
 		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
@@ -425,6 +429,67 @@ func TestOpenListWebDAVListAndResolve(t *testing.T) {
 	}
 	if !link.Proxy {
 		t.Fatalf("openlist should default to proxy mode")
+	}
+}
+
+func TestOpenListResolveUsesAPIRawURLFor302Playback(t *testing.T) {
+	var gotPath, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		if r.Method != http.MethodPost || r.URL.Path != "/api/fs/get" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"data":{"raw_url":"https://cdn.example.test/movie.mkv?sign=1"}}`))
+	}))
+	defer srv.Close()
+
+	p, err := New(TypeOpenList, map[string]any{"server": srv.URL, "token": "alist-token"}, srv.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := p.Resolve(context.Background(), "/Cloud/Movie.mkv")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if gotPath != "/api/fs/get" {
+		t.Fatalf("api path = %q, want /api/fs/get", gotPath)
+	}
+	if gotAuth != "alist-token" {
+		t.Fatalf("Authorization = %q, want token", gotAuth)
+	}
+	if link.URL != "https://cdn.example.test/movie.mkv?sign=1" {
+		t.Fatalf("url = %q", link.URL)
+	}
+	if link.Proxy {
+		t.Fatalf("openlist raw_url without required headers should be 302 playback")
+	}
+}
+
+func TestOpenListResolveFallsBackToProxyWhenAPIRawURLNeedsHeaders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/fs/get" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":200,"data":{"raw_url":"/dav/Cloud/Movie.mkv","header":{"Cookie":"sid=abc"}}}`))
+	}))
+	defer srv.Close()
+
+	p, err := New(TypeOpenList, map[string]any{"server": srv.URL, "token": "alist-token"}, srv.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := p.Resolve(context.Background(), "/Cloud/Movie.mkv")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if link.URL != srv.URL+"/dav/Cloud/Movie.mkv" {
+		t.Fatalf("url = %q", link.URL)
+	}
+	if !link.Proxy || link.Headers["Cookie"] != "sid=abc" {
+		t.Fatalf("link should keep proxy mode with required headers: %#v", link)
 	}
 }
 

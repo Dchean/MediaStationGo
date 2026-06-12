@@ -179,6 +179,56 @@ func TestEmbyPublicSystemInfoLooksLikeModernEmbyServer(t *testing.T) {
 	}
 }
 
+func TestEmbyMobileCompatibilityRoutesAvoidPlaybackBlocking404s(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if err := db.Create(&model.User{
+		Base:         model.Base{ID: "user-1"},
+		Username:     "viewer",
+		PasswordHash: "hash",
+		Role:         "admin",
+		IsActive:     true,
+	}).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	cfg := &config.Config{}
+	cfg.Secrets.JWTSecret = "test-secret"
+	repos := repository.New(db)
+	router := gin.New()
+	registerEmbyRoutes(router, cfg.Secrets.JWTSecret, &service.Container{
+		Repo: repos,
+		Emby: service.NewEmbyService(cfg, zap.NewNop(), repos),
+	})
+
+	token := signedTestToken(t, cfg.Secrets.JWTSecret)
+	tests := []struct {
+		path     string
+		auth     bool
+		wantCode int
+	}{
+		{path: "/emby/System/Ext/ServerDomains", wantCode: http.StatusOK},
+		{path: "/emby/Items/msgo-series-demo/Similar", auth: true, wantCode: http.StatusOK},
+		{path: "/emby/api/danmu/media-demo/raw", auth: true, wantCode: http.StatusOK},
+	}
+	for _, tc := range tests {
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		if tc.auth {
+			req.Header.Set("X-Emby-Token", token)
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != tc.wantCode {
+			t.Fatalf("%s status = %d body=%s", tc.path, w.Code, w.Body.String())
+		}
+	}
+}
+
 func TestEmbySenPlayerDiscoveryRoutesReturnProtocolResponses(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -645,14 +695,14 @@ func TestEmbyPlaybackInfoTokenizesCloudPath(t *testing.T) {
 	}
 	source := body["MediaSources"].([]any)[0].(map[string]any)
 	pathURL, _ := source["Path"].(string)
-	if !strings.HasPrefix(pathURL, "/Videos/cloud-1/stream") || !strings.Contains(pathURL, "api_key=") {
+	if !strings.HasPrefix(pathURL, "/api/stream/cloud-1") || !strings.Contains(pathURL, "api_key=") {
 		t.Fatalf("cloud Path should be tokenized stream URL, got %#v", source)
 	}
 	if strings.Contains(pathURL, "/api/cloud/play/") {
 		t.Fatalf("cloud Path should not expose naked cloud play URL: %#v", source)
 	}
 	directURL, _ := source["DirectStreamUrl"].(string)
-	if !strings.HasPrefix(directURL, "/Videos/cloud-1/stream.") || !strings.Contains(directURL, "api_key=") {
+	if !strings.HasPrefix(directURL, "/api/stream/cloud-1") || !strings.Contains(directURL, "api_key=") {
 		t.Fatalf("DirectStreamUrl should stay tokenized: %#v", source)
 	}
 }

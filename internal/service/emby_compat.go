@@ -511,7 +511,7 @@ func (e *EmbyService) payloadsForMedia(ctx context.Context, rows []model.Media, 
 
 	items := make([]map[string]any, 0, len(rows))
 	for _, m := range rows {
-		items = append(items, e.itemPayload(&m, userFavs[m.ID], userPos[m.ID]))
+		items = append(items, e.itemPayload(ctx, &m, userFavs[m.ID], userPos[m.ID]))
 	}
 	return items, nil
 }
@@ -562,7 +562,7 @@ func (e *EmbyService) Item(ctx context.Context, mediaID, userID string) (map[str
 			pos = h.PositionMs
 		}
 	}
-	return e.itemPayload(m, fav, pos), nil
+	return e.itemPayload(ctx, m, fav, pos), nil
 }
 
 // LatestItems 最近添加，全库或指定库。
@@ -601,7 +601,7 @@ func (e *EmbyService) LatestItems(ctx context.Context, userID, parentID string, 
 	}
 	out := make([]map[string]any, 0, len(rows))
 	for _, m := range rows {
-		out = append(out, e.itemPayload(&m, favs[m.ID], 0))
+		out = append(out, e.itemPayload(ctx, &m, favs[m.ID], 0))
 	}
 	return out, nil
 }
@@ -675,13 +675,13 @@ func (e *EmbyService) ResumeItems(ctx context.Context, userID string, limit int)
 	items := make([]map[string]any, 0, len(hist))
 	for _, h := range hist {
 		if m, ok := byID[h.MediaID]; ok {
-			items = append(items, e.itemPayload(m, false, posByID[h.MediaID]))
+			items = append(items, e.itemPayload(ctx, m, false, posByID[h.MediaID]))
 		}
 	}
 	return map[string]any{"Items": items, "TotalRecordCount": len(items)}, nil
 }
 
-func (e *EmbyService) itemPayload(m *model.Media, fav bool, posMs int64) map[string]any {
+func (e *EmbyService) itemPayload(ctx context.Context, m *model.Media, fav bool, posMs int64) map[string]any {
 	itemType := "Movie"
 	name := m.Title
 	parentID := m.LibraryID
@@ -756,7 +756,7 @@ func (e *EmbyService) itemPayload(m *model.Media, fav bool, posMs int64) map[str
 			"Played":                played,
 			"PlayedPercentage":      pct,
 		},
-		"MediaSources": []map[string]any{e.mediaSource(m, true, false)},
+		"MediaSources": []map[string]any{e.mediaSource(ctx, m, true, false)},
 	}
 }
 
@@ -1474,7 +1474,7 @@ func (e *EmbyService) PlaybackInfo(ctx context.Context, mediaID, userID string) 
 	}
 	e.ensureCloudTrackMetadata(ctx, m)
 	return map[string]any{
-		"MediaSources":  []map[string]any{e.mediaSource(m, false, e.directPlayOnly(ctx))},
+		"MediaSources":  []map[string]any{e.mediaSource(ctx, m, false, e.directPlayOnly(ctx))},
 		"PlaySessionId": fmt.Sprintf("%s-%d", m.ID, time.Now().Unix()),
 	}, nil
 }
@@ -1629,7 +1629,7 @@ func (e *EmbyService) playableMedia(ctx context.Context, id, userID string) (*mo
 // asEmbedded=true：嵌在 /Items 列表里，不包含完整 stream URL（避免暴露
 // 直链给搜索接口）。/PlaybackInfo 走 false 路径，URL 指向 Emby 兼容
 // /Videos/{id}/stream（客户端会继续携带 X-Emby-Token 或 append api_key）。
-func (e *EmbyService) mediaSource(m *model.Media, asEmbedded, directOnly bool) map[string]any {
+func (e *EmbyService) mediaSource(ctx context.Context, m *model.Media, asEmbedded, directOnly bool) map[string]any {
 	container := strings.Trim(strings.ToLower(m.Container), ". ")
 	if container == "" {
 		container = strings.TrimPrefix(strings.ToLower(filepath.Ext(m.Path)), ".")
@@ -1638,6 +1638,10 @@ func (e *EmbyService) mediaSource(m *model.Media, asEmbedded, directOnly bool) m
 		container = "strm"
 	}
 	isCloud := strings.TrimSpace(m.STRMURL) != ""
+	playURL := embyDirectStreamURL(m.ID, container)
+	if isCloud && STRMPlaybackEnabled(ctx, e.repo) {
+		playURL = embySTRMStreamURL(m.ID)
+	}
 	if isCloud {
 		// Cloud/WebDAV media is already a direct/proxy stream. Advertising HLS
 		// transcoding makes some Emby clients pick /master.m3u8, forcing this
@@ -1670,8 +1674,7 @@ func (e *EmbyService) mediaSource(m *model.Media, asEmbedded, directOnly bool) m
 		"MediaStreams":         e.mediaStreams(m),
 	}
 	if !asEmbedded {
-		streamURL := embyDirectStreamURL(m.ID, container)
-		src["DirectStreamUrl"] = streamURL
+		src["DirectStreamUrl"] = playURL
 		// 直连解码模式下不下发 TranscodingUrl，迫使客户端本地解码直连，
 		// 宿主机不参与转码。
 		if !directOnly {
@@ -1679,14 +1682,18 @@ func (e *EmbyService) mediaSource(m *model.Media, asEmbedded, directOnly bool) m
 		}
 	}
 	if strings.TrimSpace(m.STRMURL) != "" {
-		// STRM / cloud:// media plays through /Videos/{id}/stream. Some
-		// third-party Emby clients still prefer MediaSource.Path even when
-		// SupportsDirectPlay=false; pointing Path at the token-aware stream
-		// endpoint keeps those clients away from naked /api/cloud/play URLs.
+		// STRM / cloud:// media must stay behind a token-aware endpoint. When
+		// STRM playback is enabled we expose /api/stream so third-party clients
+		// follow the same STRM entry as generated .strm files; when disabled we
+		// expose /Videos/{id}/stream so playback uses the Emby 302/proxy path.
 		src["IsRemote"] = true
-		src["Path"] = embyDirectStreamURL(m.ID, container)
+		src["Path"] = playURL
 	}
 	return src
+}
+
+func embySTRMStreamURL(mediaID string) string {
+	return "/api/stream/" + url.PathEscape(strings.TrimSpace(mediaID))
 }
 
 func embyDirectStreamURL(mediaID, container string) string {

@@ -115,7 +115,7 @@ func TestServeFileRedirectUsesForwardedTunnelHost(t *testing.T) {
 	}
 }
 
-func TestServeFileRedirectsCloudMediaWhenSTRMPlaybackDisabled(t *testing.T) {
+func TestServeFileRedirectsCloudMediaForVideoStreamMode(t *testing.T) {
 	repos := newStreamTestRepo(t)
 	if err := repos.Setting.Set(t.Context(), STRMEnabledSettingKey, "false"); err != nil {
 		t.Fatal(err)
@@ -134,7 +134,7 @@ func TestServeFileRedirectsCloudMediaWhenSTRMPlaybackDisabled(t *testing.T) {
 
 	err := svc.ServeFile(w, req, "cloud-1")
 	if err != nil {
-		t.Fatalf("cloud playback should ignore local STRM toggle: %v", err)
+		t.Fatalf("video stream mode should still reach cloud playback endpoint: %v", err)
 	}
 	if w.Code != http.StatusFound {
 		t.Fatalf("status = %d, want 302", w.Code)

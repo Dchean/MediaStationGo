@@ -211,6 +211,11 @@ func (p *cloudDrive2Provider) Resolve(ctx context.Context, fileRef string) (*Dir
 	if ref == "/" {
 		return nil, fmt.Errorf("%s: file reference required", p.name)
 	}
+	if p.typ == TypeOpenList && p.apiBase != nil && isOpenListDirectPlaybackCandidate(ref) {
+		if link, err := p.resolveOpenListAPIDirect(ctx, ref); err == nil && link != nil {
+			return link, nil
+		}
+	}
 	headers := map[string]string{
 		"User-Agent": p.ua,
 	}
@@ -220,6 +225,130 @@ func (p *cloudDrive2Provider) Resolve(ctx context.Context, fileRef string) (*Dir
 		headers["Authorization"] = "Basic " + base64.StdEncoding.EncodeToString([]byte(p.username+":"+p.password))
 	}
 	return &DirectLink{URL: p.urlFor(ref), Headers: headers, Proxy: p.proxy}, nil
+}
+
+func (p *cloudDrive2Provider) resolveOpenListAPIDirect(ctx context.Context, fileRef string) (*DirectLink, error) {
+	payload, _ := json.Marshal(map[string]string{"path": normalizeCloudDAVPath(fileRef), "password": ""})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.openListAPIURL("/api/fs/get"), bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", p.ua)
+	if p.token != "" {
+		req.Header.Set("Authorization", p.token)
+	}
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, decorateDAVTransportError(p.name, p.openListAPIURL("/api/fs/get"), err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%s: api get %s returned http %d", p.name, fileRef, resp.StatusCode)
+	}
+	var decoded openListGetResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&decoded); err != nil {
+		return nil, fmt.Errorf("%s: decode api get: %w", p.name, err)
+	}
+	if decoded.Code != 0 && decoded.Code != 200 {
+		msg := strings.TrimSpace(decoded.Message)
+		if msg == "" {
+			msg = fmt.Sprintf("code %d", decoded.Code)
+		}
+		return nil, fmt.Errorf("%s: api get %s failed: %s", p.name, fileRef, msg)
+	}
+	raw := firstNonEmpty(decoded.Data.RawURL, decoded.Data.URL)
+	if raw == "" {
+		return nil, fmt.Errorf("%s: api get %s returned empty raw_url", p.name, fileRef)
+	}
+	resolved, err := p.resolveOpenListPlaybackURL(raw)
+	if err != nil {
+		return nil, err
+	}
+	headers := normalizeOpenListPlaybackHeaders(decoded.Data.Header)
+	proxy := p.proxy && len(headers) > 0
+	if !proxy {
+		headers = nil
+	}
+	return &DirectLink{URL: resolved, Headers: headers, Proxy: proxy}, nil
+}
+
+func (p *cloudDrive2Provider) resolveOpenListPlaybackURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("%s: empty playback URL", p.name)
+	}
+	if strings.HasPrefix(raw, "//") {
+		if p.apiBase == nil || p.apiBase.Scheme == "" {
+			return "", fmt.Errorf("%s: protocol-relative playback URL without API base", p.name)
+		}
+		raw = p.apiBase.Scheme + ":" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("%s: invalid playback URL: %w", p.name, err)
+	}
+	if u.IsAbs() {
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return "", fmt.Errorf("%s: unsupported playback URL scheme %q", p.name, u.Scheme)
+		}
+		return u.String(), nil
+	}
+	if p.apiBase == nil {
+		return "", fmt.Errorf("%s: relative playback URL without API base", p.name)
+	}
+	base := *p.apiBase
+	base.RawPath = ""
+	base.RawQuery = ""
+	base.Fragment = ""
+	return base.ResolveReference(u).String(), nil
+}
+
+func normalizeOpenListPlaybackHeaders(raw json.RawMessage) map[string]string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil
+	}
+	out := make(map[string]string, len(obj))
+	for k, v := range obj {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			continue
+		}
+		switch value := v.(type) {
+		case string:
+			if strings.TrimSpace(value) != "" {
+				out[key] = strings.TrimSpace(value)
+			}
+		case []any:
+			parts := make([]string, 0, len(value))
+			for _, item := range value {
+				if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+					parts = append(parts, strings.TrimSpace(s))
+				}
+			}
+			if len(parts) > 0 {
+				out[key] = strings.Join(parts, ", ")
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func isOpenListDirectPlaybackCandidate(fileRef string) bool {
+	switch strings.ToLower(path.Ext(strings.TrimSpace(fileRef))) {
+	case ".mkv", ".mp4", ".m4v", ".avi", ".mov", ".webm", ".ts", ".rmvb", ".rm", ".3gp", ".mpg", ".mpeg":
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *cloudDrive2Provider) validate() error {
@@ -462,6 +591,16 @@ type openListListItem struct {
 	Name  string `json:"name"`
 	Size  int64  `json:"size"`
 	IsDir bool   `json:"is_dir"`
+}
+
+type openListGetResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		RawURL string          `json:"raw_url"`
+		URL    string          `json:"url"`
+		Header json.RawMessage `json:"header"`
+	} `json:"data"`
 }
 
 func normalizeCloudDAVPath(p string) string {

@@ -119,7 +119,7 @@ const FIELD_DEFS: Record<StorageType, { key: string; label: string; secret?: boo
     { key: 'username', label: 'WebDAV 用户名' },
     { key: 'password', label: 'WebDAV 密码', secret: true },
     { key: 'timeout_seconds', label: '请求超时秒数', placeholder: '120' },
-    { key: 'force_302', label: '强制 302 直链(true/false,默认反代)' },
+    { key: 'force_302', label: '强制 302 直链(true/false,默认自动优先直链)' },
   ],
   webdav: [
     { key: 'url', label: 'URL', placeholder: 'https://example.com/dav/' },

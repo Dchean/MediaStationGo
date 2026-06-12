@@ -360,15 +360,49 @@ func TestEmbyPlaybackInfoKeepsSTRMBehindStreamEndpoint(t *testing.T) {
 	if src["IsRemote"] != true {
 		t.Fatalf("strm media should be marked remote: %#v", src)
 	}
-	if src["DirectStreamUrl"] != "/Videos/cloud-1/stream" {
-		t.Fatalf("strm playback must stay behind token-aware stream endpoint: %#v", src)
+	if src["DirectStreamUrl"] != "/api/stream/cloud-1" {
+		t.Fatalf("strm playback should prefer /api/stream when enabled: %#v", src)
 	}
-	if src["Path"] != "/Videos/cloud-1/stream" {
-		t.Fatalf("path should use token-aware stream endpoint: %#v", src)
+	if src["Path"] != "/api/stream/cloud-1" {
+		t.Fatalf("path should prefer /api/stream when enabled: %#v", src)
 	}
 	streams := src["MediaStreams"].([]map[string]any)
 	if len(streams) == 0 || streams[0]["Type"] != "Video" {
 		t.Fatalf("strm media should expose a fallback video stream for Android clients: %#v", src)
+	}
+}
+
+func TestEmbyPlaybackInfoUsesVideoStreamWhenSTRMDisabled(t *testing.T) {
+	svc := newTestEmbyService(t)
+	if err := svc.repo.Setting.Set(t.Context(), STRMEnabledSettingKey, "false"); err != nil {
+		t.Fatalf("set strm disabled: %v", err)
+	}
+	lib := model.Library{Name: "OpenList", Path: `cloud://openlist/Movies`, Type: "movie", Enabled: true}
+	if err := svc.repo.Library.Create(t.Context(), &lib); err != nil {
+		t.Fatalf("create library: %v", err)
+	}
+	media := model.Media{
+		Base:      model.Base{ID: "cloud-302"},
+		LibraryID: lib.ID,
+		Title:     "Cloud 302 Movie",
+		Path:      `cloud://openlist/Movies/Movie.mkv`,
+		STRMURL:   `/api/cloud/play/openlist?ref=%2FMovies%2FMovie.mkv`,
+		Container: "mkv",
+	}
+	if err := svc.repo.DB.Create(&media).Error; err != nil {
+		t.Fatalf("create media: %v", err)
+	}
+
+	pb, err := svc.PlaybackInfo(t.Context(), "cloud-302", "user-1")
+	if err != nil {
+		t.Fatalf("playback info: %v", err)
+	}
+	src := pb["MediaSources"].([]map[string]any)[0]
+	if src["DirectStreamUrl"] != "/Videos/cloud-302/stream.mkv" {
+		t.Fatalf("302/proxy mode should use Emby video stream URL: %#v", src)
+	}
+	if src["Path"] != "/Videos/cloud-302/stream.mkv" {
+		t.Fatalf("302/proxy mode path should use Emby video stream URL: %#v", src)
 	}
 }
 

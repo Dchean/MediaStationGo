@@ -226,7 +226,7 @@ export function StrmPage() {
             />
             <span>
               <span className="block font-medium text-ink-600">启用 STRM 播放</span>
-              <span className="text-xs text-ink-50">关闭后不会跳转 STRM/网盘直链；本地文件仍按本地文件播放。</span>
+              <span className="text-xs text-ink-50">开启后第三方播放优先走 STRM 入口；关闭后使用 302/反代播放入口。</span>
             </span>
           </label>
           <label className="flex items-start gap-3 text-sm text-ink-100">
@@ -289,7 +289,7 @@ export function StrmPage() {
           </button>
         </form>
         <p className="text-xs text-sand-500">
-          生成内容为 <code>域名 + /api/stream/媒体ID?token=...</code>；本地文件与网盘 302 播放都由服务端统一处理。域名会同步保存到系统设置中的「公开访问域名 / STRM 域名」。
+          生成内容为 <code>域名 + /api/stream/媒体ID?token=...</code>；开启 STRM 播放时第三方客户端优先使用该入口，关闭后回到 302/反代播放。域名会同步保存到系统设置中的「公开访问域名 / STRM 域名」。
         </p>
         {generateResult && (
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-ink-50">
