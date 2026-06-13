@@ -44,12 +44,14 @@ services:
       - ./cache:/cache
 
       # 媒体库目录。
+      # 如果要使用自动整理/重命名/入库，这里必须保持读写，不能加 :ro。
+      # 只有完全不整理、只扫描/播放已有媒体时，才建议手动改成只读。
       # 新手可先把影片放到当前目录的 ./media。
       # NAS 用户把左边改成真实路径，例如：
-      #   - /vol1/1000/Media:/media:ro
+      #   - /vol1/1000/Media:/media
       # Windows Docker Desktop 示例：
-      #   - D:/Media:/media:ro
-      - ./media:/media:ro
+      #   - D:/Media:/media
+      - ./media:/media
 
       # 下载目录。
       # qB 下载目录、手动整理、自动整理会经常用到。

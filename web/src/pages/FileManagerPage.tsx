@@ -107,6 +107,10 @@ function settingOn(value: string): boolean {
   return ['1', 'true', 'yes', 'on', 'enabled', '启用', '开启'].includes(value.trim().toLowerCase())
 }
 
+function isCloudLibraryPath(value: string): boolean {
+  return value.trim().toLowerCase().startsWith('cloud://')
+}
+
 // FileManagerPage provides a focused local storage view:
 // browse allowed roots, optionally recurse, and perform safe local operations.
 export function FileManagerPage() {
@@ -145,6 +149,10 @@ export function FileManagerPage() {
     if (data?.path) return data.path
     return path
   }, [data?.path, path])
+  const localLibraries = useMemo(
+    () => libraries.filter((library) => !isCloudLibraryPath(library.path)),
+    [libraries],
+  )
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -193,11 +201,15 @@ export function FileManagerPage() {
   }, [path])
 
   useEffect(() => {
-    const lib = libraries.find((item) => item.id === organizeLibraryID)
-    if (!lib) return
+    if (!organizeLibraryID) return
+    const lib = localLibraries.find((item) => item.id === organizeLibraryID)
+    if (!lib) {
+      setOrganizeLibraryID('')
+      return
+    }
     setOrganizeDestPath(lib.path)
     setOrganizeMediaType(lib.type || 'auto')
-  }, [libraries, organizeLibraryID])
+  }, [localLibraries, organizeLibraryID])
 
   const changeAutoConfig = (key: keyof AutoOrganizeConfig, value: string) => {
     setAutoConfig((current) => ({ ...current, [key]: value }))
@@ -551,12 +563,15 @@ export function FileManagerPage() {
                 onChange={(event) => setOrganizeLibraryID(event.target.value)}
               >
                 <option value="">手动填写目的路径</option>
-                {libraries.map((library) => (
+                {localLibraries.map((library) => (
                   <option key={library.id} value={library.id}>
                     {library.name}（{library.type}）— {library.path}
                   </option>
                 ))}
               </select>
+              <span className="text-[11px] text-sand-500">
+                手动整理只写入本地可写媒体库；网盘请到“外部存储”中挂载、扫描或转存。
+              </span>
             </label>
             <label className="space-y-1">
               <span className="text-xs text-ink-50">目的路径</span>

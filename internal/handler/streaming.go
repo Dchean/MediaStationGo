@@ -83,7 +83,7 @@ func scrapeOneHandler(svc *service.Container) gin.HandlerFunc {
 		}
 		task := startScrapeHTTPTask(svc, "手动刮削媒体", m.Title, m.Path)
 		if err := svc.Scraper.EnrichOne(c.Request.Context(), m); err != nil {
-			finishHTTPTask(task, err, "scrape", "手动刮削媒体失败", nil)
+			finishHTTPTask(task, err, "scrape", "手动刮削媒体失败", nil, nil)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -92,7 +92,7 @@ func scrapeOneHandler(svc *service.Container) gin.HandlerFunc {
 		if refreshed != nil && refreshed.ScrapeStatus == "matched" {
 			metrics["matched"] = 1
 		}
-		finishHTTPTask(task, nil, "completed", "手动刮削媒体结束", metrics)
+		finishHTTPTask(task, nil, "completed", "手动刮削媒体结束", metrics, nil)
 		c.JSON(http.StatusOK, refreshed)
 	}
 }
@@ -118,7 +118,7 @@ func scrapeLibraryHandler(svc *service.Container) gin.HandlerFunc {
 				stage = "scrape"
 				message = "手动刮削媒体库失败"
 			}
-			finishHTTPTask(task, err, stage, message, metrics)
+			finishHTTPTask(task, err, stage, message, metrics, nil)
 		}(libID, task)
 		c.JSON(http.StatusAccepted, gin.H{"status": "scraping"})
 	}

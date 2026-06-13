@@ -32,6 +32,7 @@ type BackgroundTask struct {
 	DestPath   string           `json:"dest_path,omitempty"`
 	Message    string           `json:"message,omitempty"`
 	Error      string           `json:"error,omitempty"`
+	Details    []string         `json:"details,omitempty"`
 	Metrics    map[string]int64 `json:"metrics,omitempty"`
 	StartedAt  time.Time        `json:"started_at"`
 	UpdatedAt  time.Time        `json:"updated_at"`
@@ -43,6 +44,7 @@ type TaskUpdate struct {
 	SourcePath string
 	DestPath   string
 	Message    string
+	Details    []string
 	Metrics    map[string]int64
 }
 
@@ -206,6 +208,9 @@ func applyTaskUpdate(task *BackgroundTask, update TaskUpdate) {
 	if update.Message != "" {
 		task.Message = update.Message
 	}
+	if update.Details != nil {
+		task.Details = append([]string(nil), update.Details...)
+	}
 	if update.Metrics != nil {
 		task.Metrics = cloneTaskMetrics(update.Metrics)
 	}
@@ -213,6 +218,9 @@ func applyTaskUpdate(task *BackgroundTask, update TaskUpdate) {
 
 func cloneBackgroundTask(task BackgroundTask) BackgroundTask {
 	task.Metrics = cloneTaskMetrics(task.Metrics)
+	if task.Details != nil {
+		task.Details = append([]string(nil), task.Details...)
+	}
 	if task.FinishedAt != nil {
 		finishedAt := *task.FinishedAt
 		task.FinishedAt = &finishedAt
@@ -276,6 +284,43 @@ func OrganizeTaskMetrics(res *OrganizeResult) map[string]int64 {
 		metrics["scrape_matched"] = scrapeMatched
 	}
 	return metrics
+}
+
+func OrganizeTaskDetails(res *OrganizeResult, limit int) []string {
+	if res == nil || limit <= 0 {
+		return nil
+	}
+	out := make([]string, 0, limit)
+	for _, line := range res.Errors {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		out = append(out, "错误: "+line)
+		if len(out) >= limit {
+			return out
+		}
+	}
+	for _, item := range res.Items {
+		if item.Action != "error" && item.Action != "skip" {
+			continue
+		}
+		line := strings.TrimSpace(item.Source)
+		if item.Reason != "" {
+			line += ": " + strings.TrimSpace(item.Reason)
+		}
+		if line == "" {
+			continue
+		}
+		out = append(out, item.Action+": "+line)
+		if len(out) >= limit {
+			return out
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func OrganizeSkipReasonCounts(res *OrganizeResult) map[string]int {

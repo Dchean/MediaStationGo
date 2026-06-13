@@ -153,7 +153,7 @@ docker pull shukbet/mediastationgo:latest
 volumes:
   - ./data:/data
   - ./cache:/cache
-  - ./media:/media:ro
+  - ./media:/media
   - ./downloads:/downloads
 ```
 
@@ -163,7 +163,7 @@ volumes:
 | --- | --- | --- |
 | `./data` | `/data` | 程序数据库、配置、账号信息；一定要备份 |
 | `./cache` | `/cache` | 缓存目录；可清理 |
-| `./media` | `/media` | 媒体库目录；网页里添加媒体库时填 `/media/...` |
+| `./media` | `/media` | 媒体库目录；自动整理入库需要可写，网页里添加媒体库时填 `/media/...` |
 | `./downloads` | `/downloads` | 下载目录；文件管理和自动整理会用 |
 
 如果你的媒体在 NAS 真实目录，例如：
@@ -179,7 +179,7 @@ volumes:
 volumes:
   - ./data:/data
   - ./cache:/cache
-  - /vol1/1000/Media:/media:ro
+  - /vol1/1000/Media:/media
   - /vol1/1000/Downloads:/downloads
 
 environment:
@@ -193,7 +193,8 @@ environment:
 - `volumes` 右边是容器里的路径，建议固定用 `/media` 和 `/downloads`。
 - 在网页里新建媒体库时，填容器路径，例如 `/media/电影`、`/media/电视剧`。
 - 不要把 NAS 绝对路径写成 `./vol1/...`，`./` 表示当前部署目录下面的相对路径。
-- Windows Docker Desktop 可以写成 `D:/Media:/media:ro`、`D:/Downloads:/downloads`。
+- Windows Docker Desktop 可以写成 `D:/Media:/media`、`D:/Downloads:/downloads`。
+- 如果你只想扫描/播放、不使用自动整理入库，可以手动加 `:ro` 变成只读；只要要整理、重命名、入库，媒体库挂载必须保持读写。
 
 ### 最简单 compose 示例
 
@@ -228,7 +229,7 @@ services:
 
       # 新手先用当前目录下的 media/downloads。
       # NAS 用户把左边改成真实绝对路径。
-      - ./media:/media:ro
+      - ./media:/media
       - ./downloads:/downloads
 
     environment:

@@ -36,13 +36,14 @@ export interface CloudUploadResult {
   source_path: string
   dest_path: string
   uploaded: number
+  moved?: number
   skipped: number
   bytes: number
   errors?: string[]
   items?: Array<{
     source: string
     target: string
-    action: 'upload' | 'skip' | 'error'
+    action: 'upload' | 'move' | 'skip' | 'error'
     size?: number
     reason?: string
   }>
@@ -103,6 +104,7 @@ export const storageAPI = {
       recursive: boolean
       include_sidecars: boolean
       overwrite: boolean
+      transfer_mode?: 'copy' | 'move'
     },
   ) =>
     api

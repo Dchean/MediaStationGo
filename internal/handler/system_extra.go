@@ -121,6 +121,10 @@ func schemaHandler(_ *service.Container) gin.HandlerFunc {
 						{"key": "cloud.upload_recursive", "type": "toggle", "label": "递归扫描源目录"},
 						{"key": "cloud.upload_sidecars", "type": "toggle", "label": "同步 NFO / 海报 / 字幕"},
 						{"key": "cloud.upload_overwrite", "type": "toggle", "label": "覆盖远端同名文件"},
+						{"key": "cloud.upload_transfer_mode", "type": "select", "label": "自动转存方式", "options": []gin.H{
+							{"value": "copy", "label": "复制"},
+							{"value": "move", "label": "移动"},
+						}},
 						{"key": "cloud.upload_interval_seconds", "type": "number", "label": "自动转存间隔秒数"},
 					},
 				},

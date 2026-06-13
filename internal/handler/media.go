@@ -109,7 +109,7 @@ func scanLibraryHandler(svc *service.Container) gin.HandlerFunc {
 				})
 			}
 			_, _, _ = svc.Scan.StartCloudLibraryScan(id, false)
-			finishHTTPTask(task, nil, "queued", "云盘扫描已加入后台队列", map[string]int64{"queued": 1})
+			finishHTTPTask(task, nil, "queued", "云盘扫描已加入后台队列", map[string]int64{"queued": 1}, nil)
 			c.JSON(http.StatusAccepted, gin.H{
 				"library_id":       id,
 				"visited":          0,
@@ -126,11 +126,11 @@ func scanLibraryHandler(svc *service.Container) gin.HandlerFunc {
 		task := startScanHTTPTask(svc, "手动扫描入库", lib.Name, lib.Path)
 		res, err := svc.Scan.ScanLibrary(c.Request.Context(), id)
 		if err != nil {
-			finishHTTPTask(task, err, "scan", "手动扫描入库失败", nil)
+			finishHTTPTask(task, err, "scan", "手动扫描入库失败", nil, nil)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		finishHTTPTask(task, nil, "completed", "手动扫描入库结束", scanTaskMetrics(res))
+		finishHTTPTask(task, nil, "completed", "手动扫描入库结束", scanTaskMetrics(res), nil)
 		c.JSON(http.StatusOK, res)
 	}
 }

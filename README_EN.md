@@ -153,7 +153,7 @@ Focus on this part:
 volumes:
   - ./data:/data
   - ./cache:/cache
-  - ./media:/media:ro
+  - ./media:/media
   - ./downloads:/downloads
 ```
 
@@ -179,7 +179,7 @@ change the compose file to:
 volumes:
   - ./data:/data
   - ./cache:/cache
-  - /vol1/1000/Media:/media:ro
+  - /vol1/1000/Media:/media
   - /vol1/1000/Downloads:/downloads
 
 environment:
@@ -193,7 +193,8 @@ Rules:
 - The right side is the container path. Keep `/media` and `/downloads` unless you know why you are changing them.
 - In the web UI, create libraries with container paths such as `/media/Movies` or `/media/TV`.
 - Do not write NAS absolute paths as `./vol1/...`; `./` means a folder under the current compose directory.
-- On Windows Docker Desktop, paths like `D:/Media:/media:ro` and `D:/Downloads:/downloads` are fine.
+- On Windows Docker Desktop, paths like `D:/Media:/media` and `D:/Downloads:/downloads` are fine.
+- If you only scan/play existing media and never organize into the library, you may add `:ro`; if you use organize/rename/ingest, the media mount must stay writable.
 
 ### Minimal compose example
 
@@ -228,7 +229,7 @@ services:
 
       # Beginners can keep ./media and ./downloads.
       # NAS users should replace the left side with real absolute paths.
-      - ./media:/media:ro
+      - ./media:/media
       - ./downloads:/downloads
 
     environment:

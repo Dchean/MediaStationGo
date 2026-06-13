@@ -325,7 +325,7 @@ const GROUPS: SettingGroup[] = [
         key: 'cloud.upload_auto_enabled',
         label: '启用自动转存',
         type: 'toggle',
-        hint: '开启后后台会按间隔扫描本地源目录，把视频、NFO、海报、字幕复制到目标存储；不会删除本地源文件。',
+        hint: '开启后后台会按间隔扫描本地源目录，把视频、NFO、海报、字幕转存到目标存储；还需要在外部存储页开启该目标的“允许转存写入”。',
         defaultValue: 'false',
       },
       {
@@ -372,6 +372,17 @@ const GROUPS: SettingGroup[] = [
         label: '覆盖远端同名文件',
         type: 'toggle',
         defaultValue: 'false',
+      },
+      {
+        key: 'cloud.upload_transfer_mode',
+        label: '自动转存方式',
+        type: 'select',
+        defaultValue: 'copy',
+        hint: '复制会保留本地源文件；移动只在上传成功后删除本地文件。',
+        options: [
+          { value: 'copy', label: '复制' },
+          { value: 'move', label: '移动' },
+        ],
       },
       {
         key: 'cloud.upload_interval_seconds',

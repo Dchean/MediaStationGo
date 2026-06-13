@@ -147,9 +147,10 @@ func (s *StorageConfigService) Save(ctx context.Context, in StorageInput) (*Stor
 	return s.Get(ctx, in.Type)
 }
 
-// Logout clears saved cloud login credentials and disables the storage backend.
-// It intentionally keeps non-secret connection hints such as server / WebDAV
-// URL / timeout so the admin can log in again without rebuilding the form.
+// Logout clears saved cloud login credentials, disables the storage backend,
+// and removes virtual cloud libraries/media for that provider. It intentionally
+// keeps non-secret connection hints such as server / WebDAV URL / timeout so
+// the admin can log in again without rebuilding the form.
 func (s *StorageConfigService) Logout(ctx context.Context, typ string) (*StorageView, error) {
 	if !validStorageType(typ) {
 		return nil, fmt.Errorf("unsupported storage type %q", typ)
@@ -172,7 +173,53 @@ func (s *StorageConfigService) Logout(ctx context.Context, typ string) (*Storage
 		cfg[k] = v
 	}
 	enabled := false
-	return s.Save(ctx, StorageInput{Type: typ, Config: cfg, Enabled: &enabled})
+	saved, err := s.Save(ctx, StorageInput{Type: typ, Config: cfg, Enabled: &enabled})
+	if err != nil {
+		return nil, err
+	}
+	purged, err := s.purgeCloudLibraries(ctx, typ)
+	if err != nil {
+		return nil, err
+	}
+	if s.log != nil {
+		s.log.Info("storage logout cleared cloud libraries",
+			zap.String("storage_type", typ),
+			zap.Int("libraries_deleted", purged))
+	}
+	return saved, nil
+}
+
+func (s *StorageConfigService) purgeCloudLibraries(ctx context.Context, storageType string) (int, error) {
+	if s == nil || s.repo == nil || s.repo.Library == nil || s.repo.Media == nil {
+		return 0, nil
+	}
+	libs, err := s.repo.Library.List(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list libraries: %w", err)
+	}
+	var affectedLibs []string
+	for _, lib := range libs {
+		if mount, ok := ParseCloudLibraryMount(lib.Path); ok && mount.Provider == storageType {
+			affectedLibs = append(affectedLibs, lib.ID)
+		}
+	}
+	for _, libID := range affectedLibs {
+		if err := s.repo.Media.PurgeByLibrary(ctx, libID); err != nil {
+			if s.log != nil {
+				s.log.Warn("purge media by library failed", zap.String("library_id", libID), zap.Error(err))
+			}
+			return len(affectedLibs), fmt.Errorf("purge media by library %s: %w", libID, err)
+		}
+	}
+	for _, libID := range affectedLibs {
+		if err := s.repo.Library.Delete(ctx, libID); err != nil {
+			if s.log != nil {
+				s.log.Warn("delete library failed", zap.String("library_id", libID), zap.Error(err))
+			}
+			return len(affectedLibs), fmt.Errorf("delete library %s: %w", libID, err)
+		}
+	}
+	return len(affectedLibs), nil
 }
 
 func isStorageLoginSecretKey(key string) bool {
@@ -778,32 +825,9 @@ func (s *StorageConfigService) DeleteStorage(ctx context.Context, storageType st
 		return fmt.Errorf("storage config not found: %s", storageType)
 	}
 
-	// 查找使用该存储的云盘库
-	libs, err := s.repo.Library.List(ctx)
+	affectedLibs, err := s.purgeCloudLibraries(ctx, storageType)
 	if err != nil {
-		return fmt.Errorf("list libraries: %w", err)
-	}
-
-	var affectedLibs []string
-	for _, lib := range libs {
-		// 检查是否是云盘库且Provider匹配
-		if mount, ok := ParseCloudLibraryMount(lib.Path); ok && mount.Provider == storageType {
-			affectedLibs = append(affectedLibs, lib.ID)
-		}
-	}
-
-	// 删除关联媒体
-	for _, libID := range affectedLibs {
-		if err := s.repo.Media.PurgeByLibrary(ctx, libID); err != nil {
-			s.log.Warn("purge media by library failed", zap.String("library_id", libID), zap.Error(err))
-		}
-	}
-
-	// 删除关联库
-	for _, libID := range affectedLibs {
-		if err := s.repo.Library.Delete(ctx, libID); err != nil {
-			s.log.Warn("delete library failed", zap.String("library_id", libID), zap.Error(err))
-		}
+		return err
 	}
 
 	// 删除存储配置
@@ -813,7 +837,7 @@ func (s *StorageConfigService) DeleteStorage(ctx context.Context, storageType st
 
 	s.log.Info("storage deleted",
 		zap.String("storage_type", storageType),
-		zap.Int("libraries_deleted", len(affectedLibs)))
+		zap.Int("libraries_deleted", affectedLibs))
 
 	return nil
 }

@@ -23,6 +23,7 @@ const (
 	CloudUploadRecursiveKey        = "cloud.upload_recursive"
 	CloudUploadSidecarsKey         = "cloud.upload_sidecars"
 	CloudUploadOverwriteKey        = "cloud.upload_overwrite"
+	CloudUploadTransferModeKey     = "cloud.upload_transfer_mode"
 	CloudUploadIntervalSecondsKey  = "cloud.upload_interval_seconds"
 	CloudUploadUnsupportedProvider = "本地文件直传目前支持 Alist / OpenList / WebDAV / CloudDrive2；115/夸克原生上传需要各自的分片上传私有接口，建议先用 CloudDrive2、OpenList 或 Alist 桥接后转存。"
 )
@@ -34,12 +35,14 @@ type CloudUploadInput struct {
 	Recursive       bool   `json:"recursive"`
 	IncludeSidecars bool   `json:"include_sidecars"`
 	Overwrite       bool   `json:"overwrite"`
+	TransferMode    string `json:"transfer_mode"`
 }
 
 type CloudUploadResult struct {
 	SourcePath string                  `json:"source_path"`
 	DestPath   string                  `json:"dest_path"`
 	Uploaded   int                     `json:"uploaded"`
+	Moved      int                     `json:"moved,omitempty"`
 	Skipped    int                     `json:"skipped"`
 	Bytes      int64                   `json:"bytes"`
 	Errors     []string                `json:"errors,omitempty"`
@@ -49,7 +52,7 @@ type CloudUploadResult struct {
 type CloudUploadResultItem struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
-	Action string `json:"action"` // upload / skip / error
+	Action string `json:"action"` // upload / move / skip / error
 	Size   int64  `json:"size,omitempty"`
 	Reason string `json:"reason,omitempty"`
 }
@@ -65,10 +68,10 @@ var cloudUploadSidecarExtensions = map[string]struct{}{
 	".srt": {}, ".ass": {}, ".ssa": {}, ".vtt": {}, ".sub": {}, ".idx": {},
 }
 
-// UploadLocal copies local media files into an external storage backend. It is
-// intentionally conservative: it never deletes local files, skips existing
-// remote targets unless Overwrite is set, and only uploads video + common
-// sidecar metadata files.
+// UploadLocal copies or moves local media files into an external storage
+// backend. Cloud writes are intentionally gated by the per-storage
+// transfer_enabled switch so mounting/scanning a cloud provider does not
+// accidentally make it writable.
 func (s *StorageConfigService) UploadLocal(ctx context.Context, in CloudUploadInput) (*CloudUploadResult, error) {
 	in.Type = strings.TrimSpace(in.Type)
 	in.SourcePath = strings.TrimSpace(in.SourcePath)
@@ -76,7 +79,22 @@ func (s *StorageConfigService) UploadLocal(ctx context.Context, in CloudUploadIn
 	if in.SourcePath == "" {
 		return nil, errors.New("source_path required")
 	}
-	uploader, err := s.uploader(ctx, in.Type)
+	view, err := s.Get(ctx, in.Type)
+	if err != nil {
+		return nil, err
+	}
+	if view == nil || !view.Enabled {
+		return nil, fmt.Errorf("%s storage not configured", in.Type)
+	}
+	if !parseBoolSetting(strr(view.Config["transfer_enabled"]), false) {
+		return nil, errors.New("cloud transfer is disabled for this storage; enable transfer in external storage settings before writing to cloud")
+	}
+	mode := resolveCloudUploadTransferMode(in.TransferMode, strr(view.Config["transfer_mode"]), s.settingValue(ctx, CloudUploadTransferModeKey))
+	if mode != TransferCopy && mode != TransferMove {
+		return nil, errors.New("transfer_mode must be copy or move")
+	}
+	in.TransferMode = string(mode)
+	uploader, err := s.uploaderForView(in.Type, view)
 	if err != nil {
 		return nil, err
 	}
@@ -126,6 +144,13 @@ func (s *StorageConfigService) uploader(ctx context.Context, typ string) (storag
 	if view == nil || !view.Enabled {
 		return nil, fmt.Errorf("%s storage not configured", typ)
 	}
+	return s.uploaderForView(typ, view)
+}
+
+func (s *StorageConfigService) uploaderForView(typ string, view *StorageView) (storageUploader, error) {
+	if view == nil || !view.Enabled {
+		return nil, fmt.Errorf("%s storage not configured", typ)
+	}
 	switch typ {
 	case "alist":
 		return newAlistUploader(view.Config), nil
@@ -171,7 +196,38 @@ func (s *StorageConfigService) uploadOne(ctx context.Context, uploader storageUp
 	}
 	result.Uploaded++
 	result.Bytes += size
-	addUploadItem(result, CloudUploadResultItem{Source: localPath, Target: remotePath, Action: "upload", Size: size})
+	action := "upload"
+	mode := resolveCloudUploadTransferMode(in.TransferMode)
+	if mode == TransferMove {
+		if err := os.Remove(localPath); err != nil {
+			addUploadError(result, localPath, remotePath, fmt.Errorf("uploaded but failed to remove local source: %w", err))
+			addUploadItem(result, CloudUploadResultItem{Source: localPath, Target: remotePath, Action: "upload", Size: size, Reason: "source remove failed"})
+			return
+		}
+		result.Moved++
+		action = "move"
+	}
+	addUploadItem(result, CloudUploadResultItem{Source: localPath, Target: remotePath, Action: action, Size: size})
+}
+
+func (s *StorageConfigService) settingValue(ctx context.Context, key string) string {
+	if s == nil || s.repo == nil || s.repo.Setting == nil {
+		return ""
+	}
+	v, _ := s.repo.Setting.Get(ctx, key)
+	return strings.TrimSpace(v)
+}
+
+func resolveCloudUploadTransferMode(values ...string) TransferMode {
+	for _, value := range values {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "move", "移动":
+			return TransferMove
+		case "copy", "复制":
+			return TransferCopy
+		}
+	}
+	return TransferCopy
 }
 
 func eligibleCloudUploadFile(localPath string, includeSidecars bool) bool {

@@ -61,18 +61,18 @@ func organizeMediaHandler(svc *service.Container) gin.HandlerFunc {
 		task := startOrganizeHTTPTask(svc, "手动整理媒体", opts)
 		dst, err := svc.Organizer.OrganizeMediaWithOptions(c.Request.Context(), c.Param("id"), opts)
 		if err != nil {
-			finishHTTPTask(task, err, "organize", "手动整理媒体失败", nil)
+			finishHTTPTask(task, err, "organize", "手动整理媒体失败", nil, nil)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		payload := gin.H{"path": dst}
 		if organizeScanAfter(req.ScanAfter) && !req.DryRun && svc.Scan != nil {
-			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", nil)
+			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", nil, nil)
 			scans, scrapes := scanAndScrapeAfterOrganize(c, svc, dst, strings.TrimSpace(req.LibraryID), req.ScrapeAfter)
 			payload["scans"] = scans
 			payload["scrapes"] = scrapes
 		}
-		finishHTTPTask(task, nil, "completed", "手动整理媒体结束", nil)
+		finishHTTPTask(task, nil, "completed", "手动整理媒体结束", nil, nil)
 		c.JSON(http.StatusOK, payload)
 	}
 }
@@ -85,15 +85,16 @@ func organizeLibraryHandler(svc *service.Container) gin.HandlerFunc {
 		task := startOrganizeHTTPTask(svc, "手动整理媒体库", opts)
 		res, err := svc.Organizer.OrganizeLibraryWithOptions(c.Request.Context(), c.Param("id"), opts)
 		if err != nil {
-			finishHTTPTask(task, err, "organize", "手动整理媒体库失败", nil)
+			finishHTTPTask(task, err, "organize", "手动整理媒体库失败", nil, nil)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		details := service.OrganizeTaskDetails(res, 8)
 		if organizeScanAfter(req.ScanAfter) && !req.DryRun && svc.Scan != nil {
-			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", nil)
+			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", service.OrganizeTaskMetrics(res), details)
 			res.Scans, res.Scrapes = scanAndScrapeAfterOrganize(c, svc, res.DestPath, c.Param("id"), req.ScrapeAfter)
 		}
-		finishHTTPTask(task, nil, "completed", "手动整理媒体库结束", service.OrganizeTaskMetrics(res))
+		finishHTTPTask(task, nil, "completed", "手动整理媒体库结束", service.OrganizeTaskMetrics(res), details)
 		c.JSON(http.StatusOK, res)
 	}
 }
@@ -116,16 +117,17 @@ func organizeDirectoryHandler(svc *service.Container) gin.HandlerFunc {
 		task := startOrganizeHTTPTask(svc, "手动整理入库", opts)
 		res, err := svc.Organizer.OrganizeDirectory(c.Request.Context(), opts)
 		if err != nil {
-			finishHTTPTask(task, err, "organize", "手动整理入库失败", nil)
+			finishHTTPTask(task, err, "organize", "手动整理入库失败", nil, nil)
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		updateHTTPTask(task, "organize", "手动整理完成，准备扫描入库", service.OrganizeTaskMetrics(res))
+		details := service.OrganizeTaskDetails(res, 8)
+		updateHTTPTask(task, "organize", "手动整理完成，准备扫描入库", service.OrganizeTaskMetrics(res), details)
 		if organizeScanAfter(req.ScanAfter) && !req.DryRun && svc.Scan != nil {
-			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", service.OrganizeTaskMetrics(res))
+			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", service.OrganizeTaskMetrics(res), details)
 			res.Scans, res.Scrapes = scanAndScrapeAfterOrganize(c, svc, res.DestPath, strings.TrimSpace(req.LibraryID), req.ScrapeAfter)
 		}
-		finishHTTPTask(task, nil, "completed", "手动整理入库结束", service.OrganizeTaskMetrics(res))
+		finishHTTPTask(task, nil, "completed", "手动整理入库结束", service.OrganizeTaskMetrics(res), details)
 		c.JSON(http.StatusOK, res)
 	}
 }
@@ -146,18 +148,18 @@ func startOrganizeHTTPTask(svc *service.Container, name string, opts service.Org
 	})
 }
 
-func updateHTTPTask(task *service.TaskHandle, stage, message string, metrics map[string]int64) {
+func updateHTTPTask(task *service.TaskHandle, stage, message string, metrics map[string]int64, details []string) {
 	if task == nil {
 		return
 	}
-	task.Update(service.TaskUpdate{Stage: stage, Message: message, Metrics: metrics})
+	task.Update(service.TaskUpdate{Stage: stage, Message: message, Metrics: metrics, Details: details})
 }
 
-func finishHTTPTask(task *service.TaskHandle, err error, stage, message string, metrics map[string]int64) {
+func finishHTTPTask(task *service.TaskHandle, err error, stage, message string, metrics map[string]int64, details []string) {
 	if task == nil {
 		return
 	}
-	task.Finish(err, service.TaskUpdate{Stage: stage, Message: message, Metrics: metrics})
+	task.Finish(err, service.TaskUpdate{Stage: stage, Message: message, Metrics: metrics, Details: details})
 }
 
 func scanAndScrapeAfterOrganize(c *gin.Context, svc *service.Container, destRoot, preferredLibraryID string, scrapeOverride *bool) ([]service.OrganizeScanSummary, []service.OrganizeScrapeSummary) {

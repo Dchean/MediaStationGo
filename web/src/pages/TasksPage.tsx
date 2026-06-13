@@ -94,6 +94,15 @@ function BackgroundTaskTable({ tasks, empty }: { tasks: BackgroundTask[]; empty:
               {formatMetrics(task.metrics) && (
                 <div className="mt-1 text-xs text-sand-500">{formatMetrics(task.metrics)}</div>
               )}
+              {task.details && task.details.length > 0 && (
+                <div className="mt-2 max-h-28 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] text-sand-600">
+                  {task.details.map((line, index) => (
+                    <div key={`${task.id}-detail-${index}`} className="break-all">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )}
             </td>
             <td className="text-ink-100">
               {new Date(task.finished_at || task.updated_at || task.started_at).toLocaleTimeString()}

@@ -48,8 +48,9 @@ func TestStorageConfigUploadLocalToAlist(t *testing.T) {
 	if _, err := storage.Save(t.Context(), StorageInput{
 		Type: "alist",
 		Config: map[string]any{
-			"server": alist.URL,
-			"token":  "alist-token",
+			"server":           alist.URL,
+			"token":            "alist-token",
+			"transfer_enabled": "true",
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -122,8 +123,9 @@ func TestStorageConfigUploadLocalToOpenListAPI(t *testing.T) {
 	if _, err := storage.Save(t.Context(), StorageInput{
 		Type: "openlist",
 		Config: map[string]any{
-			"server": openlist.URL,
-			"token":  "openlist-token",
+			"server":           openlist.URL,
+			"token":            "openlist-token",
+			"transfer_enabled": "true",
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -195,9 +197,10 @@ func TestStorageConfigUploadLocalToOpenListAPIWithUsernamePassword(t *testing.T)
 	if _, err := storage.Save(t.Context(), StorageInput{
 		Type: "openlist",
 		Config: map[string]any{
-			"server":   openlist.URL,
-			"username": "alice",
-			"password": "secret",
+			"server":           openlist.URL,
+			"username":         "alice",
+			"password":         "secret",
+			"transfer_enabled": "true",
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -285,8 +288,9 @@ func TestSchedulerCloudUploadUsesConfiguredLocalSource(t *testing.T) {
 	if _, err := storage.Save(t.Context(), StorageInput{
 		Type: "alist",
 		Config: map[string]any{
-			"server": alist.URL,
-			"token":  "token",
+			"server":           alist.URL,
+			"token":            "token",
+			"transfer_enabled": "true",
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -337,9 +341,10 @@ func TestStorageConfigUploadLocalToCloudDrive2(t *testing.T) {
 	if _, err := storage.Save(t.Context(), StorageInput{
 		Type: "clouddrive2",
 		Config: map[string]any{
-			"url":      dav.URL + "/dav",
-			"username": "user",
-			"password": "pass",
+			"url":              dav.URL + "/dav",
+			"username":         "user",
+			"password":         "pass",
+			"transfer_enabled": "true",
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -362,13 +367,91 @@ func TestStorageConfigUploadLocalToCloudDrive2(t *testing.T) {
 	}
 }
 
+func TestStorageConfigUploadLocalRequiresTransferEnabled(t *testing.T) {
+	_, storage := newStorageUploadTestService(t)
+	if _, err := storage.Save(t.Context(), StorageInput{
+		Type: "alist",
+		Config: map[string]any{
+			"server": "http://alist.test",
+			"token":  "token",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "Movie.mkv"), []byte("movie"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := storage.UploadLocal(t.Context(), CloudUploadInput{
+		Type:       "alist",
+		SourcePath: source,
+		DestPath:   "/MediaStationGo",
+		Recursive:  true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "transfer is disabled") {
+		t.Fatalf("upload error = %v, want transfer disabled", err)
+	}
+}
+
+func TestStorageConfigUploadLocalMoveDeletesSourceAfterUpload(t *testing.T) {
+	var uploaded []string
+	alist := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/fs/mkdir":
+			_, _ = w.Write([]byte(`{"code":200}`))
+		case "/api/fs/get":
+			w.WriteHeader(http.StatusNotFound)
+		case "/api/fs/put":
+			decoded, _ := url.PathUnescape(r.Header.Get("File-Path"))
+			uploaded = append(uploaded, decoded)
+			_, _ = w.Write([]byte(`{"code":200}`))
+		default:
+			t.Fatalf("unexpected alist path %s", r.URL.Path)
+		}
+	}))
+	defer alist.Close()
+
+	_, storage := newStorageUploadTestService(t)
+	if _, err := storage.Save(t.Context(), StorageInput{
+		Type: "alist",
+		Config: map[string]any{
+			"server":           alist.URL,
+			"token":            "token",
+			"transfer_enabled": "true",
+			"transfer_mode":    "move",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	file := filepath.Join(source, "Movie.mkv")
+	if err := os.WriteFile(file, []byte("movie"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := storage.UploadLocal(t.Context(), CloudUploadInput{
+		Type:       "alist",
+		SourcePath: source,
+		DestPath:   "/MediaStationGo",
+		Recursive:  true,
+	})
+	if err != nil {
+		t.Fatalf("upload local move: %v", err)
+	}
+	if res.Uploaded != 1 || res.Moved != 1 || len(uploaded) != 1 {
+		t.Fatalf("result = %+v uploaded=%#v", res, uploaded)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatalf("source should be removed after move upload, stat err=%v", err)
+	}
+}
+
 func newStorageUploadTestService(t *testing.T) (*repository.Container, *StorageConfigService) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&model.StorageConfig{}, &model.Setting{}); err != nil {
+	if err := db.AutoMigrate(&model.StorageConfig{}, &model.Setting{}, &model.Library{}, &model.Media{}); err != nil {
 		t.Fatal(err)
 	}
 	repos := repository.New(db)

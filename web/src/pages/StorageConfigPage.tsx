@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Cloud, FileVideo, Folder, Loader2, LogOut, PauseCircle, QrCode, RefreshCw, Save, Send, Trash2, Upload } from 'lucide-react'
+import { Cloud, Copy, FileVideo, Folder, Loader2, LogOut, Move, PauseCircle, QrCode, RefreshCw, Save, Send, Trash2, Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import { libraryAPI } from '../api/library'
@@ -26,6 +26,7 @@ const TYPE_LABEL: Record<string, string> = {
   clouddrive2: 'CloudDrive2',
 }
 const PATH_BASED_CLOUD = new Set<StorageType>(['openlist', 'clouddrive2'])
+const TRANSFER_SUPPORTED_TYPES = new Set<StorageType>(['alist', 'openlist', 'webdav', 'clouddrive2'])
 
 function normalizeCloudDisplayPath(value: string) {
   let text = value.trim()
@@ -151,6 +152,7 @@ const FIELD_DEFS: Record<StorageType, { key: string; label: string; secret?: boo
 
 function StorageForm({ type }: { type: StorageType }) {
   const fields = useMemo(() => FIELD_DEFS[type], [type])
+  const transferSupported = TRANSFER_SUPPORTED_TYPES.has(type)
   const [config, setConfig] = useState<Record<string, string>>({})
   const [enabled, setEnabled] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -163,6 +165,9 @@ function StorageForm({ type }: { type: StorageType }) {
     try {
       const r = await storageAPI.get(type)
       const next: Record<string, string> = {}
+      for (const [key, value] of Object.entries(r.config ?? {})) {
+        next[key] = value === '********' ? '' : String(value ?? '')
+      }
       for (const f of fields) {
         const v = r.config?.[f.key]
         // List() redacts secrets to "********"; show empty so the user
@@ -221,14 +226,14 @@ function StorageForm({ type }: { type: StorageType }) {
   const onLogout = async () => {
     const ok = await confirmAction({
       title: '退出云盘登录',
-      message: `将清空「${TYPE_LABEL[type] ?? type}」保存的 Cookie / Token / 密码并停用该外部存储；不会删除网盘文件，也不会删除已挂载媒体库。`,
+      message: `将清空「${TYPE_LABEL[type] ?? type}」保存的 Cookie / Token / 密码并停用该外部存储，同时移除本项目中的对应网盘挂载和媒体记录；不会删除网盘里的真实文件。`,
       confirmText: '退出登录',
     })
     if (!ok) return
     setLoggingOut(true)
     try {
       await storageAPI.logout(type)
-      toast.success('已退出云盘登录并停用该存储')
+      toast.success('已退出云盘登录、停用该存储并清理本项目挂载')
       await refresh()
     } catch (err: unknown) {
       const msg =
@@ -280,6 +285,39 @@ function StorageForm({ type }: { type: StorageType }) {
         />
         启用
       </label>
+      {transferSupported && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+          <div className="mb-2 text-sm font-semibold text-ink-600">转存写入权限</div>
+          <p className="mb-3 text-xs text-ink-50">
+            挂载/扫描只需要读取；只有手动开启这里，才允许把本地文件转存写入到该外部存储。可随时关闭。
+          </p>
+          <div className="flex flex-wrap items-center gap-4 text-sm text-ink-100">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-primary-400"
+                checked={(config.transfer_enabled ?? '').toLowerCase() === 'true'}
+                onChange={(event) => setConfig((current) => ({ ...current, transfer_enabled: event.target.checked ? 'true' : 'false' }))}
+              />
+              允许转存写入
+            </label>
+            <label className="flex items-center gap-2">
+              <span>转存方式</span>
+              <select
+                className="input-base w-32"
+                value={config.transfer_mode === 'move' ? 'move' : 'copy'}
+                onChange={(event) => setConfig((current) => ({ ...current, transfer_mode: event.target.value }))}
+              >
+                <option value="copy">复制</option>
+                <option value="move">移动</option>
+              </select>
+            </label>
+            <span className="text-xs text-ink-50">
+              复制保留本地源文件；移动只在上传成功后删除本地文件。
+            </span>
+          </div>
+        </div>
+      )}
       <div className="flex justify-end gap-2 pt-2">
         {isCloud(type) && (
           <button
@@ -306,13 +344,17 @@ function StorageForm({ type }: { type: StorageType }) {
           保存
         </button>
       </div>
-      <StorageUploadPanel type={type} />
+      <StorageUploadPanel
+        type={type}
+        transferEnabled={(config.transfer_enabled ?? '').toLowerCase() === 'true'}
+        transferMode={config.transfer_mode === 'move' ? 'move' : 'copy'}
+      />
       {isCloud(type) && <CloudBrowser type={type} />}
     </form>
   )
 }
 
-function StorageUploadPanel({ type }: { type: StorageType }) {
+function StorageUploadPanel({ type, transferEnabled, transferMode }: { type: StorageType; transferEnabled: boolean; transferMode: 'copy' | 'move' }) {
   const [sourcePath, setSourcePath] = useState('')
   const [destPath, setDestPath] = useState('/MediaStationGo')
   const [recursive, setRecursive] = useState(true)
@@ -320,7 +362,7 @@ function StorageUploadPanel({ type }: { type: StorageType }) {
   const [overwrite, setOverwrite] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const supported = type === 'alist' || type === 'openlist' || type === 'webdav' || type === 'clouddrive2'
+  const supported = TRANSFER_SUPPORTED_TYPES.has(type)
 
   const submit = async () => {
     if (!supported) {
@@ -331,6 +373,10 @@ function StorageUploadPanel({ type }: { type: StorageType }) {
       toast.error('请填写本地源目录或文件路径')
       return
     }
+    if (!transferEnabled) {
+      toast.error('请先开启“允许转存写入”并保存该外部存储配置')
+      return
+    }
     setBusy(true)
     try {
       const { result, error } = await storageAPI.uploadLocal(type, {
@@ -339,9 +385,11 @@ function StorageUploadPanel({ type }: { type: StorageType }) {
         recursive,
         include_sidecars: includeSidecars,
         overwrite,
+        transfer_mode: transferMode,
       })
       const errText = error || (result.errors && result.errors.length > 0 ? ` · 错误 ${result.errors.length}` : '')
-      toast.success(`转存完成：上传 ${result.uploaded} · 跳过 ${result.skipped} · ${fmtBytes(result.bytes)}${errText}`)
+      const movedText = result.moved ? ` · 移动 ${result.moved}` : ''
+      toast.success(`转存完成：上传 ${result.uploaded}${movedText} · 跳过 ${result.skipped} · ${fmtBytes(result.bytes)}${errText}`)
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '转存失败')
     } finally {
@@ -354,10 +402,12 @@ function StorageUploadPanel({ type }: { type: StorageType }) {
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h3 className="flex items-center gap-2 font-display text-base font-semibold text-ink-600">
-            <Upload size={16} /> 本地媒体转存到此存储
+            {transferMode === 'move' ? <Move size={16} /> : <Copy size={16} />} 本地媒体转存到此存储
           </h3>
           <p className="mt-1 text-xs text-ink-50">
-            复制本地媒体文件到外部存储，保留本地源文件；自动跳过远端已存在文件。
+            {transferMode === 'move'
+              ? '移动模式会先上传到外部存储，上传成功后才删除本地源文件；远端已存在且未覆盖时不会删除本地。'
+              : '复制本地媒体文件到外部存储，保留本地源文件；自动跳过远端已存在文件。'}
           </p>
         </div>
         {!supported && (
@@ -414,9 +464,9 @@ function StorageUploadPanel({ type }: { type: StorageType }) {
           <input type="checkbox" className="h-4 w-4 accent-primary-400" checked={overwrite} onChange={(event) => setOverwrite(event.target.checked)} />
           覆盖远端同名文件
         </label>
-        <button type="button" className="neon-button ml-auto" disabled={busy || !supported} onClick={submit}>
-          {busy ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-          {busy ? '转存中…' : '开始转存'}
+        <button type="button" className="neon-button ml-auto" disabled={busy || !supported || !transferEnabled} onClick={submit}>
+          {busy ? <Loader2 size={16} className="animate-spin" /> : transferMode === 'move' ? <Move size={16} /> : <Upload size={16} />}
+          {busy ? '转存中…' : transferMode === 'move' ? '开始移动转存' : '开始复制转存'}
         </button>
       </div>
     </div>

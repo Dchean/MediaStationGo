@@ -115,7 +115,18 @@ func (o *OrganizerService) OrganizeMediaWithOptions(ctx context.Context, mediaID
 	if err != nil || lib == nil {
 		return "", errors.New("library not found")
 	}
+	if _, ok := ParseCloudLibraryMount(lib.Path); ok {
+		return "", errors.New("local organize cannot use cloud libraries directly; use external storage scan/mount for cloud media or enable cloud transfer to write to cloud")
+	}
 	baseRoot := o.resolveBaseRoot(ctx, lib, opts.DestPath)
+	if _, ok := ParseCloudLibraryMount(baseRoot); ok {
+		return "", errors.New("organize destination must be a local writable media directory; enable cloud transfer in external storage when writing to cloud")
+	}
+	if !opts.DryRun {
+		if err := ensureOrganizeDestinationWritable(baseRoot); err != nil {
+			return "", err
+		}
+	}
 	mode := o.resolveTransferMode(ctx, opts.TransferMode)
 	if isSeriesLibraryType(lib.Type) {
 		if err := o.refreshEpisodeIdentity(m, lib); err != nil {
@@ -284,6 +295,9 @@ func (o *OrganizerService) OrganizeLibraryWithOptions(ctx context.Context, libra
 	if err != nil || lib == nil {
 		return nil, errors.New("library not found")
 	}
+	if _, ok := ParseCloudLibraryMount(lib.Path); ok {
+		return nil, errors.New("local organize cannot use cloud libraries directly; use external storage scan/mount for cloud media or enable cloud transfer to write to cloud")
+	}
 	var rows []model.Media
 	if err := o.repo.DB.WithContext(ctx).
 		Where("library_id = ? AND deleted_at IS NULL", libraryID).
@@ -292,8 +306,19 @@ func (o *OrganizerService) OrganizeLibraryWithOptions(ctx context.Context, libra
 	}
 	// 源目录（待整理）：仅整理位于该目录下的媒体；留空 = 整个媒体库。
 	sourceRoot := o.resolveSourceRoot(ctx, lib, opts.SourcePath)
+	if _, ok := ParseCloudLibraryMount(sourceRoot); ok {
+		return nil, errors.New("organize source must be a local directory; cloud libraries should be managed from external storage scan/mount")
+	}
 	// 目的地目录：已位于该根下的文件视为已整理；受 dest_path 覆盖与设置影响。
 	baseRoot := o.resolveBaseRoot(ctx, lib, opts.DestPath)
+	if _, ok := ParseCloudLibraryMount(baseRoot); ok {
+		return nil, errors.New("organize destination must be a local writable media directory; enable cloud transfer in external storage when writing to cloud")
+	}
+	if !opts.DryRun {
+		if err := ensureOrganizeDestinationWritable(baseRoot); err != nil {
+			return nil, err
+		}
+	}
 	res := &OrganizeResult{SourcePath: sourceRoot, DestPath: baseRoot, DryRun: opts.DryRun}
 	for i := range rows {
 		// 不在源目录内的文件跳过（不属于本次「从源目录整理」的范围）。

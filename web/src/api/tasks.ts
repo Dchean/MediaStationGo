@@ -18,6 +18,7 @@ export interface BackgroundTask {
   dest_path?: string
   message?: string
   error?: string
+  details?: string[]
   metrics?: Record<string, number>
   started_at: string
   updated_at: string

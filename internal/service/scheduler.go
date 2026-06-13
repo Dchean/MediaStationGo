@@ -394,6 +394,7 @@ func (s *SchedulerService) cloudUploadInput(ctx context.Context) CloudUploadInpu
 		Recursive:       parseBoolSetting(get(CloudUploadRecursiveKey), true),
 		IncludeSidecars: parseBoolSetting(get(CloudUploadSidecarsKey), true),
 		Overwrite:       parseBoolSetting(get(CloudUploadOverwriteKey), false),
+		TransferMode:    get(CloudUploadTransferModeKey),
 	}
 }
 
@@ -569,6 +570,7 @@ func (s *SchedulerService) jobOrganizeSource(ctx context.Context) error {
 			DestPath:   res.DestPath,
 			Message:    "自动整理完成，准备扫描入库",
 			Metrics:    OrganizeTaskMetrics(res),
+			Details:    OrganizeTaskDetails(res, 8),
 		})
 	}
 	if s.scanner != nil && res != nil && strings.TrimSpace(res.DestPath) != "" && OrganizeResultNeedsVisibilitySync(res) {
@@ -577,6 +579,7 @@ func (s *SchedulerService) jobOrganizeSource(ctx context.Context) error {
 				Stage:   "scan_scrape",
 				Message: "正在扫描入库并按设置刮削",
 				Metrics: OrganizeTaskMetrics(res),
+				Details: OrganizeTaskDetails(res, 8),
 			})
 		}
 		res.Scans, res.Scrapes = s.scanner.ScanAndScrapeLibrariesForPath(ctx, res.DestPath, "", OrganizeScrapeAfterEnabled(ctx, s.repo))
@@ -594,6 +597,7 @@ func (s *SchedulerService) jobOrganizeSource(ctx context.Context) error {
 			Stage:   "completed",
 			Message: "自动整理入库结束",
 			Metrics: OrganizeTaskMetrics(res),
+			Details: OrganizeTaskDetails(res, 8),
 		})
 	}
 	if s.log != nil && res != nil {

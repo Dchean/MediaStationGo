@@ -123,9 +123,18 @@ func (o *OrganizerService) OrganizeDirectory(ctx context.Context, opts OrganizeO
 	if statErr != nil {
 		return nil, fmt.Errorf("source directory not accessible: %s", filepath.Clean(requestedSource))
 	}
-	dest := resolveMappedDestinationPath(o.defaultDestRoot(ctx, opts.DestPath))
+	requestedDest := strings.TrimSpace(o.defaultDestRoot(ctx, opts.DestPath))
+	if _, ok := ParseCloudLibraryMount(requestedDest); ok {
+		return nil, errors.New("organize destination must be a local writable media directory; enable cloud transfer in external storage when writing to cloud")
+	}
+	dest := resolveMappedDestinationPath(requestedDest)
 	if dest == "" || dest == "." {
 		return nil, errors.New("destination path required")
+	}
+	if !opts.DryRun {
+		if err := ensureOrganizeDestinationWritable(dest); err != nil {
+			return nil, err
+		}
 	}
 	mode := o.resolveTransferMode(ctx, opts.TransferMode)
 	res := &OrganizeResult{SourcePath: source, DestPath: dest, DryRun: opts.DryRun}
@@ -195,6 +204,32 @@ func (o *OrganizerService) OrganizeDirectory(ctx context.Context, opts OrganizeO
 		zap.Any("skip_reasons", OrganizeSkipReasonCounts(res)),
 	)
 	return res, nil
+}
+
+func ensureOrganizeDestinationWritable(dest string) error {
+	dest = strings.TrimSpace(dest)
+	if dest == "" || dest == "." {
+		return errors.New("destination path required")
+	}
+	if _, ok := ParseCloudLibraryMount(dest); ok {
+		return errors.New("organize destination must be a local writable media directory; enable cloud transfer in external storage when writing to cloud")
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil { // #nosec G301 -- organized media directories must remain readable by NAS/player users.
+		return fmt.Errorf("destination path is not a writable directory: %s: %w", dest, err)
+	}
+	probe, err := os.CreateTemp(dest, ".mediastation-write-test-*") // #nosec G304 -- dest is operator-configured organize root.
+	if err != nil {
+		return fmt.Errorf("destination path is not writable: %s: %w", dest, err)
+	}
+	name := probe.Name()
+	if closeErr := probe.Close(); closeErr != nil {
+		_ = os.Remove(name)
+		return fmt.Errorf("destination path write probe failed: %s: %w", dest, closeErr)
+	}
+	if err := os.Remove(name); err != nil {
+		return fmt.Errorf("destination path cleanup probe failed: %s: %w", dest, err)
+	}
+	return nil
 }
 
 type organizeDirectoryLayout struct {

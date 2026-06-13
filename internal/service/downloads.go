@@ -1136,6 +1136,7 @@ func (d *DownloadService) onTorrentComplete(ctx context.Context, torrent QBitTor
 			DestPath:   res.DestPath,
 			Message:    "下载完成整理已完成，准备扫描入库",
 			Metrics:    OrganizeTaskMetrics(res),
+			Details:    OrganizeTaskDetails(res, 8),
 		})
 	}
 	if d.scanner != nil && res != nil && strings.TrimSpace(res.DestPath) != "" && OrganizeResultNeedsVisibilitySync(res) {
@@ -1144,6 +1145,7 @@ func (d *DownloadService) onTorrentComplete(ctx context.Context, torrent QBitTor
 				Stage:   "scan_scrape",
 				Message: "正在扫描入库并按设置刮削",
 				Metrics: OrganizeTaskMetrics(res),
+				Details: OrganizeTaskDetails(res, 8),
 			})
 		}
 		res.Scans, res.Scrapes = d.scanner.ScanAndScrapeLibrariesForPath(ctx, res.DestPath, "", OrganizeScrapeAfterEnabled(ctx, d.repo))
@@ -1160,6 +1162,7 @@ func (d *DownloadService) onTorrentComplete(ctx context.Context, torrent QBitTor
 			Stage:   "completed",
 			Message: "下载完成自动整理入库结束",
 			Metrics: OrganizeTaskMetrics(res),
+			Details: OrganizeTaskDetails(res, 8),
 		})
 	}
 	d.markCompletedTorrentCatchupRecorded(context.Background(), torrent)
