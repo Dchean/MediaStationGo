@@ -313,6 +313,73 @@ func TestOrganizeDirectoryDedup(t *testing.T) {
 	}
 }
 
+func TestOrganizeDirectoryTreatsScannedTargetPathAsLibraryDuplicate(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "downloads")
+	dest := filepath.Join(root, "media")
+
+	writeOrgFile(t, filepath.Join(src, "Weird.Release.2024.1080p.mkv"), "source")
+	existing := filepath.Join(dest, "电影", "Weird Release (2024)", "Weird Release (2024).mkv")
+	writeOrgFile(t, existing, "existing")
+
+	repos := newOrganizerTestRepo(t)
+	row := model.Media{Title: "刮削后的正式片名", Path: existing, Year: 2024, Container: "mkv", Width: 1920, Height: 1080}
+	if err := repos.Media.Upsert(t.Context(), &row); err != nil {
+		t.Fatal(err)
+	}
+
+	org := NewOrganizerService(&config.Config{}, zap.NewNop(), repos)
+	res, err := org.OrganizeDirectory(t.Context(), OrganizeOptions{
+		SourcePath:   src,
+		DestPath:     dest,
+		TransferMode: TransferCopy,
+	})
+	if err != nil {
+		t.Fatalf("organize directory: %v", err)
+	}
+	if res.Organized != 0 || res.Skipped != 1 {
+		t.Fatalf("result = %+v, want organized=0 skipped=1", res)
+	}
+	if len(res.Items) != 1 || res.Items[0].Reason != organizeSkipDuplicateLibrary {
+		t.Fatalf("items = %+v, want duplicate in library", res.Items)
+	}
+	if OrganizeResultNeedsVisibilitySync(res) {
+		t.Fatal("path already present in DB should not trigger another visibility scan")
+	}
+}
+
+func TestOrganizeDirectorySkipsSampleClips(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "downloads")
+	dest := filepath.Join(root, "media")
+
+	writeOrgFile(t, filepath.Join(src, "Demo.Movie.2024.1080p.mkv"), "main")
+	writeOrgFile(t, filepath.Join(src, "Samples", "Sample1.mkv"), "sample-dir")
+	writeOrgFile(t, filepath.Join(src, "Demo.Movie.2024.sample.mkv"), "sample-file")
+
+	org := NewOrganizerService(&config.Config{}, zap.NewNop(), newOrganizerTestRepo(t))
+	res, err := org.OrganizeDirectory(t.Context(), OrganizeOptions{
+		SourcePath:   src,
+		DestPath:     dest,
+		TransferMode: TransferCopy,
+	})
+	if err != nil {
+		t.Fatalf("organize directory: %v", err)
+	}
+	if res.Organized != 1 || res.Skipped != 2 {
+		t.Fatalf("result = %+v, want organized=1 skipped=2", res)
+	}
+	if got := OrganizeSkipReasonCounts(res)[organizeSkipSampleClip]; got != 2 {
+		t.Fatalf("sample skip count = %d, want 2; items=%+v", got, res.Items)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "电影", "Sample1", "Sample1.mkv")); !os.IsNotExist(err) {
+		t.Fatalf("sample directory clip should not be organized, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "电影", "Demo Movie Sample (2024)", "Demo Movie Sample (2024).mkv")); !os.IsNotExist(err) {
+		t.Fatalf("sample suffix clip should not be organized, stat err=%v", err)
+	}
+}
+
 // TestOrganizeDirectorySkipsHigherResolutionWhenReplacementDisabled verifies
 // that dedup wins by default: even a higher-resolution source must not replace
 // an existing library item unless the caller explicitly allows washing.
@@ -546,6 +613,54 @@ func TestOrganizeDirectoryUsesExplicitCategoryLibraryRoot(t *testing.T) {
 	}
 	if pathWithin(res.Items[0].Target, filepath.Join(dest, "电视剧")) && !pathWithin(res.Items[0].Target, libraryRoot) {
 		t.Fatalf("target landed outside category library: %q", res.Items[0].Target)
+	}
+}
+
+func TestOrganizeDirectoryCreatesMissingCategoryLibraryForVisibility(t *testing.T) {
+	root := t.TempDir()
+	srcRoot := filepath.Join(root, "downloads")
+	dest := filepath.Join(root, "media")
+	source := filepath.Join(srcRoot, "Gourd.Brothers.S01E01.2026.1080p.mkv")
+	target := filepath.Join(dest, "电视剧", "未分类", "Gourd Brothers", "Season 01", "Gourd Brothers - S01E01.mkv")
+	writeOrgFile(t, source, "source")
+	writeOrgFile(t, target, "already-there")
+
+	repos := newOrganizerTestRepo(t)
+	org := NewOrganizerService(&config.Config{}, zap.NewNop(), repos)
+	res, err := org.OrganizeDirectory(t.Context(), OrganizeOptions{
+		SourcePath:           srcRoot,
+		DestPath:             dest,
+		MediaType:            "tv",
+		MediaCategory:        "未分类",
+		TransferMode:         TransferCopy,
+		AllowReplaceExisting: false,
+	})
+	if err != nil {
+		t.Fatalf("organize missing category: %v", err)
+	}
+	if res.Organized != 0 || res.Skipped != 1 || len(res.Items) != 1 || res.Items[0].Reason != organizeSkipTargetExists {
+		t.Fatalf("result = %+v, want skipped target exists", res)
+	}
+
+	var lib model.Library
+	if err := repos.DB.Where("path = ?", filepath.Join(dest, "电视剧", "未分类")).First(&lib).Error; err != nil {
+		t.Fatalf("missing auto-created category library: %v", err)
+	}
+	if lib.Name != "未分类" || lib.Type != "tv" || !lib.Enabled {
+		t.Fatalf("auto-created library = %+v, want enabled tv 未分类", lib)
+	}
+
+	scanner := NewScannerService(&config.Config{}, zap.NewNop(), repos, NewHub(zap.NewNop()), nil, nil)
+	scans := scanner.ScanLibrariesForPath(t.Context(), res.DestPath, "")
+	added := 0
+	for _, scan := range scans {
+		if scan.Error != "" {
+			t.Fatalf("scan failed: %#v", scan)
+		}
+		added += scan.Added
+	}
+	if added != 1 {
+		t.Fatalf("scan added = %d, want 1; scans=%#v", added, scans)
 	}
 }
 

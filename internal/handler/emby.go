@@ -1059,6 +1059,15 @@ func embyVideoStreamHandler(svc *service.Container, cloudMode string) gin.Handle
 			c.Status(http.StatusNotFound)
 			return
 		}
+		if embyShouldRedirectVideoStreamToSTRM(c, svc, c.Param("id"), cloudMode) {
+			target := "/api/stream/" + url.PathEscape(strings.TrimSpace(c.Param("id")))
+			if token := embyPlaybackRedirectToken(c, svc); token != "" {
+				target = embyAppendAPIKey(target, token)
+			}
+			setRedirectNoStoreHeaders(c)
+			c.Redirect(http.StatusFound, absoluteRequestURL(c, target))
+			return
+		}
 		// 直接调用 Stream service 写入 response。
 		// 此前这里把所有错误一律吞成 404：云盘 Cookie 过期、直链解析失败、
 		// STRM 播放被关闭……在第三方播放器上全部表现为「404 不存在」，
@@ -1078,6 +1087,43 @@ func embyVideoStreamHandler(svc *service.Container, cloudMode string) gin.Handle
 			}
 		}
 	}
+}
+
+func embyPlaybackRedirectToken(c *gin.Context, svc *service.Container) string {
+	if token := embyRequestToken(c); token != "" {
+		return token
+	}
+	if c == nil || svc == nil || svc.Auth == nil || svc.Repo == nil || svc.Repo.User == nil {
+		return ""
+	}
+	uid := embyUserID(c)
+	if uid == "" {
+		return ""
+	}
+	u, err := svc.Repo.User.FindByID(c.Request.Context(), uid)
+	if err != nil || u == nil {
+		return ""
+	}
+	token, err := svc.Auth.IssueEmbyToken(u)
+	if err != nil {
+		return ""
+	}
+	return token
+}
+
+func embyShouldRedirectVideoStreamToSTRM(c *gin.Context, svc *service.Container, mediaID, cloudMode string) bool {
+	if c == nil || svc == nil || svc.Repo == nil || svc.Repo.Media == nil || cloudMode != service.CloudPlaybackModeRedirectProxy {
+		return false
+	}
+	settings := service.CloudPlaybackSettings(c.Request.Context(), svc.Repo)
+	if settings.PreferredMode != service.CloudPlaybackModeSTRM || !settings.STRMEnabled {
+		return false
+	}
+	m, err := svc.Repo.Media.FindByID(c.Request.Context(), mediaID)
+	if err != nil || m == nil {
+		return false
+	}
+	return strings.TrimSpace(m.STRMURL) != ""
 }
 
 func embyVideoHLSPlaylistHandler(svc *service.Container) gin.HandlerFunc {

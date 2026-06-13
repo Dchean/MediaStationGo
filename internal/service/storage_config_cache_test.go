@@ -79,3 +79,11 @@ func TestCloudResolveHotCacheRefreshesInBackground(t *testing.T) {
 		t.Fatalf("refreshed link = %s, want second URL", link.URL)
 	}
 }
+
+func TestCloudResolveCacheTTLUsesShortTTLForCloudPlaybackLinks(t *testing.T) {
+	for _, typ := range []string{"quark", "cloud115", "clouddrive2", "openlist"} {
+		if got := cloudResolveCacheTTL(typ); got != 2*time.Minute {
+			t.Fatalf("%s cloud resolve cache ttl = %v, want 2m", typ, got)
+		}
+	}
+}

@@ -494,10 +494,8 @@ func cloudResolveHotRefreshWindow(ttl time.Duration) time.Duration {
 
 func cloudResolveCacheTTL(typ string) time.Duration {
 	switch typ {
-	case cloud.TypeQuark, cloud.Type115:
+	case cloud.TypeQuark, cloud.Type115, cloud.TypeCloudDrive2, cloud.TypeOpenList:
 		return 2 * time.Minute
-	case cloud.TypeCloudDrive2, cloud.TypeOpenList:
-		return 15 * time.Minute
 	default:
 		return 5 * time.Minute
 	}

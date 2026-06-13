@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -257,6 +258,9 @@ func OrganizeTaskMetrics(res *OrganizeResult) map[string]int64 {
 		metrics["scan_updated"] = scanUpdated
 		metrics["scan_removed"] = scanRemoved
 	}
+	for reason, count := range OrganizeSkipReasonCounts(res) {
+		metrics["skip_"+organizeMetricKey(reason)] = int64(count)
+	}
 	var scrapeMatched int64
 	for _, scrape := range res.Scrapes {
 		scrapeMatched += int64(scrape.Matched)
@@ -272,4 +276,45 @@ func OrganizeTaskMetrics(res *OrganizeResult) map[string]int64 {
 		metrics["scrape_matched"] = scrapeMatched
 	}
 	return metrics
+}
+
+func OrganizeSkipReasonCounts(res *OrganizeResult) map[string]int {
+	if res == nil || len(res.Items) == 0 {
+		return nil
+	}
+	counts := map[string]int{}
+	for _, item := range res.Items {
+		if item.Action != "skip" {
+			continue
+		}
+		reason := strings.TrimSpace(item.Reason)
+		if reason == "" {
+			reason = "unknown"
+		}
+		counts[reason]++
+	}
+	if len(counts) == 0 {
+		return nil
+	}
+	return counts
+}
+
+func organizeMetricKey(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "unknown"
+	}
+	replacer := strings.NewReplacer(" ", "_", "-", "_", "/", "_", "\\", "_")
+	value = replacer.Replace(value)
+	var b strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		}
+	}
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		return "unknown"
+	}
+	return out
 }

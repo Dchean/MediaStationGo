@@ -159,6 +159,15 @@ func absoluteRequestURL(c *gin.Context, path string) string {
 	return scheme + "://" + host + path
 }
 
+func setRedirectNoStoreHeaders(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+}
+
 // transcodeStatusHandler reports the live status of one transcode job.
 // We surface the active jobs the transcoder knows about.
 func transcodeStatusHandler(svc *service.Container) gin.HandlerFunc {

@@ -10,6 +10,29 @@ import type { Library, Media } from '../types'
 
 type CloudPlaybackMode = 'strm' | 'redirect_proxy'
 
+function currentOrigin() {
+  if (typeof window === 'undefined') return ''
+  return window.location.origin.replace(/\/+$/, '')
+}
+
+function isLocalPlaybackBase(raw: string) {
+  try {
+    const u = new URL(raw)
+    const host = u.hostname.toLowerCase()
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  } catch {
+    return false
+  }
+}
+
+function preferredSTRMBaseURL(saved: string) {
+  const current = currentOrigin()
+  const trimmed = saved.trim().replace(/\/+$/, '')
+  if (!trimmed) return current
+  if (current && isLocalPlaybackBase(trimmed) && trimmed !== current) return current
+  return trimmed
+}
+
 // StrmPage exposes the URL-as-file admin tooling backed by the Go server:
 //   - import a brand-new media row directly from a (library, title, url)
 //     tuple — useful for streaming-only entries with no on-disk file.
@@ -50,7 +73,7 @@ export function StrmPage() {
       .listSettings()
       .then((rows) => {
         const settings = Object.fromEntries(rows.map((row) => [row.key, row.value]))
-        setBaseURL(settings['app.server_url'] || settings['strm.base_url'] || '')
+        setBaseURL(preferredSTRMBaseURL(settings['strm.base_url'] || settings['app.server_url'] || ''))
         setOutputDir(settings['strm.output_dir'] || '')
         const mode = settings['cloud.playback_mode']
         const nextMode =
@@ -336,6 +359,13 @@ export function StrmPage() {
             value={baseURL}
             onChange={(e) => setBaseURL(e.target.value)}
           />
+          <button
+            type="button"
+            className="rounded-2xl border border-primary-400/40 px-3 py-2 text-sm text-brand-500 transition hover:bg-primary-400/10"
+            onClick={() => setBaseURL(currentOrigin())}
+          >
+            使用当前访问地址
+          </button>
           <label className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white/70 px-3 py-2 text-sm text-ink-50">
             <input
               type="checkbox"
@@ -350,7 +380,7 @@ export function StrmPage() {
             value={outputDir}
             onChange={(e) => setOutputDir(e.target.value)}
           />
-          <button type="submit" disabled={generating || !generateLibraryID || !baseURL.trim()} className="neon-button">
+          <button type="submit" disabled={generating || !generateLibraryID || !baseURL.trim()} className="neon-button md:col-span-4">
             {generating ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
             {generating ? '生成中…' : '批量生成 STRM'}
           </button>

@@ -57,11 +57,27 @@ func OrganizeResultHasChanges(res *OrganizeResult) bool {
 }
 
 // OrganizeResultNeedsVisibilitySync reports whether a just-finished organize
-// should make sure the destination media exists in the DB. Skipped target files
-// can still be invisible after a restart or an older organize run, so download
-// completion should run one visibility sync even when no bytes were moved.
+// should make sure destination files exist in the DB. New/replaced files always
+// need it. Skips only need it when the target file exists on disk but was not
+// proven to be an already scanned library duplicate; otherwise an automatic
+// organize loop with only seeding duplicates would rescan libraries forever.
 func OrganizeResultNeedsVisibilitySync(res *OrganizeResult) bool {
-	return res != nil && (res.Organized > 0 || res.Replaced > 0 || res.Skipped > 0)
+	if OrganizeResultHasChanges(res) {
+		return true
+	}
+	if res == nil {
+		return false
+	}
+	for _, item := range res.Items {
+		if item.Action != "skip" {
+			continue
+		}
+		switch item.Reason {
+		case organizeSkipAlreadyOrganized, organizeSkipTargetExists, "duplicate exists", "target exists":
+			return true
+		}
+	}
+	return false
 }
 
 // ScanLibrariesForPath recursively scans libraries affected by an organize
@@ -144,7 +160,10 @@ func (s *ScannerService) scrapeOrganizeTargets(ctx context.Context, targets []mo
 			Name:      lib.Name,
 			Path:      lib.Path,
 		}
-		matched, err := s.scraper.EnrichLibrary(ctx, lib.ID)
+		// Organize is an explicit ingest workflow: after rename/classification,
+		// previously failed no_match rows should be retried so the operator does
+		// not need to run a separate manual scrape.
+		matched, err := s.scraper.EnrichLibrary(ctx, lib.ID, true)
 		if err != nil {
 			summary.Error = err.Error()
 		} else {

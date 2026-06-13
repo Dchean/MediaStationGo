@@ -380,6 +380,7 @@ func (s *StreamService) ServeFileWithCloudMode(w http.ResponseWriter, r *http.Re
 		// 云盘播放 URL 先规范化为相对路径，免疫扫描时固化的旧 host。
 		target := normalizeCloudPlayTarget(strmURL)
 		target = withAuthTokenForInternalRedirect(target, r, PublicServerURL(r.Context(), s.repo, s.cfg))
+		setCloudRedirectNoStore(w)
 		http.Redirect(w, r, absoluteInternalRedirect(target, r), http.StatusFound)
 		return nil
 	}
@@ -403,6 +404,15 @@ func (s *StreamService) ServeFileWithCloudMode(w http.ResponseWriter, r *http.Re
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, stat.Name(), stat.ModTime(), f)
 	return nil
+}
+
+func setCloudRedirectNoStore(w http.ResponseWriter) {
+	if w == nil {
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 }
 
 func isCloudPlaybackTarget(raw string) bool {

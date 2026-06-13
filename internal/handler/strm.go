@@ -118,10 +118,14 @@ func generateSTRMHandler(svc *service.Container) gin.HandlerFunc {
 		if strmSvc == nil {
 			strmSvc = service.NewSTRMService(svc.Log, svc.Repo, svc.Cfg)
 		}
+		baseURL := strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
+		if baseURL == "" {
+			baseURL = strings.TrimRight(absoluteRequestURL(c, "/"), "/")
+		}
 		res, err := strmSvc.GenerateForLibrary(c.Request.Context(), service.GenerateSTRMOptions{
 			LibraryID:     req.LibraryID,
 			OutputDir:     req.OutputDir,
-			BaseURL:       req.BaseURL,
+			BaseURL:       baseURL,
 			Enabled:       req.Enabled,
 			Overwrite:     req.Overwrite,
 			IncludeLocal:  true,

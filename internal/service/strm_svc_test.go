@@ -59,6 +59,12 @@ func TestGenerateSTRMForLibraryWritesFilesAndRecords(t *testing.T) {
 	localSTRM := filepath.Join(outDir, "本地电影 (2025)", "本地电影 (2025).strm")
 	assertFileContains(t, cloudSTRM, "http://nas.example:18080/api/stream/cloud-media?token=strm-token")
 	assertFileContains(t, localSTRM, "http://nas.example:18080/api/stream/local-media?token=strm-token")
+	if got, err := repos.Setting.Get(t.Context(), "app.server_url"); err != nil || got != "http://nas.example:18080" {
+		t.Fatalf("app.server_url = %q, %v; want generated base url", got, err)
+	}
+	if got, err := repos.Setting.Get(t.Context(), "strm.base_url"); err != nil || got != "http://nas.example:18080" {
+		t.Fatalf("strm.base_url = %q, %v; want generated base url", got, err)
+	}
 
 	var count int64
 	if err := repos.DB.Model(&model.STRMRecord{}).Count(&count).Error; err != nil {

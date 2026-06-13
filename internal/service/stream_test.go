@@ -84,6 +84,9 @@ func TestServeFileRedirectsInternalSTRMAsAbsoluteURLWithToken(t *testing.T) {
 		!strings.Contains(loc, "token=jwt123") {
 		t.Fatalf("redirect Location should be absolute and tokenized, got %q", loc)
 	}
+	if got := w.Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Fatalf("cloud redirect Cache-Control = %q, want no-store", got)
+	}
 }
 
 func TestServeFileRedirectUsesForwardedTunnelHost(t *testing.T) {

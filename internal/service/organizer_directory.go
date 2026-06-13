@@ -28,6 +28,13 @@ import (
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 )
 
+const (
+	organizeSkipAlreadyOrganized = "already organized"
+	organizeSkipDuplicateLibrary = "duplicate in library"
+	organizeSkipTargetExists     = "target file exists"
+	organizeSkipSampleClip       = "sample/trailer clip"
+)
+
 // OrganizeSourceCandidate is a selectable organize source directory surfaced to
 // the UI so operators can organize an arbitrary directory (such as the download
 // directory) and not only registered libraries.
@@ -127,6 +134,20 @@ func (o *OrganizerService) OrganizeDirectory(ctx context.Context, opts OrganizeO
 		if _, ok := videoExtensions[ext]; !ok {
 			return nil, fmt.Errorf("source is not a supported video file: %s", source)
 		}
+		if skipped, reason := shouldSkipOrganizeSourceVideo(source, filepath.Dir(source)); skipped {
+			res.Skipped++
+			res.Items = append(res.Items, OrganizePreviewItem{Source: source, Action: "skip", Reason: reason})
+			o.log.Info("organize file finished",
+				zap.String("source", source),
+				zap.String("dest", dest),
+				zap.String("mode", string(mode)),
+				zap.Int("organized", res.Organized),
+				zap.Int("replaced", res.Replaced),
+				zap.Int("skipped", res.Skipped),
+				zap.Any("skip_reasons", OrganizeSkipReasonCounts(res)),
+			)
+			return res, nil
+		}
 		if err := o.organizeSourceFile(ctx, source, filepath.Dir(source), dest, mode, opts.MediaType, opts.MediaCategory, opts.DryRun, opts.AllowReplaceExisting, res); err != nil {
 			res.Errors = append(res.Errors, fmt.Sprintf("%s: %s", filepath.Base(source), err.Error()))
 			res.Items = append(res.Items, OrganizePreviewItem{Source: source, Action: "error", Reason: err.Error()})
@@ -138,6 +159,7 @@ func (o *OrganizerService) OrganizeDirectory(ctx context.Context, opts OrganizeO
 			zap.Int("organized", res.Organized),
 			zap.Int("replaced", res.Replaced),
 			zap.Int("skipped", res.Skipped),
+			zap.Any("skip_reasons", OrganizeSkipReasonCounts(res)),
 		)
 		return res, nil
 	}
@@ -147,6 +169,11 @@ func (o *OrganizerService) OrganizeDirectory(ctx context.Context, opts OrganizeO
 		}
 		ext := strings.ToLower(filepath.Ext(path))
 		if _, ok := videoExtensions[ext]; !ok {
+			return nil
+		}
+		if skipped, reason := shouldSkipOrganizeSourceVideo(path, source); skipped {
+			res.Skipped++
+			res.Items = append(res.Items, OrganizePreviewItem{Source: path, Action: "skip", Reason: reason})
 			return nil
 		}
 		if err := o.organizeSourceFile(ctx, path, source, dest, mode, opts.MediaType, opts.MediaCategory, opts.DryRun, opts.AllowReplaceExisting, res); err != nil {
@@ -165,6 +192,7 @@ func (o *OrganizerService) OrganizeDirectory(ctx context.Context, opts OrganizeO
 		zap.Int("organized", res.Organized),
 		zap.Int("replaced", res.Replaced),
 		zap.Int("skipped", res.Skipped),
+		zap.Any("skip_reasons", OrganizeSkipReasonCounts(res)),
 	)
 	return res, nil
 }
@@ -212,6 +240,9 @@ func (o *OrganizerService) organizeSourceFile(ctx context.Context, src, sourceRo
 	if !matchedLibrary && layout.Category != "" {
 		layoutRoot = categoryRoot(layoutRoot, sanitizeFilename(layout.Category))
 	}
+	if !matchedLibrary && !dryRun {
+		o.ensureOrganizeLibraryForRoot(ctx, layoutRoot, layout.MediaType, layout.Category)
+	}
 
 	var destDir, dst, episodeTag string
 	isSeries := season > 0 || episode > 0
@@ -237,7 +268,7 @@ func (o *OrganizerService) organizeSourceFile(ctx context.Context, src, sourceRo
 	if filepath.Clean(src) == filepath.Clean(dst) {
 		res.Skipped++
 		res.Items = append(res.Items, OrganizePreviewItem{
-			Source: src, Target: dst, Action: "skip", Reason: "already organized",
+			Source: src, Target: dst, Action: "skip", Reason: organizeSkipAlreadyOrganized,
 			MediaType: layout.MediaType, Category: layout.Category, Title: title,
 		})
 		return nil
@@ -245,7 +276,9 @@ func (o *OrganizerService) organizeSourceFile(ctx context.Context, src, sourceRo
 
 	// 去重候选：合并「目的地媒体库已扫描入库的同一媒体（按标题/年份/季集匹配，
 	// 不受目录大小写或布局影响）」与「目标文件夹内已存在的同名视频文件」。
-	existing := o.existingVersionPaths(ctx, destRoot, destDir, parsedTitle, episodeTag, year, season, episode)
+	identityExisting := o.existingByIdentity(ctx, destRoot, parsedTitle, year, season, episode)
+	folderExisting := o.existingByFolder(destDir, episodeTag)
+	existing := mergeExistingVersionPaths(identityExisting, folderExisting)
 	if len(existing) > 0 {
 		srcArea := o.resolutionArea(ctx, src)
 		bestArea := 0
@@ -278,11 +311,15 @@ func (o *OrganizerService) organizeSourceFile(ctx context.Context, src, sourceRo
 			return nil
 		}
 		// 去重：目的地已存在同一媒体且不低于来源分辨率，跳过不再整理过去。
+		reason := organizeSkipTargetExists
+		if len(identityExisting) > 0 || o.allExistingPathsInDB(ctx, existing) {
+			reason = organizeSkipDuplicateLibrary
+		}
 		o.log.Debug("organize skip duplicate",
-			zap.String("src", src), zap.String("dest_dir", destDir))
+			zap.String("src", src), zap.String("dest_dir", destDir), zap.String("reason", reason))
 		res.Skipped++
 		res.Items = append(res.Items, OrganizePreviewItem{
-			Source: src, Target: dst, Action: "skip", Reason: "duplicate exists",
+			Source: src, Target: dst, Action: "skip", Reason: reason,
 			MediaType: layout.MediaType, Category: layout.Category, Title: title,
 		})
 		return nil
@@ -303,7 +340,7 @@ func (o *OrganizerService) organizeSourceFile(ctx context.Context, src, sourceRo
 		res.Skipped++
 		if len(res.Items) > 0 {
 			res.Items[len(res.Items)-1].Action = "skip"
-			res.Items[len(res.Items)-1].Reason = "target exists"
+			res.Items[len(res.Items)-1].Reason = organizeSkipTargetExists
 		}
 		return nil
 	}
@@ -316,6 +353,37 @@ func (o *OrganizerService) organizeSourceFile(ctx context.Context, src, sourceRo
 	}
 	res.Organized++
 	return nil
+}
+
+func shouldSkipOrganizeSourceVideo(path, sourceRoot string) (bool, string) {
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(sourceRoot)
+	if rel, err := filepath.Rel(cleanRoot, cleanPath); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+		dir := filepath.Dir(rel)
+		if dir != "." {
+			for _, part := range strings.Split(dir, string(os.PathSeparator)) {
+				switch normalizeOrganizeCategoryKey(part) {
+				case "sample", "samples", "trailer", "trailers", "preview", "previews", "teaser", "teasers":
+					return true, organizeSkipSampleClip
+				}
+			}
+		}
+	}
+	base := strings.ToLower(strings.TrimSuffix(filepath.Base(cleanPath), filepath.Ext(cleanPath)))
+	normalized := strings.NewReplacer("_", " ", "-", " ", ".", " ").Replace(base)
+	fields := strings.Fields(normalized)
+	if len(fields) == 0 {
+		return false, ""
+	}
+	if len(fields) == 1 && strings.HasPrefix(fields[0], "sample") {
+		return true, organizeSkipSampleClip
+	}
+	last := fields[len(fields)-1]
+	switch last {
+	case "sample", "trailer", "preview", "teaser":
+		return true, organizeSkipSampleClip
+	}
+	return false, ""
 }
 
 func normalizeOrganizeMediaType(mediaType string) string {
@@ -507,6 +575,92 @@ func (o *OrganizerService) organizeLibraryRootForLayout(ctx context.Context, des
 	return filepath.Clean(bestPath), true
 }
 
+func (o *OrganizerService) ensureOrganizeLibraryForRoot(ctx context.Context, root, mediaType, category string) {
+	if o == nil || o.repo == nil || o.repo.Library == nil {
+		return
+	}
+	root = filepath.Clean(strings.TrimSpace(root))
+	if root == "" || root == "." {
+		return
+	}
+	if _, ok := ParseCloudLibraryMount(root); ok {
+		return
+	}
+	libraries, err := o.repo.Library.List(ctx)
+	if err != nil {
+		if o.log != nil {
+			o.log.Debug("list libraries before organize auto-create failed", zap.Error(err))
+		}
+		return
+	}
+	for _, lib := range libraries {
+		if !lib.Enabled || strings.TrimSpace(lib.Path) == "" {
+			continue
+		}
+		if _, ok := ParseCloudLibraryMount(lib.Path); ok {
+			continue
+		}
+		if pathWithin(root, lib.Path) {
+			return
+		}
+	}
+	name := strings.TrimSpace(category)
+	if name == "" {
+		name = filepath.Base(root)
+	}
+	if name == "" || name == "." || name == string(os.PathSeparator) {
+		name = organizeLibraryTypeName(mediaType)
+	}
+	lib := model.Library{
+		Name:    name,
+		Path:    root,
+		Type:    organizeLibraryModelType(mediaType),
+		Enabled: true,
+	}
+	if err := o.repo.Library.Create(ctx, &lib); err != nil {
+		if o.log != nil {
+			o.log.Warn("organize auto-create library failed",
+				zap.String("path", root),
+				zap.String("type", lib.Type),
+				zap.String("name", lib.Name),
+				zap.Error(err))
+		}
+		return
+	}
+	if o.log != nil {
+		o.log.Info("organize auto-created missing library",
+			zap.String("path", root),
+			zap.String("type", lib.Type),
+			zap.String("name", lib.Name))
+	}
+}
+
+func organizeLibraryModelType(mediaType string) string {
+	switch normalizeOrganizeMediaType(mediaType) {
+	case "tv", "anime", "variety":
+		return "tv"
+	case "adult", "movie":
+		return "movie"
+	default:
+		return "movie"
+	}
+}
+
+func organizeLibraryTypeName(mediaType string) string {
+	switch normalizeOrganizeMediaType(mediaType) {
+	case "tv":
+		return "电视剧"
+	case "anime":
+		return "动漫"
+	case "variety":
+		return "综艺"
+	case "adult":
+		return "成人"
+	default:
+		return "电影"
+	}
+}
+
 func (o *OrganizerService) organizeCategoryAliases(mediaType, category string) map[string]struct{} {
 	aliases := map[string]struct{}{}
 	add := func(values ...string) {
@@ -603,6 +757,13 @@ func pathDepth(path string) int {
 //  2. Filesystem: video files inside the computed destination folder (matching
 //     the SxxExx tag for episodes). Covers destinations that were not scanned.
 func (o *OrganizerService) existingVersionPaths(ctx context.Context, destRoot, destDir, title, episodeTag string, year, season, episode int) []string {
+	return mergeExistingVersionPaths(
+		o.existingByIdentity(ctx, destRoot, title, year, season, episode),
+		o.existingByFolder(destDir, episodeTag),
+	)
+}
+
+func mergeExistingVersionPaths(groups ...[]string) []string {
 	seen := map[string]struct{}{}
 	var out []string
 	add := func(p string) {
@@ -619,13 +780,42 @@ func (o *OrganizerService) existingVersionPaths(ctx context.Context, destRoot, d
 		seen[c] = struct{}{}
 		out = append(out, c)
 	}
-	for _, p := range o.existingByIdentity(ctx, destRoot, title, year, season, episode) {
-		add(p)
-	}
-	for _, p := range o.existingByFolder(destDir, episodeTag) {
-		add(p)
+	for _, group := range groups {
+		for _, p := range group {
+			add(p)
+		}
 	}
 	return out
+}
+
+func (o *OrganizerService) allExistingPathsInDB(ctx context.Context, paths []string) bool {
+	if o == nil || o.repo == nil || o.repo.DB == nil || len(paths) == 0 {
+		return false
+	}
+	cleaned := make([]string, 0, len(paths))
+	seen := map[string]struct{}{}
+	for _, path := range paths {
+		path = filepath.Clean(strings.TrimSpace(path))
+		if path == "" || path == "." {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		cleaned = append(cleaned, path)
+	}
+	if len(cleaned) == 0 {
+		return false
+	}
+	var count int64
+	if err := o.repo.DB.WithContext(ctx).
+		Model(&model.Media{}).
+		Where("path IN ?", cleaned).
+		Count(&count).Error; err != nil {
+		return false
+	}
+	return count == int64(len(cleaned))
 }
 
 // existingByIdentity finds scanned destination media matching the parsed

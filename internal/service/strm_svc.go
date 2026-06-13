@@ -98,7 +98,9 @@ func (s *STRMService) GenerateForLibrary(ctx context.Context, opts GenerateSTRMO
 		return nil, errors.New("output_dir required")
 	}
 	if strings.TrimSpace(opts.BaseURL) != "" && s.repo.Setting != nil {
-		_ = s.repo.Setting.Set(ctx, "app.server_url", strings.TrimRight(strings.TrimSpace(opts.BaseURL), "/"))
+		baseURL := strings.TrimRight(strings.TrimSpace(opts.BaseURL), "/")
+		_ = s.repo.Setting.Set(ctx, "app.server_url", baseURL)
+		_ = s.repo.Setting.Set(ctx, "strm.base_url", baseURL)
 	}
 	if s.repo.Setting != nil {
 		_ = s.repo.Setting.Set(ctx, "strm.auto_generate_enabled", strconv.FormatBool(opts.Enabled))

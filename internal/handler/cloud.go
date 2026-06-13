@@ -330,6 +330,7 @@ func serveCloudResolvedLink(svc *service.Container, c *gin.Context, typ, ref str
 	}
 	if !link.Proxy {
 		// Pure offload: send the client straight to the cloud CDN.
+		setRedirectNoStoreHeaders(c)
 		logCloudPlayback(svc, "cloud playback redirect",
 			append(cloudPlaybackLogFields(typ, ref, link, resolveDur),
 				zap.String("mode", "redirect"),
