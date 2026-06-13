@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -212,10 +213,22 @@ func (p *cloudDrive2Provider) Resolve(ctx context.Context, fileRef string) (*Dir
 	if ref == "/" {
 		return nil, fmt.Errorf("%s: file reference required", p.name)
 	}
-	if p.typ == TypeOpenList && p.apiBase != nil && isOpenListDirectPlaybackCandidate(ref) {
-		if link, err := p.resolveOpenListAPIDirect(ctx, ref); err == nil && link != nil {
-			return link, nil
+	if p.typ == TypeOpenList && isCloudVideoPlaybackCandidate(ref) {
+		if p.apiBase == nil {
+			return nil, fmt.Errorf("%s: pure 302 playback requires an OpenList API server address; configure server/api_url so /api/fs/get can return raw_url", p.name)
 		}
+		link, err := p.resolveOpenListAPIDirect(ctx, ref)
+		if err != nil {
+			return nil, fmt.Errorf("%s: pure 302 playback requires OpenList raw_url for %s: %w", p.name, ref, err)
+		}
+		return link, nil
+	}
+	if p.typ == TypeCloudDrive2 && isCloudVideoPlaybackCandidate(ref) {
+		link, err := p.resolveCloudDAVRedirectDirect(ctx, ref)
+		if err != nil {
+			return nil, fmt.Errorf("%s: pure 302 playback requires CloudDrive2/WebDAV to return a CDN Location for %s: %w", p.name, ref, err)
+		}
+		return link, nil
 	}
 	headers := map[string]string{
 		"User-Agent": p.ua,
@@ -272,11 +285,108 @@ func (p *cloudDrive2Provider) resolveOpenListAPIDirect(ctx context.Context, file
 		return nil, err
 	}
 	headers := normalizeOpenListPlaybackHeaders(decoded.Data.Header)
-	proxy := p.proxy && len(headers) > 0
-	if !proxy {
-		headers = nil
+	if len(headers) > 0 {
+		return nil, fmt.Errorf("%s: api get %s returned raw_url that requires headers (%s); refusing WebDAV/proxy fallback for pure 302 playback", p.name, fileRef, strings.Join(sortedHeaderNames(headers), ","))
 	}
-	return &DirectLink{URL: resolved, Headers: headers, Proxy: proxy}, nil
+	resolved, err = p.resolveOpenListCDNRedirect(ctx, fileRef, resolved)
+	if err != nil {
+		return nil, err
+	}
+	return &DirectLink{URL: resolved, Headers: nil, Proxy: false}, nil
+}
+
+func (p *cloudDrive2Provider) resolveOpenListCDNRedirect(ctx context.Context, fileRef, rawURL string) (string, error) {
+	if p.apiBase == nil || !sameURLHost(rawURL, p.apiBase) {
+		return rawURL, nil
+	}
+	location, status, err := p.firstHTTPRedirectLocation(ctx, rawURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("%s: probe raw_url %s failed: %w", p.name, fileRef, err)
+	}
+	if location != "" {
+		return location, nil
+	}
+	return "", fmt.Errorf("%s: api get %s returned an OpenList-hosted raw_url with http %d and no CDN Location; refusing OpenList/WebDAV proxy fallback for pure 302 playback", p.name, fileRef, status)
+}
+
+func (p *cloudDrive2Provider) resolveCloudDAVRedirectDirect(ctx context.Context, fileRef string) (*DirectLink, error) {
+	target := p.urlFor(fileRef)
+	headers := map[string]string{
+		"User-Agent": p.ua,
+	}
+	if p.token != "" {
+		headers["Authorization"] = p.token
+	} else if p.username != "" {
+		headers["Authorization"] = "Basic " + base64.StdEncoding.EncodeToString([]byte(p.username+":"+p.password))
+	}
+	location, status, err := p.firstHTTPRedirectLocation(ctx, target, headers)
+	if err != nil {
+		return nil, decorateDAVTransportError(p.name, target, err)
+	}
+	if location == "" {
+		return nil, fmt.Errorf("%s: WebDAV %s returned http %d without CDN Location; refusing WebDAV/proxy fallback for pure 302 playback", p.name, fileRef, status)
+	}
+	return &DirectLink{URL: location, Headers: nil, Proxy: false}, nil
+}
+
+func (p *cloudDrive2Provider) firstHTTPRedirectLocation(ctx context.Context, target string, headers map[string]string) (string, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return "", 0, err
+	}
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept-Encoding", "identity")
+	req.Header.Set("Range", "bytes=0-0")
+	if strings.TrimSpace(p.ua) != "" {
+		req.Header.Set("User-Agent", p.ua)
+	}
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		if key != "" && strings.TrimSpace(value) != "" {
+			req.Header.Set(key, value)
+		}
+	}
+	client := p.client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	noFollow := *client
+	noFollow.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := noFollow.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+	status := resp.StatusCode
+	if status >= 300 && status < 400 {
+		rawLocation := strings.TrimSpace(resp.Header.Get("Location"))
+		if rawLocation == "" {
+			return "", status, fmt.Errorf("%s: upstream returned redirect http %d without Location", p.name, status)
+		}
+		location, err := resolveHTTPRedirectLocation(target, rawLocation)
+		if err != nil {
+			return "", status, err
+		}
+		return location, status, nil
+	}
+	return "", status, nil
+}
+
+func sortedHeaderNames(headers map[string]string) []string {
+	if len(headers) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(headers))
+	for key := range headers {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			out = append(out, key)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (p *cloudDrive2Provider) hasOpenListAPICredentials() bool {
@@ -359,6 +469,49 @@ func (p *cloudDrive2Provider) resolveOpenListPlaybackURL(raw string) (string, er
 	return base.ResolveReference(u).String(), nil
 }
 
+func sameURLHost(raw string, base *url.URL) bool {
+	if base == nil {
+		return false
+	}
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	if !u.IsAbs() {
+		return true
+	}
+	return strings.EqualFold(u.Host, base.Host)
+}
+
+func resolveHTTPRedirectLocation(baseURL, rawLocation string) (string, error) {
+	rawLocation = strings.TrimSpace(rawLocation)
+	if rawLocation == "" {
+		return "", fmt.Errorf("empty redirect Location")
+	}
+	if strings.HasPrefix(rawLocation, "//") {
+		base, err := url.Parse(baseURL)
+		if err != nil || base.Scheme == "" {
+			return "", fmt.Errorf("protocol-relative redirect Location without base scheme")
+		}
+		rawLocation = base.Scheme + ":" + rawLocation
+	}
+	location, err := url.Parse(rawLocation)
+	if err != nil {
+		return "", fmt.Errorf("invalid redirect Location: %w", err)
+	}
+	if location.IsAbs() {
+		if location.Scheme != "http" && location.Scheme != "https" {
+			return "", fmt.Errorf("unsupported redirect Location scheme %q", location.Scheme)
+		}
+		return location.String(), nil
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid redirect base URL: %w", err)
+	}
+	return base.ResolveReference(location).String(), nil
+}
+
 func normalizeOpenListPlaybackHeaders(raw json.RawMessage) map[string]string {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
@@ -396,7 +549,7 @@ func normalizeOpenListPlaybackHeaders(raw json.RawMessage) map[string]string {
 	return out
 }
 
-func isOpenListDirectPlaybackCandidate(fileRef string) bool {
+func isCloudVideoPlaybackCandidate(fileRef string) bool {
 	switch strings.ToLower(path.Ext(strings.TrimSpace(fileRef))) {
 	case ".mkv", ".mp4", ".m4v", ".avi", ".mov", ".webm", ".ts", ".rmvb", ".rm", ".3gp", ".mpg", ".mpeg":
 		return true
