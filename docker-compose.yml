@@ -16,7 +16,12 @@
 
 services:
   mediastation-go:
-    image: ghcr.io/shukebta/mediastation-go:latest
+    # 镜像二选一：
+    # 方式一：Docker Hub（默认，推荐）
+    image: shukbet/mediastationgo:latest
+    # 方式二：GitHub 仓库镜像 GHCR（Docker Hub 拉取慢或不可用时使用）
+    # image: ghcr.io/shukebta/mediastation-go:latest
+
     container_name: mediastation-go
     restart: unless-stopped
     init: true

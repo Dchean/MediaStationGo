@@ -118,6 +118,33 @@ http://服务器IP:18080
 
 仓库里的 `docker-compose.yml` 已经是最简单模板：默认不用 `.env`。
 
+### 镜像地址怎么选
+
+两种镜像地址都可以用，选择其中一种写到 `image:` 即可：
+
+| 来源 | 镜像地址 | 适合场景 |
+| --- | --- | --- |
+| Docker Hub | `shukbet/mediastationgo:latest` | 最常用，直接 `docker compose pull` |
+| GitHub 仓库镜像 GHCR | `ghcr.io/shukebta/mediastation-go:latest` | Docker Hub 拉取慢或不可用时备用 |
+
+如果想固定版本，推荐使用 Docker Hub 已发布版本标签，例如：
+
+```yaml
+image: shukbet/mediastationgo:MediaStationGo-v0.0.72
+```
+
+GHCR 固定版本请以仓库 Packages 页面已发布的标签为准；如果只想简单部署，直接使用 `latest` 即可。
+
+手动拉取示例：
+
+```bash
+# Docker Hub
+docker pull shukbet/mediastationgo:latest
+
+# GitHub 仓库镜像
+docker pull ghcr.io/shukebta/mediastation-go:latest
+```
+
 你只需要重点看 `volumes` 这一段：
 
 ```yaml
@@ -173,7 +200,12 @@ environment:
 ```yaml
 services:
   mediastation-go:
-    image: ghcr.io/shukebta/mediastation-go:latest
+    # 镜像二选一：
+    # Docker Hub：
+    image: shukbet/mediastationgo:latest
+    # GitHub 仓库镜像 GHCR：
+    # image: ghcr.io/shukebta/mediastation-go:latest
+
     container_name: mediastation-go
     restart: unless-stopped
     init: true

@@ -118,6 +118,33 @@ Password: admin123
 
 The repository `docker-compose.yml` is intentionally simple and does not require `.env`.
 
+### Choose an image source
+
+Both image sources are supported. Pick one and put it in `image:`:
+
+| Source | Image | Best for |
+| --- | --- | --- |
+| Docker Hub | `shukbet/mediastationgo:latest` | Most common deployments, simple `docker compose pull` |
+| GitHub Container Registry (GHCR) | `ghcr.io/shukebta/mediastation-go:latest` | Backup source when Docker Hub is slow or unavailable |
+
+To pin a version, use a published Docker Hub version tag:
+
+```yaml
+image: shukbet/mediastationgo:MediaStationGo-v0.0.72
+```
+
+For pinned GHCR versions, use the tags published on the repository Packages page. For the simplest setup, keep `latest`.
+
+Manual pull examples:
+
+```bash
+# Docker Hub
+docker pull shukbet/mediastationgo:latest
+
+# GitHub Container Registry
+docker pull ghcr.io/shukebta/mediastation-go:latest
+```
+
 Focus on this part:
 
 ```yaml
@@ -173,7 +200,12 @@ The root `docker-compose.yml` follows this style:
 ```yaml
 services:
   mediastation-go:
-    image: ghcr.io/shukebta/mediastation-go:latest
+    # Pick one image source:
+    # Docker Hub:
+    image: shukbet/mediastationgo:latest
+    # GitHub Container Registry (GHCR):
+    # image: ghcr.io/shukebta/mediastation-go:latest
+
     container_name: mediastation-go
     restart: unless-stopped
     init: true
