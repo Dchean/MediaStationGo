@@ -2,8 +2,6 @@
 package handler
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
@@ -30,14 +28,11 @@ func (h *SchedulerHandler) ListTasks(c *gin.Context) {
 // RunTask 手动触发指定任务。
 func (h *SchedulerHandler) RunTask(c *gin.Context) {
 	name := c.Param("id")
-	ctx := c.Request.Context()
-
-	if err := h.svc.Scheduler.RunNow(ctx, name); err != nil {
-		Error(c, http.StatusInternalServerError, ErrInternal, "任务执行失败: "+err.Error())
+	if !triggerSchedulerJob(c, h.svc, name) {
 		return
 	}
 
-	SuccessWithMessage(c, "任务已触发执行", nil)
+	SuccessWithMessage(c, "任务已触发后台执行", nil)
 }
 
 // GetStatus 返回调度器运行状态。

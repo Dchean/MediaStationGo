@@ -37,15 +37,15 @@ type OrganizeScrapeSummary struct {
 // metadata scraping after scanning organized files into libraries.
 func OrganizeScrapeAfterEnabled(ctx context.Context, repo *repository.Container) bool {
 	if repo == nil || repo.Setting == nil {
-		return false
+		return true
 	}
 	if value, err := repo.Setting.Get(ctx, "organize.scrape_after"); err == nil && strings.TrimSpace(value) != "" {
-		return parseBoolSetting(value, false)
+		return parseBoolSetting(value, true)
 	}
 	if value, err := repo.Setting.Get(ctx, "scrape.auto_on_scan"); err == nil && strings.TrimSpace(value) != "" {
-		return parseBoolSetting(value, false)
+		return parseBoolSetting(value, true)
 	}
-	return false
+	return true
 }
 
 // OrganizeResultHasChanges reports whether an organize run actually changed
@@ -54,6 +54,14 @@ func OrganizeScrapeAfterEnabled(ctx context.Context, repo *repository.Container)
 // full library ffprobe sweep.
 func OrganizeResultHasChanges(res *OrganizeResult) bool {
 	return res != nil && (res.Organized > 0 || res.Replaced > 0)
+}
+
+// OrganizeResultNeedsVisibilitySync reports whether a just-finished organize
+// should make sure the destination media exists in the DB. Skipped target files
+// can still be invisible after a restart or an older organize run, so download
+// completion should run one visibility sync even when no bytes were moved.
+func OrganizeResultNeedsVisibilitySync(res *OrganizeResult) bool {
+	return res != nil && (res.Organized > 0 || res.Replaced > 0 || res.Skipped > 0)
 }
 
 // ScanLibrariesForPath recursively scans libraries affected by an organize

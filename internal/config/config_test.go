@@ -40,6 +40,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Secrets.JWTSecret == "" {
 		t.Fatalf("expected auto-generated JWT secret")
 	}
+	if !cfg.Organizer.SmartClassify {
+		t.Fatalf("expected organizer smart classify enabled by default")
+	}
 	// Re-loading must reuse the persisted secret on disk.
 	cfg2, err := Load()
 	if err != nil {

@@ -369,7 +369,7 @@ func TestDownloadPollSkipsRecordedCompletedTorrentCatchup(t *testing.T) {
 	}
 }
 
-func TestAutoOrganizeSkipsScanWhenNoFilesChanged(t *testing.T) {
+func TestAutoOrganizeSyncsVisibilityWhenTargetAlreadyExists(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "downloads", "国产剧", "狂飙.S01E01.2023.1080p.mkv")
 	dest := filepath.Join(root, "media")
@@ -413,8 +413,8 @@ func TestAutoOrganizeSkipsScanWhenNoFilesChanged(t *testing.T) {
 	if err := repos.DB.Model(&model.Media{}).Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
-	if count != 0 {
-		t.Fatalf("no-op auto organize triggered scan and created %d media rows, want 0", count)
+	if count != 1 {
+		t.Fatalf("target already exists should still be scanned into DB, count=%d want 1", count)
 	}
 }
 

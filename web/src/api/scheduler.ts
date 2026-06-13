@@ -5,6 +5,8 @@ export interface JobStatus {
   interval: string
   last_run?: string
   last_err?: string
+  running?: boolean
+  started_at?: string
 }
 
 export const schedulerAPI = {

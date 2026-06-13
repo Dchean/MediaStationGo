@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -111,6 +112,121 @@ func TestSchedulerRunNowOrganizeSourceBypassesDisabledSwitch(t *testing.T) {
 	want := filepath.Join(dest, "电影", "Dune (2021)", "Dune (2021).mkv")
 	if _, err := os.Stat(want); err != nil {
 		t.Fatalf("expected run-now organize output at %q: %v", want, err)
+	}
+}
+
+func TestSchedulerRunNowAsyncSurvivesCallerCancellation(t *testing.T) {
+	scheduler := NewSchedulerService(zap.NewNop(), nil, nil, nil, nil, nil, nil, "")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	scheduler.jobs = []*scheduledJob{{
+		name:     "organize_source",
+		interval: time.Minute,
+		run: func(ctx context.Context) error {
+			close(started)
+			defer close(finished)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-release:
+				return nil
+			}
+		},
+	}}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	if err := scheduler.RunNowAsync(ctx, "organize_source"); err != nil {
+		t.Fatalf("run now async: %v", err)
+	}
+	<-started
+	cancel()
+	select {
+	case <-finished:
+		t.Fatal("manual scheduled job was canceled with the HTTP caller context")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("manual scheduled job did not finish after release")
+	}
+	status := scheduler.Status()
+	if len(status) != 1 || status[0].Running || status[0].LastErr != "" {
+		t.Fatalf("unexpected status after async run: %+v", status)
+	}
+}
+
+func TestSchedulerRunNowAsyncRejectsDuplicateRun(t *testing.T) {
+	scheduler := NewSchedulerService(zap.NewNop(), nil, nil, nil, nil, nil, nil, "")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	scheduler.jobs = []*scheduledJob{{
+		name:     "organize_source",
+		interval: time.Minute,
+		run: func(ctx context.Context) error {
+			close(started)
+			<-release
+			return nil
+		},
+	}}
+
+	if err := scheduler.RunNowAsync(t.Context(), "organize_source"); err != nil {
+		t.Fatalf("first run now async: %v", err)
+	}
+	<-started
+	if err := scheduler.RunNowAsync(t.Context(), "organize_source"); !errors.Is(err, ErrSchedulerJobAlreadyRunning) {
+		t.Fatalf("duplicate run error = %v, want %v", err, ErrSchedulerJobAlreadyRunning)
+	}
+	close(release)
+}
+
+func TestSchedulerOrganizeSourceSyncsVisibilityWhenTargetAlreadyExists(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "downloads")
+	dest := filepath.Join(root, "media")
+	writeOrgFile(t, filepath.Join(src, "国产剧", "狂飙.S01E01.2023.1080p.mkv"), "episode")
+
+	repos := newOrganizerTestRepo(t)
+	for key, value := range map[string]string{
+		"organize.source_dir":    src,
+		"organize.target_dir":    dest,
+		"organize.transfer_mode": "copy",
+	} {
+		if err := repos.Setting.Set(t.Context(), key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lib := model.Library{Name: "国产剧", Path: filepath.Join(dest, "电视剧", "国产剧"), Type: "tv", Enabled: true}
+	if err := repos.Library.Create(t.Context(), &lib); err != nil {
+		t.Fatal(err)
+	}
+	organizer := NewOrganizerService(&config.Config{}, zap.NewNop(), repos)
+	if _, err := organizer.OrganizeDirectory(t.Context(), OrganizeOptions{
+		SourcePath:   src,
+		DestPath:     dest,
+		TransferMode: TransferCopy,
+	}); err != nil {
+		t.Fatalf("seed organize destination: %v", err)
+	}
+	scanner := NewScannerService(&config.Config{}, zap.NewNop(), repos, NewHub(zap.NewNop()), nil, nil)
+	scheduler := NewSchedulerService(zap.NewNop(), repos, scanner, nil, organizer, nil, NewHub(zap.NewNop()), "")
+	scheduler.jobs = []*scheduledJob{{
+		name:     "organize_source",
+		interval: time.Minute,
+		run:      scheduler.jobOrganizeSource,
+	}}
+
+	if err := scheduler.RunNow(t.Context(), "organize_source"); err != nil {
+		t.Fatalf("run now organize source: %v", err)
+	}
+	var count int64
+	if err := repos.DB.Model(&model.Media{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("target already exists should still be scanned into DB, count=%d want 1", count)
 	}
 }
 

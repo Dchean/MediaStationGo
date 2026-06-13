@@ -89,6 +89,38 @@ func TestClassifyMediaCategoryMatchesMoviePilotStyleRules(t *testing.T) {
 			},
 			want: "欧美剧",
 		},
+		{
+			name: "iqiyi romanized chinese drama",
+			input: mediaClassifyInput{
+				MediaType: "tv",
+				Title:     "Motherhood.of.Taihang.S01E01.2026.1080p.iQIYI.WEB-DL",
+			},
+			want: "国产剧",
+		},
+		{
+			name: "youku romanized chinese drama",
+			input: mediaClassifyInput{
+				MediaType: "tv",
+				Title:     "Ashes.to.Crown.S01E15.2160p.YOUKU.WEB-DL",
+			},
+			want: "国产剧",
+		},
+		{
+			name: "gala is variety",
+			input: mediaClassifyInput{
+				MediaType: "tv",
+				Title:     "HNTV Spring Festival Gala 2026 2160p WEB-DL",
+			},
+			want: "综艺",
+		},
+		{
+			name: "jav code is adult",
+			input: mediaClassifyInput{
+				MediaType: "movie",
+				Title:     "IPZZ-293-UC 1080p",
+			},
+			want: "成人",
+		},
 	}
 
 	for _, tt := range tests {

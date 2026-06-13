@@ -159,11 +159,10 @@ func schemaHandler(_ *service.Container) gin.HandlerFunc {
 // schedulerTriggerHandler is the alternate path for /admin/scheduler/:name/run.
 func schedulerTriggerHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := svc.Scheduler.RunNow(c.Request.Context(), c.Param("name")); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if !triggerSchedulerJob(c, svc, c.Param("name")) {
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"ok": true})
+		c.JSON(http.StatusAccepted, gin.H{"ok": true, "message": "任务已在后台触发"})
 	}
 }
 

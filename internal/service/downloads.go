@@ -1138,7 +1138,7 @@ func (d *DownloadService) onTorrentComplete(ctx context.Context, torrent QBitTor
 			Metrics:    OrganizeTaskMetrics(res),
 		})
 	}
-	if d.scanner != nil && res != nil && strings.TrimSpace(res.DestPath) != "" && OrganizeResultHasChanges(res) {
+	if d.scanner != nil && res != nil && strings.TrimSpace(res.DestPath) != "" && OrganizeResultNeedsVisibilitySync(res) {
 		if taskHandle != nil {
 			taskHandle.Update(TaskUpdate{
 				Stage:   "scan_scrape",
@@ -1147,7 +1147,7 @@ func (d *DownloadService) onTorrentComplete(ctx context.Context, torrent QBitTor
 			})
 		}
 		res.Scans, res.Scrapes = d.scanner.ScanAndScrapeLibrariesForPath(ctx, res.DestPath, "", OrganizeScrapeAfterEnabled(ctx, d.repo))
-	} else if d.log != nil && res != nil && !OrganizeResultHasChanges(res) {
+	} else if d.log != nil && res != nil && !OrganizeResultNeedsVisibilitySync(res) {
 		d.log.Info("auto organize completed torrent skipped scan; no destination changes",
 			zap.String("hash", torrent.Hash),
 			zap.String("source", source),

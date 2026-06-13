@@ -68,3 +68,19 @@ func TestOrganizeDirectoryScanAndScrapeAfter(t *testing.T) {
 		t.Fatalf("organized file missing at %q: %v", media.Path, err)
 	}
 }
+
+func TestOrganizeScrapeAfterEnabledDefaultsOn(t *testing.T) {
+	if !OrganizeScrapeAfterEnabled(t.Context(), nil) {
+		t.Fatalf("organize scrape-after should default on without a repo")
+	}
+	repos := newOrganizerTestRepo(t)
+	if !OrganizeScrapeAfterEnabled(t.Context(), repos) {
+		t.Fatalf("organize scrape-after should default on when setting is absent")
+	}
+	if err := repos.Setting.Set(t.Context(), "organize.scrape_after", "false"); err != nil {
+		t.Fatal(err)
+	}
+	if OrganizeScrapeAfterEnabled(t.Context(), repos) {
+		t.Fatalf("explicit organize.scrape_after=false should be respected")
+	}
+}

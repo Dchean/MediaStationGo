@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,10 +19,24 @@ func schedulerStatusHandler(svc *service.Container) gin.HandlerFunc {
 func schedulerRunHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := c.Param("name")
-		if err := svc.Scheduler.RunNow(c.Request.Context(), name); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if !triggerSchedulerJob(c, svc, name) {
 			return
 		}
-		c.Status(http.StatusNoContent)
+		c.JSON(http.StatusAccepted, gin.H{"ok": true, "message": "任务已在后台触发"})
 	}
+}
+
+func triggerSchedulerJob(c *gin.Context, svc *service.Container, name string) bool {
+	if err := svc.Scheduler.RunNowAsync(c.Request.Context(), name); err != nil {
+		switch {
+		case errors.Is(err, service.ErrSchedulerJobAlreadyRunning):
+			c.JSON(http.StatusConflict, gin.H{"error": "任务正在运行，请稍后到实时任务查看进度"})
+		case errors.Is(err, service.ErrSchedulerJobNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return false
+	}
+	return true
 }

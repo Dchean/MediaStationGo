@@ -25,6 +25,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -55,6 +56,11 @@ type SchedulerService struct {
 	jobs   []*scheduledJob
 }
 
+var (
+	ErrSchedulerJobNotFound       = errors.New("scheduled job not found")
+	ErrSchedulerJobAlreadyRunning = errors.New("scheduled job already running")
+)
+
 func (s *SchedulerService) SetTaskTracker(tasks *TaskTrackerService) {
 	s.tasks = tasks
 }
@@ -66,6 +72,8 @@ type scheduledJob struct {
 	run      func(ctx context.Context) error
 	lastRun  time.Time
 	lastErr  string
+	running  bool
+	started  time.Time
 }
 
 type schedulerManualRunKey struct{}
@@ -168,6 +176,8 @@ type JobStatus struct {
 	Interval string    `json:"interval"`
 	LastRun  time.Time `json:"last_run,omitempty"`
 	LastErr  string    `json:"last_err,omitempty"`
+	Running  bool      `json:"running,omitempty"`
+	Started  time.Time `json:"started_at,omitempty"`
 }
 
 // Status returns the current state of every registered job.
@@ -181,6 +191,8 @@ func (s *SchedulerService) Status() []JobStatus {
 			Interval: j.interval.String(),
 			LastRun:  j.lastRun,
 			LastErr:  j.lastErr,
+			Running:  j.running,
+			Started:  j.started,
 		})
 	}
 	return out
@@ -188,11 +200,34 @@ func (s *SchedulerService) Status() []JobStatus {
 
 // RunNow triggers a single run of the named job synchronously.
 func (s *SchedulerService) RunNow(ctx context.Context, name string) error {
-	for _, j := range s.jobs {
-		if j.name == name {
-			return s.runOnce(context.WithValue(ctx, schedulerManualRunKey{}, true), j)
-		}
+	j := s.jobByName(name)
+	if j == nil {
+		return ErrSchedulerJobNotFound
 	}
+	return s.runOnce(context.WithValue(ctx, schedulerManualRunKey{}, true), j)
+}
+
+// RunNowAsync triggers a named job in the background and returns immediately.
+// The job is detached from the HTTP request cancellation so a browser timeout,
+// route change, or reverse-proxy disconnect cannot kill long organize/scan work.
+func (s *SchedulerService) RunNowAsync(ctx context.Context, name string) error {
+	j := s.jobByName(name)
+	if j == nil {
+		return ErrSchedulerJobNotFound
+	}
+	runCtx := context.Background()
+	if ctx != nil {
+		runCtx = context.WithoutCancel(ctx)
+	}
+	runCtx = context.WithValue(runCtx, schedulerManualRunKey{}, true)
+	if err := s.beginRun(j); err != nil {
+		return err
+	}
+	go func() {
+		if err := s.runReserved(runCtx, j); err != nil && s.log != nil {
+			s.log.Warn("manual scheduled job failed", zap.String("name", name), zap.Error(err))
+		}
+	}()
 	return nil
 }
 
@@ -235,6 +270,35 @@ func (s *SchedulerService) loopWithInitialDelay(ctx context.Context, j *schedule
 }
 
 func (s *SchedulerService) runOnce(ctx context.Context, j *scheduledJob) error {
+	if err := s.beginRun(j); err != nil {
+		return err
+	}
+	return s.runReserved(ctx, j)
+}
+
+func (s *SchedulerService) jobByName(name string) *scheduledJob {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, j := range s.jobs {
+		if j.name == name {
+			return j
+		}
+	}
+	return nil
+}
+
+func (s *SchedulerService) beginRun(j *scheduledJob) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if j.running {
+		return ErrSchedulerJobAlreadyRunning
+	}
+	j.running = true
+	j.started = s.currentTime()
+	return nil
+}
+
+func (s *SchedulerService) runReserved(ctx context.Context, j *scheduledJob) error {
 	err := j.run(ctx)
 	s.mu.Lock()
 	j.lastRun = s.currentTime()
@@ -243,12 +307,15 @@ func (s *SchedulerService) runOnce(ctx context.Context, j *scheduledJob) error {
 	} else {
 		j.lastErr = ""
 	}
+	j.running = false
+	j.started = time.Time{}
+	lastErr := j.lastErr
 	s.mu.Unlock()
 	if s.hub != nil {
 		s.hub.Publish("scheduler", map[string]any{
 			"name":  j.name,
 			"ok":    err == nil,
-			"error": j.lastErr,
+			"error": lastErr,
 		})
 	}
 	return err
@@ -504,7 +571,7 @@ func (s *SchedulerService) jobOrganizeSource(ctx context.Context) error {
 			Metrics:    OrganizeTaskMetrics(res),
 		})
 	}
-	if s.scanner != nil && res != nil && strings.TrimSpace(res.DestPath) != "" && OrganizeResultHasChanges(res) {
+	if s.scanner != nil && res != nil && strings.TrimSpace(res.DestPath) != "" && OrganizeResultNeedsVisibilitySync(res) {
 		if task != nil {
 			task.Update(TaskUpdate{
 				Stage:   "scan_scrape",
@@ -513,7 +580,7 @@ func (s *SchedulerService) jobOrganizeSource(ctx context.Context) error {
 			})
 		}
 		res.Scans, res.Scrapes = s.scanner.ScanAndScrapeLibrariesForPath(ctx, res.DestPath, "", OrganizeScrapeAfterEnabled(ctx, s.repo))
-	} else if s.log != nil && res != nil && !OrganizeResultHasChanges(res) {
+	} else if s.log != nil && res != nil && !OrganizeResultNeedsVisibilitySync(res) {
 		s.log.Info("scheduled source organize skipped scan; no destination changes",
 			zap.String("source", res.SourcePath),
 			zap.String("dest", res.DestPath),

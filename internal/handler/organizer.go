@@ -21,7 +21,7 @@ type organizeReq struct {
 	TransferMode  string `json:"transfer_mode"`
 	MediaType     string `json:"media_type"`
 	MediaCategory string `json:"media_category"`
-	ScanAfter     bool   `json:"scan_after"`
+	ScanAfter     *bool  `json:"scan_after"`
 	ScrapeAfter   *bool  `json:"scrape_after"`
 	LibraryID     string `json:"library_id"`
 	DryRun        bool   `json:"dry_run"`
@@ -66,7 +66,7 @@ func organizeMediaHandler(svc *service.Container) gin.HandlerFunc {
 			return
 		}
 		payload := gin.H{"path": dst}
-		if req.ScanAfter && !req.DryRun && svc.Scan != nil {
+		if organizeScanAfter(req.ScanAfter) && !req.DryRun && svc.Scan != nil {
 			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", nil)
 			scans, scrapes := scanAndScrapeAfterOrganize(c, svc, dst, strings.TrimSpace(req.LibraryID), req.ScrapeAfter)
 			payload["scans"] = scans
@@ -89,7 +89,7 @@ func organizeLibraryHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if req.ScanAfter && !req.DryRun && svc.Scan != nil {
+		if organizeScanAfter(req.ScanAfter) && !req.DryRun && svc.Scan != nil {
 			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", nil)
 			res.Scans, res.Scrapes = scanAndScrapeAfterOrganize(c, svc, res.DestPath, c.Param("id"), req.ScrapeAfter)
 		}
@@ -121,7 +121,7 @@ func organizeDirectoryHandler(svc *service.Container) gin.HandlerFunc {
 			return
 		}
 		updateHTTPTask(task, "organize", "手动整理完成，准备扫描入库", service.OrganizeTaskMetrics(res))
-		if req.ScanAfter && !req.DryRun && svc.Scan != nil {
+		if organizeScanAfter(req.ScanAfter) && !req.DryRun && svc.Scan != nil {
 			updateHTTPTask(task, "scan_scrape", "正在扫描入库并按设置刮削", service.OrganizeTaskMetrics(res))
 			res.Scans, res.Scrapes = scanAndScrapeAfterOrganize(c, svc, res.DestPath, strings.TrimSpace(req.LibraryID), req.ScrapeAfter)
 		}
@@ -166,4 +166,8 @@ func scanAndScrapeAfterOrganize(c *gin.Context, svc *service.Container, destRoot
 		scrapeAfter = *scrapeOverride
 	}
 	return svc.Scan.ScanAndScrapeLibrariesForPath(c.Request.Context(), destRoot, preferredLibraryID, scrapeAfter)
+}
+
+func organizeScanAfter(value *bool) bool {
+	return value == nil || *value
 }

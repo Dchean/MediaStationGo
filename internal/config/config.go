@@ -260,7 +260,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("flaresolverr.timeout", 60)
 
 	v.SetDefault("downloads.smart_classify", true)
-	v.SetDefault("organizer.smart_classify", false)
+	v.SetDefault("organizer.smart_classify", true)
 	v.SetDefault("organizer.auto_after_download", false)
 	v.SetDefault("organize.scrape_after", true)
 	v.SetDefault("scrape.delay_min_ms", 250)
