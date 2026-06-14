@@ -150,6 +150,16 @@ func TestRegisterTelegramBotCommands(t *testing.T) {
 }
 
 func TestTelegramCommandMenusSeparateGroupAndAdminCommands(t *testing.T) {
+	privateNames := telegramCommandNames(telegramPrivateBotCommandMenu())
+	for _, hiddenAlias := range []string{"myinfo", "count"} {
+		if privateNames[hiddenAlias] {
+			t.Fatalf("private menu should hide compatibility alias %s", hiddenAlias)
+		}
+		if !telegramSupportedCommand("/" + hiddenAlias) {
+			t.Fatalf("compatibility alias /%s should remain executable", hiddenAlias)
+		}
+	}
+
 	groupNames := telegramCommandNames(telegramGroupBotCommandMenu())
 	for _, forbidden := range []string{"status", "search", "downloads", "stats", "users", "cleanup", "cleanup_rule", "register", "redeem"} {
 		if groupNames[forbidden] {
@@ -165,6 +175,11 @@ func TestTelegramCommandMenusSeparateGroupAndAdminCommands(t *testing.T) {
 	for _, required := range []string{"users", "status", "cleanup_rule"} {
 		if !adminNames[required] {
 			t.Fatalf("admin menu should include %s", required)
+		}
+	}
+	for _, hiddenAlias := range []string{"myinfo", "count"} {
+		if adminNames[hiddenAlias] {
+			t.Fatalf("admin menu should hide compatibility alias %s", hiddenAlias)
 		}
 	}
 }
