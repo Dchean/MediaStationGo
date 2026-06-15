@@ -20,7 +20,16 @@
 # =============================================================================
 set -euo pipefail
 
-PORT="${PORT:-18080}"
+if [ -z "${PORT:-}" ]; then
+  PORT="$(python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+)"
+fi
 ROOT="$(mktemp -d -t msgo-smoke.XXXXXX)"
 DATA="$ROOT/data"
 CACHE="$ROOT/cache"
@@ -119,10 +128,17 @@ curl -s "http://127.0.0.1:$PORT/api/health" | grep -q '"ok"' && ok "/api/health"
 
 # --- 3. Auth ----------------------------------------------------------------
 hdr "Auth"
-TOKEN=$(curl -s -X POST -H 'Content-Type: application/json' \
+LOGIN_JSON=$(curl -s -X POST -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"smoketest12345"}' \
-  "http://127.0.0.1:$PORT/api/auth/login" | json_token)
-[ -n "$TOKEN" ] && ok "login as admin" || fail "login as admin"
+  "http://127.0.0.1:$PORT/api/auth/login")
+TOKEN=$(printf '%s' "$LOGIN_JSON" | json_token || true)
+if [ -n "$TOKEN" ]; then
+  ok "login as admin"
+else
+  fail "login as admin"
+  printf "login response: %s\n" "$LOGIN_JSON"
+  exit 1
+fi
 H="Authorization: Bearer $TOKEN"
 curl -s -o /dev/null -w "%{http_code}" -H "$H" "http://127.0.0.1:$PORT/api/me" | grep -q 200 \
   && ok "/api/me with bearer" || fail "/api/me with bearer"
@@ -131,15 +147,29 @@ curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/api/me" | grep -q
 
 # --- 4. Library + scan ------------------------------------------------------
 hdr "Library + scan + search"
-MOVIE=$(curl -s -X POST -H "$H" -H 'Content-Type: application/json' \
+MOVIE_JSON=$(curl -s -X POST -H "$H" -H 'Content-Type: application/json' \
   -d "{\"name\":\"movies\",\"path\":\"$MEDIA/movies\",\"type\":\"movie\"}" \
-  "http://127.0.0.1:$PORT/api/libraries" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')
-[ -n "$MOVIE" ] && ok "create movie library" || fail "create movie library"
+  "http://127.0.0.1:$PORT/api/libraries")
+MOVIE=$(printf '%s' "$MOVIE_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("id", ""))' || true)
+if [ -n "$MOVIE" ]; then
+  ok "create movie library"
+else
+  fail "create movie library"
+  printf "create movie library response: %s\n" "$MOVIE_JSON"
+  exit 1
+fi
 
-TV=$(curl -s -X POST -H "$H" -H 'Content-Type: application/json' \
+TV_JSON=$(curl -s -X POST -H "$H" -H 'Content-Type: application/json' \
   -d "{\"name\":\"tv\",\"path\":\"$MEDIA/tv\",\"type\":\"tv\"}" \
-  "http://127.0.0.1:$PORT/api/libraries" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')
-[ -n "$TV" ] && ok "create tv library" || fail "create tv library"
+  "http://127.0.0.1:$PORT/api/libraries")
+TV=$(printf '%s' "$TV_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("id", ""))' || true)
+if [ -n "$TV" ]; then
+  ok "create tv library"
+else
+  fail "create tv library"
+  printf "create tv library response: %s\n" "$TV_JSON"
+  exit 1
+fi
 
 RES=$(curl -s -X POST -H "$H" "http://127.0.0.1:$PORT/api/libraries/$MOVIE/scan")
 ADDED=$(echo "$RES" | python3 -c 'import json,sys;print(json.load(sys.stdin)["added"])')

@@ -71,5 +71,3 @@ jobs:
         run: cd web && npm ci && npm run build
       - name: Run smoke test
         run: ./scripts/smoke-test.sh
-        env:
-          PORT: 18080
