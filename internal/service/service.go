@@ -283,7 +283,7 @@ func (c *Container) Boot() {
 	// 自动扫描云盘媒体库，使内容对所有用户立即可见
 	c.BootCloudLibraries(c.stopCtx)
 
-	// Sakura 保号规则巡检：默认关闭，由管理员通过 Telegram Bot 命令开启。
+	// Mgo 保号规则巡检：默认关闭，由管理员通过 Telegram Bot 命令开启。
 	// 每天触发一次评估；规则里的窗口可随机，不固定。
 	if c.Device != nil {
 		go c.runInactivitySweeper(c.stopCtx)

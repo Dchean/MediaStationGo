@@ -377,6 +377,16 @@ func TestBotAdminCommandsManageDevicePolicy(t *testing.T) {
 	}
 }
 
+func TestBotCleanupRulesDefaultToEmpty(t *testing.T) {
+	ctx := context.Background()
+	repos, _ := newBotTestService(t)
+
+	cfg := loadBotConfig(ctx, repos)
+	if len(cfg.AccountCleanupRules) != 0 {
+		t.Fatalf("default cleanup rules should be empty, got %+v", cfg.AccountCleanupRules)
+	}
+}
+
 func TestBotCleanupRulesCanBeDeletedUntilEmpty(t *testing.T) {
 	ctx := context.Background()
 	repos, bot := newBotTestService(t)
@@ -387,6 +397,9 @@ func TestBotCleanupRulesCanBeDeletedUntilEmpty(t *testing.T) {
 	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"admin_user_ids":"9001"}`}
 	msg := &TelegramMessage{From: TelegramUser{ID: 9001, Username: "root"}, Chat: TelegramChat{ID: 9001, Type: "private"}}
 
+	if _, err := bot.executeCommand(ctx, channel, msg, "/cleanup_rule add watch_hours watch_3_5d_6h 观看3到5天满6小时 3 5 6"); err != nil {
+		t.Fatal(err)
+	}
 	reply, err := bot.executeCommand(ctx, channel, msg, "/cleanup_rule del watch_3_5d_6h")
 	if err != nil {
 		t.Fatal(err)
@@ -421,11 +434,11 @@ func TestBotCleanupRuleListInfersDaysAndHidesDuplicateNames(t *testing.T) {
 	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"admin_user_ids":"9001"}`}
 	msg := &TelegramMessage{From: TelegramUser{ID: 9001, Username: "root"}, Chat: TelegramChat{ID: 9001, Type: "private"}}
 
-	reply, err := bot.executeCommand(ctx, channel, msg, "/cleanup_rule list")
+	reply, err := bot.executeCommand(ctx, channel, msg, "/cleanup_rule")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []string{"login_7d</code> · login_7d", "new_7d</code> · new_7d", "5 天内登录", "新号宽限 1 天"} {
+	for _, bad := range []string{"login_7d</code> · login_7d", "new_7d</code> · new_7d", "5 天内登录", "新号宽限 1 天", "add watch_hours", "Mgo 保号规则命令"} {
 		if strings.Contains(reply.Text, bad) {
 			t.Fatalf("rule list still contains bad fragment %q: %s", bad, reply.Text)
 		}

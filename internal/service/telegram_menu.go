@@ -1125,7 +1125,7 @@ func (s *TelegramBotService) protectReason(ctx context.Context, userID string) s
 func (s *TelegramBotService) replyDevicePolicy(ctx context.Context) telegramCommandReply {
 	cfg := loadBotConfig(ctx, s.repo)
 	text := fmt.Sprintf(
-		"<b>设备策略</b>\n\n① 防共享：<b>%s</b>\n   并发播放上限 %d / 登录客户端上限 %d；超限会禁用账号，管理员可解禁。\n   设备指纹异常警告 %d 次后禁用账号。\n\n② Sakura 保号规则：<b>%s</b>\n   保号模式：%s；需要满足 %d 条；启用规则 %d 条。\n\n<b>命令：</b>\n<code>/antishare on play=3 login=3 warn=2</code>\n<code>/cleanup on|off|run</code>\n<code>/cleanup_mode any|all|count 2</code>\n<code>/cleanup_rule list|add|edit|修改|del|enable|disable</code>\n\n策略默认关闭；清理前会先通过 Bot 通知用户；管理员/受保护账号永不自动处理。",
+		"<b>设备策略</b>\n\n① 防共享：<b>%s</b>\n   并发播放上限 %d / 登录客户端上限 %d；超限会禁用账号，管理员可解禁。\n   设备指纹异常警告 %d 次后禁用账号。\n\n② Mgo 保号规则：<b>%s</b>\n   保号模式：%s；需要满足 %d 条；启用规则 %d 条。\n\n<b>命令：</b>\n<code>/antishare on play=3 login=3 warn=2</code>\n<code>/cleanup on|off|run</code>\n<code>/cleanup_mode any|all|count 2</code>\n<code>/cleanup_rule list|add|edit|修改|del|enable|disable</code>\n\n策略默认关闭；清理前会先通过 Bot 通知用户；管理员/受保护账号永不自动处理。",
 		onOff(cfg.AntiShareEnabled), cfg.MaxConcurrentPlay, cfg.MaxLoggedClients, cfg.WarnThreshold,
 		onOff(cfg.AccountCleanupEnabled), cleanupModeLabel(cfg.AccountCleanupKeepMode), cfg.AccountCleanupRequiredCount, countEnabledCleanupRules(cfg.AccountCleanupRules))
 	return telegramCommandReply{
@@ -1233,14 +1233,16 @@ func (s *TelegramBotService) cmdCleanupMode(ctx context.Context, args []string) 
 }
 
 func (s *TelegramBotService) cmdCleanupRule(ctx context.Context, args []string) telegramCommandReply {
-	if len(args) == 0 {
-		return telegramCommandReply{Text: cleanupRuleHelp()}
-	}
 	rules := s.currentCleanupRules(ctx)
+	if len(args) == 0 {
+		return telegramCommandReply{Text: formatCleanupRules(rules)}
+	}
 	action := strings.ToLower(strings.TrimSpace(args[0]))
 	switch action {
 	case "list", "ls", "status":
 		return telegramCommandReply{Text: formatCleanupRules(rules)}
+	case "help", "?", "帮助":
+		return telegramCommandReply{Text: cleanupRuleHelp()}
 	case "del", "delete", "rm":
 		if len(args) < 2 {
 			return telegramCommandReply{Text: "用法：<code>/cleanup_rule del 规则ID</code>"}
@@ -1511,7 +1513,7 @@ func cleanupRuleTypeLabel(t string) string {
 }
 
 func cleanupRuleHelp() string {
-	return "<b>Sakura 保号规则命令</b>\n\n" +
+	return "<b>Mgo 保号规则命令</b>\n\n" +
 		"<code>/cleanup_rule list</code> — 查看规则\n" +
 		"<code>/cleanup_rule add watch_hours watch_3_5d_6h 观看3到5天满6小时 3 5 6</code>\n" +
 		"<code>/cleanup_rule add recent_login login_7d 七天内登录 7</code>\n" +

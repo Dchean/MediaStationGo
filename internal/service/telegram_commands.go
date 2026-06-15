@@ -135,7 +135,7 @@ func (s *TelegramBotService) telegramCommandDefinitions(ctx context.Context, cha
 			return s.cmdSakuraProtectedUser(ctx, args, false), nil
 		}},
 		{Aliases: []string{"/restart", "/update_bot", "/paolu", "/bindall_id", "/sync_favorites", "/coins", "/score", "/coinsall", "/coinsclear", "/red", "/srank", "/white_channel", "/rev_white_channel", "/unban_channel", "/config"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraUnsupported("Sakura 专属命令", "这些命令涉及外部 Bot 自身运维/积分红包/皮套人管理，已在 MediaStationGo 中由权限、通知渠道、设备策略替代。"), nil
+			return s.cmdSakuraUnsupported("Mgo 兼容命令", "这些命令涉及外部 Bot 自身运维/积分红包/皮套人管理，已在 MediaStationGo 中由权限、通知渠道、设备策略替代。"), nil
 		}},
 	}
 }
@@ -254,8 +254,9 @@ func telegramAdminBotCommandMenu() []telegramBotCommand {
 		telegramBotCommand{Command: "downloads", Description: "下载列表(管理员)"},
 		telegramBotCommand{Command: "stats", Description: "媒体库统计(管理员)"},
 		telegramBotCommand{Command: "users", Description: "用户管理(管理员)"},
-		telegramBotCommand{Command: "cleanup", Description: "保号规则开关/巡检(管理员)"},
-		telegramBotCommand{Command: "cleanup_rule", Description: "Sakura保号规则管理(管理员)"},
+		telegramBotCommand{Command: "cleanup", Description: "开启关闭或执行保号巡检(管理员)"},
+		telegramBotCommand{Command: "cleanup_mode", Description: "设置保号规则匹配模式(管理员)"},
+		telegramBotCommand{Command: "cleanup_rule", Description: "Mgo保号规则管理(管理员)"},
 	)
 	return commands
 }

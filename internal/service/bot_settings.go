@@ -35,13 +35,13 @@ const (
 	SettingPlayWindowSeconds = "device.play_window_seconds" // 并发播放判定窗口（秒）
 	SettingClientActiveDays  = "device.client_active_days"  // 登录设备活跃天数窗口
 
-	// Sakura 风格保号规则。规则默认关闭；开启后按 KeepMode 计算用户
+	// Mgo 保号规则。规则默认关闭；开启后按 KeepMode 计算用户
 	// 是否满足足够的保号条件，未满足才会被清理。
 	SettingAccountCleanupEnabled       = "device.account_cleanup_enabled"
 	SettingAccountCleanupKeepMode      = "device.account_cleanup_keep_mode"      // any / all / count
 	SettingAccountCleanupRequiredCount = "device.account_cleanup_required_count" // keep_mode=count 时需要满足几条
 	SettingAccountCleanupRules         = "device.account_cleanup_rules"          // JSON []accountCleanupRule
-	SettingProtectedUserIDs            = "device.protected_user_ids"             // comma separated user IDs; Sakura /prouser
+	SettingProtectedUserIDs            = "device.protected_user_ids"             // comma separated user IDs; Mgo /prouser
 )
 
 // botConfig 是设备管控的已解析配置（含默认值）。
@@ -92,17 +92,7 @@ func defaultBotConfig() botConfig {
 		AccountCleanupEnabled:       false,
 		AccountCleanupKeepMode:      "any",
 		AccountCleanupRequiredCount: 1,
-		AccountCleanupRules: []accountCleanupRule{
-			{
-				ID:            "watch_3_5d_6h",
-				Name:          "3~5 天观看满 6 小时",
-				Type:          "watch_hours",
-				Enabled:       true,
-				WindowDaysMin: 3,
-				WindowDaysMax: 5,
-				MinHours:      6,
-			},
-		},
+		AccountCleanupRules:         nil,
 	}
 }
 
@@ -138,7 +128,7 @@ func loadBotConfig(ctx context.Context, repo *repository.Container) botConfig {
 	return cfg
 }
 
-// ProtectedUserIDSet returns the explicit Sakura-compatible protected user list.
+// ProtectedUserIDSet returns the explicit Mgo-compatible protected user list.
 // Admins and the default admin are protected separately by UserIsProtectedAccount.
 func ProtectedUserIDSet(ctx context.Context, repo *repository.Container) map[string]struct{} {
 	out := make(map[string]struct{})

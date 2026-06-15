@@ -171,8 +171,9 @@ func TestTelegramCommandMenusSeparateGroupAndAdminCommands(t *testing.T) {
 			t.Fatalf("group menu should include %s", required)
 		}
 	}
-	adminNames := telegramCommandNames(telegramAdminBotCommandMenu())
-	for _, required := range []string{"users", "status", "cleanup_rule"} {
+	adminCommands := telegramAdminBotCommandMenu()
+	adminNames := telegramCommandNames(adminCommands)
+	for _, required := range []string{"users", "status", "cleanup_mode", "cleanup_rule"} {
 		if !adminNames[required] {
 			t.Fatalf("admin menu should include %s", required)
 		}
@@ -180,6 +181,11 @@ func TestTelegramCommandMenusSeparateGroupAndAdminCommands(t *testing.T) {
 	for _, hiddenAlias := range []string{"myinfo", "count"} {
 		if adminNames[hiddenAlias] {
 			t.Fatalf("admin menu should hide compatibility alias %s", hiddenAlias)
+		}
+	}
+	for _, command := range adminCommands {
+		if strings.Contains(command.Description, "Sakura") {
+			t.Fatalf("admin menu command %s should not mention Sakura: %q", command.Command, command.Description)
 		}
 	}
 }

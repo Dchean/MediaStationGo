@@ -20,7 +20,7 @@ import (
 //	① 防共享: too many concurrent playbacks / logged-in clients disables the
 //	   account immediately; fingerprint mismatch is warning-based and disables
 //	   the account after the configured warning threshold.
-//	② Sakura 保号规则: admins define one or more keep rules; a sweep deletes
+//	② Mgo 保号规则: admins define one or more keep rules; a sweep deletes
 //	   accounts that do not satisfy the configured any/all/count rule set.
 //
 // Safeguards: admin / protected accounts are never auto disabled or deleted;
