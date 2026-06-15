@@ -224,8 +224,6 @@ func telegramPrivateBotCommandMenu() []telegramBotCommand {
 		{Command: "menu", Description: "打开功能菜单"},
 		{Command: "help", Description: "查看命令帮助"},
 		{Command: "account", Description: "查看账号状态"},
-		{Command: "myinfo", Description: "查看账号状态"},
-		{Command: "count", Description: "查看媒体库数量"},
 		{Command: "signin", Description: "签到"},
 		{Command: "devices", Description: "查看登录设备"},
 		{Command: "kick", Description: "踢下线设备"},
