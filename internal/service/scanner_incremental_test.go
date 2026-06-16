@@ -155,6 +155,28 @@ func TestScanLibrarySkipsUnchangedExistingLocalMediaWithMissingTrackMetadata(t *
 	}
 }
 
+func TestScanLibraryImportsNewLocalMediaWithoutSynchronousProbe(t *testing.T) {
+	sc, repos := newScannerTestEnv(t)
+	sc.probe = NewFFprobeService(&config.Config{}, zap.NewNop())
+	root := t.TempDir()
+	lib := model.Library{Name: "Movies", Path: root, Type: "movie", Enabled: true}
+	if err := repos.Library.Create(t.Context(), &lib); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(root, "New Movie (2026).mkv")
+	if err := os.WriteFile(file, []byte("new-file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := sc.ScanLibrary(t.Context(), lib.ID)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if res.Added != 1 || res.Probed != 0 {
+		t.Fatalf("scan result = %#v, want fast import without synchronous ffprobe", res)
+	}
+}
+
 func TestScanLibraryReportsPerFileUpsertErrors(t *testing.T) {
 	sc, repos := newScannerTestEnv(t)
 	root := t.TempDir()
