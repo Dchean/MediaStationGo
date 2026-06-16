@@ -184,8 +184,8 @@ func TestTelegramCommandMenusSeparateGroupAndAdminCommands(t *testing.T) {
 		}
 	}
 	for _, command := range adminCommands {
-		if strings.Contains(command.Description, "Sakura") {
-			t.Fatalf("admin menu command %s should not mention Sakura: %q", command.Command, command.Description)
+		if strings.Contains(command.Description, "Mgo 兼容") {
+			t.Fatalf("admin menu command %s should use native Mgo wording: %q", command.Command, command.Description)
 		}
 	}
 }

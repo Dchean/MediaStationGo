@@ -11,7 +11,7 @@ import (
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 )
 
-func TestSakuraUserManagementAndAuditCommands(t *testing.T) {
+func TestMgoBotUserManagementAndAuditCommands(t *testing.T) {
 	ctx := t.Context()
 	repos, bot := newBotTestService(t)
 	if err := repos.User.Create(ctx, &model.User{Username: "root", PasswordHash: "x", Role: "admin", IsActive: true}); err != nil {
@@ -66,7 +66,7 @@ func TestSakuraUserManagementAndAuditCommands(t *testing.T) {
 	}
 }
 
-func TestSakuraBatchAndPermissionCommands(t *testing.T) {
+func TestMgoBotBatchAndPermissionCommands(t *testing.T) {
 	ctx := t.Context()
 	repos, bot := newBotTestService(t)
 	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"admin_user_ids":"9501"}`}
@@ -135,7 +135,7 @@ func TestSakuraBatchAndPermissionCommands(t *testing.T) {
 	}
 }
 
-func TestSakuraSyncExpiryAndBotAdminCommands(t *testing.T) {
+func TestMgoBotSyncExpiryAndBotAdminCommands(t *testing.T) {
 	ctx := t.Context()
 	repos, bot := newBotTestService(t)
 	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"admin_user_ids":"9601"}`}
@@ -176,7 +176,7 @@ func TestSakuraSyncExpiryAndBotAdminCommands(t *testing.T) {
 	}
 }
 
-func TestSakuraProtectedUsersAndBackupCommands(t *testing.T) {
+func TestMgoBotProtectedUsersAndBackupCommands(t *testing.T) {
 	ctx := t.Context()
 	repos, bot := newBotTestService(t)
 	cfg := &config.Config{}
@@ -245,7 +245,7 @@ func TestSakuraProtectedUsersAndBackupCommands(t *testing.T) {
 	}
 }
 
-func TestSakuraAliasesAndSyncGroupGuards(t *testing.T) {
+func TestMgoBotAliasesAndSyncGroupGuards(t *testing.T) {
 	ctx := t.Context()
 	repos, bot := newBotTestService(t)
 	if err := repos.User.Create(ctx, &model.User{Username: "root", PasswordHash: "x", Role: "admin", IsActive: true}); err != nil {

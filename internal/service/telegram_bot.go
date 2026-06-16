@@ -534,7 +534,7 @@ func (s *TelegramBotService) cmdHelp(ctx context.Context, msg *TelegramMessage) 
 		"<b>/search 关键词</b> — 搜索媒体库\n" +
 		"<b>/downloads</b> — 下载列表\n" +
 		"<b>/stats</b> — 媒体库统计\n\n" +
-		"<b>Mgo 兼容 Sakura 管理命令：</b>\n" +
+		"<b>Mgo 管理命令：</b>\n" +
 		"用户：<code>/ucr</code> <code>/uinfo</code> <code>/rmemby</code> <code>/only_rm_record</code> <code>/renewall</code>\n" +
 		"审计：<code>/userip</code> <code>/auditip</code> <code>/auditdevice</code> <code>/auditclient</code> <code>/udeviceid</code>\n" +
 		"清理：<code>/syncunbound</code> <code>/syncgroupm</code> <code>/check_ex</code> <code>/deleted</code> <code>/low_activity</code>\n" +

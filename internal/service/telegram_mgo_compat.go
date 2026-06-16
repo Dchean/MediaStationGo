@@ -12,7 +12,7 @@ import (
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 )
 
-func (s *TelegramBotService) cmdSakuraCreateUser(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoCreateUser(ctx context.Context, args []string) telegramCommandReply {
 	if len(args) < 2 {
 		return telegramCommandReply{Text: "用法：<code>/ucr 用户名 密码 [天数]</code>，天数 0 表示永久。"}
 	}
@@ -37,11 +37,11 @@ func (s *TelegramBotService) cmdSakuraCreateUser(ctx context.Context, args []str
 	return telegramCommandReply{Text: fmt.Sprintf("已创建用户：<b>%s</b>\n到期：<b>%s</b>", user.Username, formatExpiry(s.userExpiry(ctx, user.ID)))}
 }
 
-func (s *TelegramBotService) cmdSakuraUserInfo(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoUserInfo(ctx context.Context, args []string) telegramCommandReply {
 	if len(args) == 0 {
 		return telegramCommandReply{Text: "用法：<code>/uinfo 用户名</code>"}
 	}
-	user := s.findSakuraUser(ctx, args[0])
+	user := s.findMgoBotUser(ctx, args[0])
 	if user == nil {
 		return telegramCommandReply{Text: "未找到用户。"}
 	}
@@ -62,11 +62,11 @@ func (s *TelegramBotService) cmdSakuraUserInfo(ctx context.Context, args []strin
 	)}
 }
 
-func (s *TelegramBotService) cmdSakuraDeleteUser(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoDeleteUser(ctx context.Context, args []string) telegramCommandReply {
 	if len(args) < 2 || !strings.EqualFold(args[len(args)-1], "confirm") {
 		return telegramCommandReply{Text: "删除用户需要确认：<code>/rmemby 用户名 confirm</code> 或 <code>/urm 用户名 confirm</code>"}
 	}
-	user := s.findSakuraUser(ctx, args[0])
+	user := s.findMgoBotUser(ctx, args[0])
 	if user == nil {
 		return telegramCommandReply{Text: "未找到用户。"}
 	}
@@ -80,7 +80,7 @@ func (s *TelegramBotService) cmdSakuraDeleteUser(ctx context.Context, args []str
 	return telegramCommandReply{Text: fmt.Sprintf("已删除用户 <b>%s</b>。", user.Username)}
 }
 
-func (s *TelegramBotService) cmdSakuraOnlyRemoveRecord(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoOnlyRemoveRecord(ctx context.Context, args []string) telegramCommandReply {
 	if len(args) == 0 {
 		return telegramCommandReply{Text: "用法：<code>/only_rm_record tg:123456</code> 或 <code>/only_rm_record 用户名</code>，只删除 Telegram 绑定记录。"}
 	}
@@ -96,7 +96,7 @@ func (s *TelegramBotService) cmdSakuraOnlyRemoveRecord(ctx context.Context, args
 			return telegramCommandReply{Text: "删除绑定失败：" + err.Error()}
 		}
 	} else {
-		user := s.findSakuraUser(ctx, target)
+		user := s.findMgoBotUser(ctx, target)
 		if user == nil {
 			return telegramCommandReply{Text: "未找到用户。"}
 		}
@@ -109,11 +109,11 @@ func (s *TelegramBotService) cmdSakuraOnlyRemoveRecord(ctx context.Context, args
 	return telegramCommandReply{Text: fmt.Sprintf("已删除 Telegram 绑定记录：<b>%d</b> 条。", removed)}
 }
 
-func (s *TelegramBotService) cmdSakuraUserIP(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoUserIP(ctx context.Context, args []string) telegramCommandReply {
 	if len(args) == 0 {
 		return telegramCommandReply{Text: "用法：<code>/userip 用户名</code>"}
 	}
-	user := s.findSakuraUser(ctx, args[0])
+	user := s.findMgoBotUser(ctx, args[0])
 	if user == nil {
 		return telegramCommandReply{Text: "未找到用户。"}
 	}
@@ -134,7 +134,7 @@ func (s *TelegramBotService) cmdSakuraUserIP(ctx context.Context, args []string)
 	return telegramCommandReply{Text: "<b>" + user.Username + " 的设备/IP</b>\n\n<code>" + strings.Join(out, "\n") + "</code>"}
 }
 
-func (s *TelegramBotService) cmdSakuraAuditDevices(ctx context.Context, mode string, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoAuditDevices(ctx context.Context, mode string, args []string) telegramCommandReply {
 	if len(args) == 0 {
 		return telegramCommandReply{Text: fmt.Sprintf("用法：<code>/%s 关键词</code>", mode)}
 	}
@@ -175,7 +175,7 @@ func (s *TelegramBotService) cmdSakuraAuditDevices(ctx context.Context, mode str
 	return telegramCommandReply{Text: "<b>审计结果</b>\n\n<code>" + strings.Join(out, "\n") + "</code>"}
 }
 
-func (s *TelegramBotService) cmdSakuraRenewAll(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoRenewAll(ctx context.Context, args []string) telegramCommandReply {
 	if len(args) < 2 || !strings.EqualFold(args[len(args)-1], "confirm") {
 		return telegramCommandReply{Text: "批量续期需要确认：<code>/renewall 天数 confirm</code>"}
 	}
@@ -199,7 +199,7 @@ func (s *TelegramBotService) cmdSakuraRenewAll(ctx context.Context, args []strin
 	return telegramCommandReply{Text: fmt.Sprintf("批量续期完成：<b>%d</b> 个普通用户。", count)}
 }
 
-func (s *TelegramBotService) cmdSakuraBanAll(ctx context.Context, active bool, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoBanAll(ctx context.Context, active bool, args []string) telegramCommandReply {
 	if len(args) == 0 || !strings.EqualFold(args[len(args)-1], "confirm") {
 		action := "banall"
 		if active {
@@ -235,7 +235,7 @@ func (s *TelegramBotService) cmdSakuraBanAll(ctx context.Context, active bool, a
 	return telegramCommandReply{Text: fmt.Sprintf("已禁用普通用户：<b>%d</b> 个。", count)}
 }
 
-func (s *TelegramBotService) cmdSakuraCallAll(ctx context.Context, channel *model.NotifyChannel, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoCallAll(ctx context.Context, channel *model.NotifyChannel, args []string) telegramCommandReply {
 	message := strings.TrimSpace(strings.Join(args, " "))
 	if message == "" {
 		return telegramCommandReply{Text: "用法：<code>/callall 消息内容</code>"}
@@ -259,7 +259,7 @@ func (s *TelegramBotService) cmdSakuraCallAll(ctx context.Context, channel *mode
 	return telegramCommandReply{Text: fmt.Sprintf("群发完成：成功发送 <b>%d</b> 个绑定用户。", sent)}
 }
 
-func (s *TelegramBotService) cmdSakuraSyncUnbound(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoSyncUnbound(ctx context.Context, args []string) telegramCommandReply {
 	var users []model.User
 	if err := s.repo.DB.WithContext(ctx).
 		Where("role <> ?", "admin").
@@ -293,7 +293,7 @@ func (s *TelegramBotService) cmdSakuraSyncUnbound(ctx context.Context, args []st
 	return telegramCommandReply{Text: fmt.Sprintf("未绑定 Bot 的普通用户：<b>%d</b> 个。\n%s\n\n如需删除：<code>/syncunbound delete confirm</code>", len(users), telegramInlineCodeList(names))}
 }
 
-func (s *TelegramBotService) cmdSakuraCheckExpired(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoCheckExpired(ctx context.Context, args []string) telegramCommandReply {
 	now := time.Now()
 	var users []model.User
 	if err := s.repo.DB.WithContext(ctx).Where("expired_at IS NOT NULL AND expired_at < ?", now).Order("expired_at asc").Find(&users).Error; err != nil {
@@ -324,7 +324,7 @@ func (s *TelegramBotService) cmdSakuraCheckExpired(ctx context.Context, args []s
 	return telegramCommandReply{Text: fmt.Sprintf("过期用户：<b>%d</b> 个。\n%s\n\n如需禁用：<code>/check_ex disable confirm</code>", len(users), telegramInlineCodeList(lines))}
 }
 
-func (s *TelegramBotService) cmdSakuraScanNames(ctx context.Context) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoScanNames(ctx context.Context) telegramCommandReply {
 	var rows []struct {
 		Username string
 		Count    int64
@@ -344,7 +344,7 @@ func (s *TelegramBotService) cmdSakuraScanNames(ctx context.Context) telegramCom
 	return telegramCommandReply{Text: "<b>同名用户记录</b>\n" + telegramInlineCodeList(out)}
 }
 
-func (s *TelegramBotService) cmdSakuraRanks(ctx context.Context, window time.Duration, byDuration bool) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoRanks(ctx context.Context, window time.Duration, byDuration bool) telegramCommandReply {
 	since := time.Now().Add(-window)
 	title := "播放次数排行"
 	selectExpr := "COUNT(*) AS score"
@@ -382,11 +382,11 @@ func (s *TelegramBotService) cmdSakuraRanks(ctx context.Context, window time.Dur
 	return telegramCommandReply{Text: "<b>" + title + "</b>\n\n<code>" + strings.Join(out, "\n") + "</code>"}
 }
 
-func (s *TelegramBotService) cmdSakuraAdminRole(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoAdminRole(ctx context.Context, args []string) telegramCommandReply {
 	if len(args) < 2 {
 		return telegramCommandReply{Text: "用法：<code>/embyadmin 用户名 on|off</code>"}
 	}
-	user := s.findSakuraUser(ctx, args[0])
+	user := s.findMgoBotUser(ctx, args[0])
 	if user == nil {
 		return telegramCommandReply{Text: "未找到用户。"}
 	}
@@ -409,7 +409,7 @@ func (s *TelegramBotService) cmdSakuraAdminRole(ctx context.Context, args []stri
 	return telegramCommandReply{Text: fmt.Sprintf("已将 <b>%s</b> 角色设置为 <b>%s</b>。", user.Username, role)}
 }
 
-func (s *TelegramBotService) cmdSakuraMediaAccessAll(ctx context.Context, allow bool) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoMediaAccessAll(ctx context.Context, allow bool) telegramCommandReply {
 	users, err := s.repo.User.List(ctx)
 	if err != nil {
 		return telegramCommandReply{Text: "读取用户失败：" + err.Error()}
@@ -443,7 +443,7 @@ func (s *TelegramBotService) cmdSakuraMediaAccessAll(ctx context.Context, allow 
 	return telegramCommandReply{Text: fmt.Sprintf("已为普通用户%s媒体播放权限：<b>%d</b> 个。", state, updated)}
 }
 
-func (s *TelegramBotService) cmdSakuraBotAdmin(ctx context.Context, channel *model.NotifyChannel, args []string, add bool) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoBotAdmin(ctx context.Context, channel *model.NotifyChannel, args []string, add bool) telegramCommandReply {
 	if channel == nil {
 		return telegramCommandReply{Text: "Telegram 渠道不存在。"}
 	}
@@ -489,11 +489,11 @@ func (s *TelegramBotService) cmdSakuraBotAdmin(ctx context.Context, channel *mod
 	return telegramCommandReply{Text: "已移除 Bot 管理员：<code>" + tgID + "</code>"}
 }
 
-func (s *TelegramBotService) cmdSakuraProtectedUser(ctx context.Context, args []string, protect bool) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoProtectedUser(ctx context.Context, args []string, protect bool) telegramCommandReply {
 	if len(args) == 0 || strings.EqualFold(args[0], "list") {
-		return s.cmdSakuraProtectedUserList(ctx)
+		return s.cmdMgoProtectedUserList(ctx)
 	}
-	user := s.findSakuraUser(ctx, args[0])
+	user := s.findMgoBotUser(ctx, args[0])
 	if user == nil {
 		return telegramCommandReply{Text: "未找到用户。"}
 	}
@@ -512,7 +512,7 @@ func (s *TelegramBotService) cmdSakuraProtectedUser(ctx context.Context, args []
 	return telegramCommandReply{Text: fmt.Sprintf("已移出保护名单：<b>%s</b>。", user.Username)}
 }
 
-func (s *TelegramBotService) cmdSakuraProtectedUserList(ctx context.Context) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoProtectedUserList(ctx context.Context) telegramCommandReply {
 	ids := ProtectedUserIDSet(ctx, s.repo)
 	if len(ids) == 0 {
 		return telegramCommandReply{Text: "保护名单为空。管理员和默认管理员始终自动保护。"}
@@ -529,7 +529,7 @@ func (s *TelegramBotService) cmdSakuraProtectedUserList(ctx context.Context) tel
 	return telegramCommandReply{Text: fmt.Sprintf("保护名单：<b>%d</b> 个。\n%s", len(names), telegramInlineCodeList(names))}
 }
 
-func (s *TelegramBotService) cmdSakuraBackupDB(ctx context.Context) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoBackupDB(ctx context.Context) telegramCommandReply {
 	if s.backup == nil {
 		return telegramCommandReply{Text: "备份服务暂不可用。"}
 	}
@@ -540,7 +540,7 @@ func (s *TelegramBotService) cmdSakuraBackupDB(ctx context.Context) telegramComm
 	return telegramCommandReply{Text: fmt.Sprintf("数据库备份完成：<code>%s</code>\n大小：<b>%d</b> bytes", info.Filename, info.Size)}
 }
 
-func (s *TelegramBotService) cmdSakuraRestoreDB(ctx context.Context, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoRestoreDB(ctx context.Context, args []string) telegramCommandReply {
 	if s.backup == nil {
 		return telegramCommandReply{Text: "备份服务暂不可用。"}
 	}
@@ -571,7 +571,7 @@ func (s *TelegramBotService) cmdSakuraRestoreDB(ctx context.Context, args []stri
 	return telegramCommandReply{Text: "数据库已从备份恢复，请重启 MediaStationGo 后生效。"}
 }
 
-func (s *TelegramBotService) cmdSakuraSyncGroup(ctx context.Context, channel *model.NotifyChannel, args []string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoSyncGroup(ctx context.Context, channel *model.NotifyChannel, args []string) telegramCommandReply {
 	chatIDs := s.telegramMembershipChatIDs(channel)
 	if len(chatIDs) == 0 {
 		return telegramCommandReply{Text: "未配置可校验成员的群组/频道 ID。请在 Telegram 通知渠道设置 group_chat_id 或 channel_chat_id。"}
@@ -652,7 +652,7 @@ func (s *TelegramBotService) telegramMembershipChatIDs(channel *model.NotifyChan
 	return out
 }
 
-func (s *TelegramBotService) cmdSakuraUnsupported(name, replacement string) telegramCommandReply {
+func (s *TelegramBotService) cmdMgoUnsupported(name, replacement string) telegramCommandReply {
 	text := fmt.Sprintf("<b>%s</b> 已识别，但当前 Telegram Bot API 无法完整复刻该行为。", name)
 	if replacement != "" {
 		text += "\n请使用：" + replacement
@@ -660,7 +660,7 @@ func (s *TelegramBotService) cmdSakuraUnsupported(name, replacement string) tele
 	return telegramCommandReply{Text: text}
 }
 
-func (s *TelegramBotService) findSakuraUser(ctx context.Context, target string) *model.User {
+func (s *TelegramBotService) findMgoBotUser(ctx context.Context, target string) *model.User {
 	target = strings.TrimSpace(strings.TrimPrefix(target, "@"))
 	if target == "" {
 		return nil

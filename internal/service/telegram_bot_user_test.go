@@ -230,7 +230,7 @@ func TestTelegramPollingChannelHintWinsForPrivateMessages(t *testing.T) {
 	}
 }
 
-func TestTelegramSakuraCompatibleUserCommands(t *testing.T) {
+func TestTelegramMgoCompatibleUserCommands(t *testing.T) {
 	ctx := t.Context()
 	repos, bot := newBotTestService(t)
 	user := &model.User{Username: "viewer", PasswordHash: "hash", Role: "user", IsActive: true}

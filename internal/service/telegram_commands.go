@@ -75,64 +75,64 @@ func (s *TelegramBotService) telegramCommandDefinitions(ctx context.Context, cha
 		{Aliases: []string{"/downloads"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdDownloads(ctx) }},
 		{Aliases: []string{"/stats"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdStats(ctx) }},
 		{Aliases: []string{"/renew"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdUserRenew(ctx, args), nil }},
-		{Aliases: []string{"/ucr"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraCreateUser(ctx, args), nil }},
-		{Aliases: []string{"/uinfo"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraUserInfo(ctx, args), nil }},
-		{Aliases: []string{"/rmemby", "/urm", "/only_rm_emby"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraDeleteUser(ctx, args), nil }},
-		{Aliases: []string{"/only_rm_record"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraOnlyRemoveRecord(ctx, args), nil }},
-		{Aliases: []string{"/userip"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraUserIP(ctx, args), nil }},
+		{Aliases: []string{"/ucr"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoCreateUser(ctx, args), nil }},
+		{Aliases: []string{"/uinfo"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoUserInfo(ctx, args), nil }},
+		{Aliases: []string{"/rmemby", "/urm", "/only_rm_emby"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoDeleteUser(ctx, args), nil }},
+		{Aliases: []string{"/only_rm_record"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoOnlyRemoveRecord(ctx, args), nil }},
+		{Aliases: []string{"/userip"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoUserIP(ctx, args), nil }},
 		{Aliases: []string{"/udeviceid"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraAuditDevices(ctx, "udeviceid", args), nil
+			return s.cmdMgoAuditDevices(ctx, "udeviceid", args), nil
 		}},
 		{Aliases: []string{"/auditip"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraAuditDevices(ctx, "auditip", args), nil
+			return s.cmdMgoAuditDevices(ctx, "auditip", args), nil
 		}},
 		{Aliases: []string{"/auditdevice"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraAuditDevices(ctx, "auditdevice", args), nil
+			return s.cmdMgoAuditDevices(ctx, "auditdevice", args), nil
 		}},
 		{Aliases: []string{"/auditclient"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraAuditDevices(ctx, "auditclient", args), nil
+			return s.cmdMgoAuditDevices(ctx, "auditclient", args), nil
 		}},
-		{Aliases: []string{"/renewall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraRenewAll(ctx, args), nil }},
-		{Aliases: []string{"/callall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraCallAll(ctx, channel, args), nil }},
-		{Aliases: []string{"/syncunbound"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraSyncUnbound(ctx, args), nil }},
+		{Aliases: []string{"/renewall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoRenewAll(ctx, args), nil }},
+		{Aliases: []string{"/callall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoCallAll(ctx, channel, args), nil }},
+		{Aliases: []string{"/syncunbound"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoSyncUnbound(ctx, args), nil }},
 		{Aliases: []string{"/syncgroupm"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraSyncGroup(ctx, channel, args), nil
+			return s.cmdMgoSyncGroup(ctx, channel, args), nil
 		}},
 		{Aliases: []string{"/kick_not_emby"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraUnsupported("群内无号用户清理", "<code>/syncgroupm</code> 可检查已绑定账号是否仍在群内；Telegram Bot API 无法枚举全部群成员，因此不能可靠找出“在群但无号”的用户。"), nil
+			return s.cmdMgoUnsupported("群内无号用户清理", "<code>/syncgroupm</code> 可检查已绑定账号是否仍在群内；Telegram Bot API 无法枚举全部群成员，因此不能可靠找出“在群但无号”的用户。"), nil
 		}},
-		{Aliases: []string{"/scan_embyname"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraScanNames(ctx), nil }},
-		{Aliases: []string{"/check_ex"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraCheckExpired(ctx, args), nil }},
+		{Aliases: []string{"/scan_embyname"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoScanNames(ctx), nil }},
+		{Aliases: []string{"/check_ex"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoCheckExpired(ctx, args), nil }},
 		{Aliases: []string{"/deleted", "/low_activity"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdCleanup(ctx, []string{"run"}), nil }},
-		{Aliases: []string{"/uranks"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraRanks(ctx, 0, true), nil }},
+		{Aliases: []string{"/uranks"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoRanks(ctx, 0, true), nil }},
 		{Aliases: []string{"/days_ranks"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraRanks(ctx, 24*time.Hour, false), nil
+			return s.cmdMgoRanks(ctx, 24*time.Hour, false), nil
 		}},
 		{Aliases: []string{"/week_ranks"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraRanks(ctx, 7*24*time.Hour, false), nil
+			return s.cmdMgoRanks(ctx, 7*24*time.Hour, false), nil
 		}},
-		{Aliases: []string{"/embyadmin"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraAdminRole(ctx, args), nil }},
-		{Aliases: []string{"/unbanall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraBanAll(ctx, true, args), nil }},
-		{Aliases: []string{"/banall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraBanAll(ctx, false, args), nil }},
+		{Aliases: []string{"/embyadmin"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoAdminRole(ctx, args), nil }},
+		{Aliases: []string{"/unbanall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoBanAll(ctx, true, args), nil }},
+		{Aliases: []string{"/banall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoBanAll(ctx, false, args), nil }},
 		{Aliases: []string{"/embylibs_unblockall", "/extraembylibs_unblockall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraMediaAccessAll(ctx, true), nil
+			return s.cmdMgoMediaAccessAll(ctx, true), nil
 		}},
 		{Aliases: []string{"/embylibs_blockall", "/extraembylibs_blockall"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraMediaAccessAll(ctx, false), nil
+			return s.cmdMgoMediaAccessAll(ctx, false), nil
 		}},
 		{Aliases: []string{"/proadmin"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraBotAdmin(ctx, channel, args, true), nil
+			return s.cmdMgoBotAdmin(ctx, channel, args, true), nil
 		}},
 		{Aliases: []string{"/revadmin"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraBotAdmin(ctx, channel, args, false), nil
+			return s.cmdMgoBotAdmin(ctx, channel, args, false), nil
 		}},
-		{Aliases: []string{"/backup_db"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraBackupDB(ctx), nil }},
-		{Aliases: []string{"/restore_from_db"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdSakuraRestoreDB(ctx, args), nil }},
+		{Aliases: []string{"/backup_db"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoBackupDB(ctx), nil }},
+		{Aliases: []string{"/restore_from_db"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) { return s.cmdMgoRestoreDB(ctx, args), nil }},
 		{Aliases: []string{"/prouser"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraProtectedUser(ctx, args, true), nil
+			return s.cmdMgoProtectedUser(ctx, args, true), nil
 		}},
 		{Aliases: []string{"/revuser"}, AdminOnly: true, AdminOnlyText: adminOnly, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.cmdSakuraProtectedUser(ctx, args, false), nil
+			return s.cmdMgoProtectedUser(ctx, args, false), nil
 		}},
 	}
 }
