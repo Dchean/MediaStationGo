@@ -2,6 +2,7 @@ package handler
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ShukeBta/MediaStationGo/internal/service"
 )
@@ -88,5 +89,32 @@ func TestLicenseHeartbeatPayloadIncludesStoredLicenseKey(t *testing.T) {
 	}
 	if payload["key"] != "MS-ABCD-EFGH-JKLM-NPQR" {
 		t.Fatalf("heartbeat should include stored license key for server-side backfill: %#v", payload)
+	}
+}
+
+func TestLicenseHeartbeatDueUsesTwelveHourWindow(t *testing.T) {
+	state := service.LicenseActivationState{
+		Valid:     true,
+		UpdatedAt: time.Now().Add(-11 * time.Hour).Format(time.RFC3339),
+	}
+	if licenseHeartbeatDue(state, 12*time.Hour) {
+		t.Fatalf("heartbeat should not be due before interval")
+	}
+
+	state.UpdatedAt = time.Now().Add(-13 * time.Hour).Format(time.RFC3339)
+	if !licenseHeartbeatDue(state, 12*time.Hour) {
+		t.Fatalf("heartbeat should be due after interval")
+	}
+}
+
+func TestLicenseHeartbeatEligibleRequiresActivationState(t *testing.T) {
+	if licenseHeartbeatEligible(service.LicenseActivationState{DeviceID: "device-only"}) {
+		t.Fatalf("device id alone should not trigger automatic license heartbeat")
+	}
+	if !licenseHeartbeatEligible(service.LicenseActivationState{LicenseKey: "MS-KEY"}) {
+		t.Fatalf("stored license key should trigger automatic license heartbeat")
+	}
+	if !licenseHeartbeatEligible(service.LicenseActivationState{Valid: true}) {
+		t.Fatalf("valid license state should trigger automatic license heartbeat")
 	}
 }

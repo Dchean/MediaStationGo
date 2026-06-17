@@ -420,6 +420,14 @@ func (c *Container) NormalizeCloudLibraryTypes(ctx context.Context) error {
 	return nil
 }
 
+// Context is canceled when the service container is closing.
+func (c *Container) Context() context.Context {
+	if c == nil || c.stopCtx == nil {
+		return context.Background()
+	}
+	return c.stopCtx
+}
+
 // runInactivitySweeper periodically runs the account-cleanup policy. Kept with
 // the historical name to avoid churn in callers.
 func (c *Container) runInactivitySweeper(ctx context.Context) {

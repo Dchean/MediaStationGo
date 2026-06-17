@@ -192,7 +192,7 @@ export function Layout() {
       <div className="flex h-20 items-center justify-between px-6 border-b border-gray-100">
         <Link to="/" className="flex items-center gap-3">
           <img
-            src="/brand/mgo-emby-icon.svg"
+            src="/brand/mediastationgo-logo.svg"
             alt="MediaStationGo"
             className="h-10 w-10 shrink-0 rounded-xl object-contain shadow-sm"
           />
