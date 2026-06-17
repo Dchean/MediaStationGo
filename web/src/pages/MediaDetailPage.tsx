@@ -1,7 +1,7 @@
 ﻿import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { FileText, Heart, Play, RefreshCw, Sparkles, Trash2, Calendar, Database } from 'lucide-react'
+import { FileText, Heart, Play, RefreshCw, Sparkles, Trash2, Calendar, Database, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import { mediaAPI } from '../api/library'
@@ -13,6 +13,7 @@ import { api } from '../api/client'
 import type { Media } from '../types'
 import { confirmAction } from '../components/ConfirmDialog'
 import { ExternalPlayerButton } from '../components/ExternalPlayerButton'
+import { ManualScrapeDialog } from '../components/ManualScrapeDialog'
 
 function fmtDuration(sec: number): string {
   if (!sec || sec <= 0) return '—'
@@ -45,6 +46,7 @@ export function MediaDetailPage() {
   const [media, setMedia] = useState<Media | null>(null)
   const [favourite, setFavourite] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [manualScrapeOpen, setManualScrapeOpen] = useState(false)
 
   const refresh = async () => {
     if (!id) return
@@ -315,6 +317,10 @@ export function MediaDetailPage() {
                     <Sparkles size={13} className="text-[#c9954a]" />
                     <span>智能刮削 (TMDB)</span>
                   </button>
+                  <button onClick={() => setManualScrapeOpen(true)} className="btn-outline py-2 px-3.5 text-xs gap-1.5 border-gray-200 hover:border-brand-500/50 hover:bg-brand-50">
+                    <Search size={13} className="text-[#c9954a]" />
+                    <span>手动匹配刮削</span>
+                  </button>
                   <button onClick={reprobe} className="btn-outline py-2 px-3.5 text-xs gap-1.5 border-gray-200 hover:border-brand-500/50 hover:bg-brand-50">
                     <Database size={13} className="text-gray-600" />
                     <span>探测媒体轨 (ffprobe)</span>
@@ -336,6 +342,15 @@ export function MediaDetailPage() {
           </div>
         </div>
       </div>
+      <ManualScrapeDialog
+        open={manualScrapeOpen}
+        media={media}
+        defaultQuery={media.title}
+        mediaType={media.season_num > 0 || media.episode_num > 0 ? 'tv' : undefined}
+        scopeLabel={media.title}
+        onClose={() => setManualScrapeOpen(false)}
+        onApplied={refresh}
+      />
     </div>
   )
 }

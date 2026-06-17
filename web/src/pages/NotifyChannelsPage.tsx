@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Bell, Loader2, Pencil, Plus, Send, Trash2 } from 'lucide-react'
+import { Bell, Loader2, Pencil, Play, Plus, Send, Square, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import {
@@ -17,6 +17,8 @@ export function NotifyChannelsPage() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<NotifyChannel | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [testingID, setTestingID] = useState<string | null>(null)
+  const [pollingBusy, setPollingBusy] = useState<'start' | 'stop' | null>(null)
 
   const refresh = async () => {
     setLoading(true)
@@ -32,6 +34,7 @@ export function NotifyChannelsPage() {
   }, [])
 
   const onTest = async (id: string) => {
+    setTestingID(id)
     try {
       await notifyChannelsAPI.test(id)
       toast.success('测试消息已发送')
@@ -39,6 +42,42 @@ export function NotifyChannelsPage() {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '发送失败'
       toast.error(msg)
+    } finally {
+      setTestingID(null)
+    }
+  }
+
+  const onStartPolling = async () => {
+    setPollingBusy('start')
+    try {
+      const res = await notifyChannelsAPI.startTelegramPolling()
+      if ((res.started ?? 0) > 0) {
+        toast.success(`已启动 ${res.started} 个 Telegram Bot 轮询`)
+      } else if ((res.already_running ?? 0) > 0) {
+        toast.success('Telegram Bot 轮询已在运行')
+      } else {
+        toast.error(res.errors?.[0] ?? '没有可启动的 Telegram Bot 渠道')
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '启动轮询失败'
+      toast.error(msg)
+    } finally {
+      setPollingBusy(null)
+    }
+  }
+
+  const onStopPolling = async () => {
+    setPollingBusy('stop')
+    try {
+      const res = await notifyChannelsAPI.stopTelegramPolling()
+      toast.success(res.stopped > 0 ? `已停止 ${res.stopped} 个 Telegram Bot 轮询` : '当前没有运行中的轮询')
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '停止轮询失败'
+      toast.error(msg)
+    } finally {
+      setPollingBusy(null)
     }
   }
 
@@ -69,15 +108,35 @@ export function NotifyChannelsPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            setEditing(null)
-            setShowForm(true)
-          }}
-          className="neon-button"
-        >
-          <Plus size={16} /> 添加渠道
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={onStartPolling}
+            disabled={pollingBusy !== null}
+            className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-ink-100 hover:border-primary-400/40 hover:text-brand-500 disabled:opacity-50"
+            title="启动 Telegram Bot 长轮询"
+          >
+            {pollingBusy === 'start' ? <Loader2 size={16} className="inline animate-spin" /> : <Play size={16} className="inline" />}
+            {' '}启动 Bot 轮询
+          </button>
+          <button
+            onClick={onStopPolling}
+            disabled={pollingBusy !== null}
+            className="rounded-xl border border-gray-200 px-3 py-2 text-sm text-ink-100 hover:border-primary-400/40 hover:text-brand-500 disabled:opacity-50"
+            title="停止本地长轮询。"
+          >
+            {pollingBusy === 'stop' ? <Loader2 size={16} className="inline animate-spin" /> : <Square size={16} className="inline" />}
+            {' '}停止轮询
+          </button>
+          <button
+            onClick={() => {
+              setEditing(null)
+              setShowForm(true)
+            }}
+            className="neon-button"
+          >
+            <Plus size={16} /> 添加渠道
+          </button>
+        </div>
       </div>
 
       {loading && (
@@ -97,6 +156,7 @@ export function NotifyChannelsPage() {
               key={ch.id}
               channel={ch}
               onTest={() => onTest(ch.id)}
+              testing={testingID === ch.id}
               onEdit={() => {
                 setEditing(ch)
                 setShowForm(true)
@@ -140,11 +200,13 @@ const EVENT_OPTIONS = [
 function ChannelCard({
   channel,
   onTest,
+  testing,
   onEdit,
   onDelete,
 }: {
   channel: NotifyChannel
   onTest: () => void
+  testing?: boolean
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -167,9 +229,10 @@ function ChannelCard({
       <div className="flex shrink-0 gap-2">
         <button
           onClick={onTest}
+          disabled={testing}
           className="rounded-lg border border-gray-200 px-2 py-1 text-xs text-ink-100 hover:border-primary-400/40 hover:text-brand-500"
         >
-          <Send size={12} className="inline" /> 测试
+          {testing ? <Loader2 size={12} className="inline animate-spin" /> : <Send size={12} className="inline" />} 测试
         </button>
         <button
           onClick={onEdit}

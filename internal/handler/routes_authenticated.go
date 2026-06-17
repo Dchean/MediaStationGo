@@ -42,6 +42,9 @@ func registerAuthenticatedRoutes(api *gin.RouterGroup, cfg *config.Config, svc *
 		authed.GET("/media/:id", getMediaHandler(svc))
 		authed.GET("/media", searchMediaHandler(svc))
 		authed.POST("/media/:id/scrape", middleware.AdminRequired(), scrapeOneHandler(svc))
+		authed.GET("/media/:id/scrape/search", middleware.AdminRequired(), manualScrapeSearchHandler(svc))
+		authed.POST("/media/:id/scrape/apply", middleware.AdminRequired(), manualScrapeApplyOneHandler(svc))
+		authed.POST("/media/scrape/apply", middleware.AdminRequired(), manualScrapeApplyBatchHandler(svc))
 		authed.POST("/media/:id/probe", middleware.AdminRequired(), reprobeHandler(svc))
 		authed.DELETE("/media/:id", middleware.AdminRequired(), deleteMediaHandler(svc))
 		authed.POST("/media/:id/restore", middleware.AdminRequired(), restoreMediaHandler(svc))
@@ -145,6 +148,8 @@ func registerAuthenticatedRoutes(api *gin.RouterGroup, cfg *config.Config, svc *
 
 		// Recycle bin.
 		authed.GET("/recycle", middleware.AdminRequired(), listRecycleHandler(svc))
+		authed.POST("/recycle/restore", middleware.AdminRequired(), restoreMediaBatchHandler(svc))
+		authed.POST("/recycle/purge", middleware.AdminRequired(), purgeMediaBatchHandler(svc))
 
 		authed.GET("/ws", wsHandler(svc))
 

@@ -22,6 +22,7 @@ type ExternalMediaResult struct {
 	TMDbID             int     `json:"tmdb_id,omitempty"`
 	BangumiID          int     `json:"bangumi_id,omitempty"`
 	DoubanID           string  `json:"douban_id,omitempty"`
+	TheTVDBID          string  `json:"thetvdb_id,omitempty"`
 	SubscribeKeyword   string  `json:"subscribe_keyword"`
 	TotalEpisodes      int     `json:"total_episodes,omitempty"`
 	DownloadedEpisodes int     `json:"downloaded_episodes,omitempty"`

@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,6 +138,135 @@ func (t *TheTVDBProvider) SearchSeries(ctx context.Context, query string) (*Matc
 		_, _ = fmt.Sscanf(r.Year[:4], "%d", &m.Year)
 	}
 	return m, nil
+}
+
+func (t *TheTVDBProvider) GetSeriesEpisodeCount(ctx context.Context, seriesID string) (int, error) {
+	if !t.Enabled() || strings.TrimSpace(seriesID) == "" {
+		return 0, nil
+	}
+	tok, err := t.Login(ctx)
+	if err != nil {
+		return 0, err
+	}
+	id := normalizeTheTVDBSeriesID(seriesID)
+	u := fmt.Sprintf("https://api4.thetvdb.com/v4/series/%s/extended?meta=episodes", urlEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return 0, fmt.Errorf("thetvdb series detail: %d", resp.StatusCode)
+	}
+	var out struct {
+		Data struct {
+			Episodes []struct {
+				ID           int    `json:"id"`
+				Name         string `json:"name"`
+				Number       int    `json:"number"`
+				SeasonNumber int    `json:"seasonNumber"`
+				Type         string `json:"type"`
+			} `json:"episodes"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, episode := range out.Data.Episodes {
+		if episode.SeasonNumber == 0 || strings.EqualFold(episode.Type, "special") {
+			continue
+		}
+		count++
+	}
+	if count > 0 {
+		return count, nil
+	}
+	return len(out.Data.Episodes), nil
+}
+
+func (t *TheTVDBProvider) GetSeriesMatchByID(ctx context.Context, seriesID string) (*Match, error) {
+	if !t.Enabled() || strings.TrimSpace(seriesID) == "" {
+		return nil, nil
+	}
+	tok, err := t.Login(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id := normalizeTheTVDBSeriesID(seriesID)
+	u := fmt.Sprintf("https://api4.thetvdb.com/v4/series/%s/extended", urlEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("thetvdb series detail: %d", resp.StatusCode)
+	}
+	var out struct {
+		Data struct {
+			ID         int    `json:"id"`
+			Name       string `json:"name"`
+			Overview   string `json:"overview"`
+			Image      string `json:"image"`
+			ImageURL   string `json:"image_url"`
+			FirstAired string `json:"firstAired"`
+			Year       string `json:"year"`
+			Score      int    `json:"score"`
+			Average    string `json:"averageRuntime"`
+			Genres     []struct {
+				Name string `json:"name"`
+			} `json:"genres"`
+			OriginalCountry  string `json:"originalCountry"`
+			OriginalLanguage string `json:"originalLanguage"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	idValue := id
+	if out.Data.ID > 0 {
+		idValue = fmt.Sprint(out.Data.ID)
+	}
+	m := &Match{
+		TheTVDBID: idValue,
+		Title:     out.Data.Name,
+		Overview:  out.Data.Overview,
+		PosterURL: firstNonEmpty(out.Data.Image, out.Data.ImageURL),
+		Languages: nonEmptyStrings(out.Data.OriginalLanguage),
+		Countries: nonEmptyStrings(out.Data.OriginalCountry),
+	}
+	if out.Data.Score > 0 {
+		m.Rating = float32(out.Data.Score) / 10
+	}
+	yearText := firstNonEmpty(out.Data.Year, out.Data.FirstAired)
+	if len(yearText) >= 4 {
+		_, _ = fmt.Sscanf(yearText[:4], "%d", &m.Year)
+	}
+	for _, genre := range out.Data.Genres {
+		if strings.TrimSpace(genre.Name) != "" {
+			m.Genres = append(m.Genres, genre.Name)
+		}
+	}
+	return m, nil
+}
+
+func normalizeTheTVDBSeriesID(seriesID string) string {
+	seriesID = strings.TrimSpace(seriesID)
+	if idx := strings.LastIndex(seriesID, "-"); idx >= 0 && idx+1 < len(seriesID) {
+		return seriesID[idx+1:]
+	}
+	return seriesID
 }
 
 // urlEscape is a tiny replacement for net/url.QueryEscape kept inline so

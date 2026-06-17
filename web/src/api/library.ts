@@ -15,6 +15,24 @@ export interface MediaSearchPage {
   page_size?: number
 }
 
+export interface ManualScrapeCandidate {
+  source: string
+  media_type?: string
+  title: string
+  overview?: string
+  poster_url?: string
+  backdrop_url?: string
+  year?: number
+  rating?: number
+  tmdb_id?: number
+  bangumi_id?: number
+  douban_id?: string
+  thetvdb_id?: string
+  languages?: string[]
+  countries?: string[]
+  genres?: string[]
+}
+
 export const libraryAPI = {
   list: (options?: { includeHidden?: boolean }) =>
     api
@@ -56,4 +74,15 @@ export const mediaAPI = {
       .then((r) => r.data),
 
   get: (id: string) => api.get<Media>(`/media/${id}`).then((r) => r.data),
+
+  manualScrapeSearch: (id: string, params: { query: string; provider?: string; media_type?: string }) =>
+    api
+      .get<{ items: ManualScrapeCandidate[] }>(`/media/${id}/scrape/search`, { params })
+      .then((r) => r.data.items),
+
+  applyManualScrape: (id: string, match: ManualScrapeCandidate) =>
+    api.post<Media>(`/media/${id}/scrape/apply`, match).then((r) => r.data),
+
+  applyManualScrapeBatch: (mediaIDs: string[], match: ManualScrapeCandidate) =>
+    api.post<{ applied: number; errors?: string[] }>('/media/scrape/apply', { media_ids: mediaIDs, match }).then((r) => r.data),
 }

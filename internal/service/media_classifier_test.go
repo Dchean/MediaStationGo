@@ -163,6 +163,23 @@ func TestClassifyMediaCategoryMatchesMoviePilotStyleRules(t *testing.T) {
 	}
 }
 
+func TestNormalizeMediaTypeAcceptsChineseLibraryTypes(t *testing.T) {
+	tests := map[string]string{
+		"华语电影": "movie",
+		"欧美剧":  "tv",
+		"国产剧":  "tv",
+		"日漫":   "anime",
+		"国漫":   "anime",
+		"综艺":   "variety",
+		"成人":   "adult",
+	}
+	for input, want := range tests {
+		if got := normalizeMediaType(input, "测试标题", ""); got != want {
+			t.Fatalf("normalizeMediaType(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestSubscriptionResolveClassifiedSavePath(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -263,6 +264,55 @@ func TestSoftDeleteCloudMediaPurgesRecordWithoutRecycleBin(t *testing.T) {
 	}
 	if len(recycle) != 0 {
 		t.Fatalf("cloud media removal must not populate recycle bin: %#v", recycle)
+	}
+}
+
+func TestListRecycleBinPrunesOldRowsOverLimit(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Media{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	now := time.Now()
+	for i := 0; i < maxRecycleBinRecords+5; i++ {
+		deletedAt := now.Add(time.Duration(i) * time.Second)
+		media := model.Media{
+			Base: model.Base{
+				ID:        fmt.Sprintf("media-%03d", i),
+				DeletedAt: gorm.DeletedAt{Time: deletedAt, Valid: true},
+			},
+			Title: fmt.Sprintf("Movie %03d", i),
+			Path:  filepath.Join(t.TempDir(), fmt.Sprintf("Movie %03d.mkv", i)),
+		}
+		if err := db.Unscoped().Create(&media).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	svc := NewMediaService(&config.Config{}, zap.NewNop(), repos)
+	rows, err := svc.ListRecycleBin(t.Context(), 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != maxRecycleBinRecords {
+		t.Fatalf("recycle rows = %d, want %d", len(rows), maxRecycleBinRecords)
+	}
+	var count int64
+	if err := db.Unscoped().Model(&model.Media{}).Where("deleted_at IS NOT NULL").Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != maxRecycleBinRecords {
+		t.Fatalf("stored recycle rows = %d, want %d", count, maxRecycleBinRecords)
+	}
+	var oldCount int64
+	if err := db.Unscoped().Model(&model.Media{}).Where("id IN ?", []string{"media-000", "media-001", "media-002", "media-003", "media-004"}).Count(&oldCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if oldCount != 0 {
+		t.Fatalf("oldest recycle rows were not pruned, count=%d", oldCount)
 	}
 }
 

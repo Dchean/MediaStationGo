@@ -26,4 +26,16 @@ export const notifyChannelsAPI = {
 
   test: (id: string) =>
     api.post<{ message: string }>(`/admin/notify/channels/${id}/test`).then((r) => r.data),
+
+  startTelegramPolling: () =>
+    api.post<{
+      message: string
+      started: number
+      already_running: number
+      skipped: number
+      errors?: string[]
+    }>('/admin/telegram/polling/start').then((r) => r.data),
+
+  stopTelegramPolling: () =>
+    api.post<{ message: string; stopped: number }>('/admin/telegram/polling/stop').then((r) => r.data),
 }

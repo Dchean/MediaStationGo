@@ -959,6 +959,11 @@ func (r *SettingRepository) Set(ctx context.Context, key, value string) error {
 	return r.db.WithContext(ctx).Save(&s).Error
 }
 
+// Delete removes a setting key.
+func (r *SettingRepository) Delete(ctx context.Context, key string) error {
+	return r.db.WithContext(ctx).Where("key = ?", key).Delete(&model.Setting{}).Error
+}
+
 // All returns every key/value pair (used by the admin UI).
 func (r *SettingRepository) All(ctx context.Context) ([]model.Setting, error) {
 	var rows []model.Setting

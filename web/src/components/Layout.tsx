@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import toast from 'react-hot-toast'
@@ -14,9 +14,12 @@ import { AppFooter } from './AppFooter'
 import { useAuthStore } from '../stores/auth'
 import { usePermissionStore } from '../stores/permissions'
 import { usePlayProfileStore } from '../stores/playProfile'
+import { imageURL } from '../api/client'
+import { mediaAPI } from '../api/library'
 import { playProfilesAPI } from '../api/play_profiles'
 import { requestPIN } from './PinDialog'
-import type { PlayProfile } from '../types'
+import type { Media, PlayProfile } from '../types'
+import { groupSeries, seriesCardLink } from '../utils/groupSeries'
 
 export function Layout() {
   const navigate = useNavigate()
@@ -36,6 +39,12 @@ export function Layout() {
   const [profiles, setProfiles] = useState<PlayProfile[]>([])
   const [searchFocused, setSearchFocused] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchItems, setSearchItems] = useState<Media[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchTotal, setSearchTotal] = useState(0)
+  const [searchError, setSearchError] = useState('')
+  const searchSeq = useRef(0)
+  const searchCards = useMemo(() => groupSeries(searchItems).slice(0, 8), [searchItems])
 
   // Auto-collapse sidebar on smaller tablet screens, and auto-hide drawer on path change
   useEffect(() => {
@@ -60,6 +69,48 @@ export function Layout() {
       fetchPermissions().catch(() => undefined)
     }
   }, [fetchPermissions, isPermissionLoading, permissions, user])
+
+  useEffect(() => {
+    if (location.pathname === '/search') {
+      const query = new URLSearchParams(location.search).get('q') ?? ''
+      setSearchQuery(query)
+    }
+  }, [location.pathname, location.search])
+
+  useEffect(() => {
+    const query = searchQuery.trim()
+    const seq = ++searchSeq.current
+    if (!searchFocused || !query) {
+      setSearchItems([])
+      setSearchTotal(0)
+      setSearchError('')
+      setSearchLoading(false)
+      return
+    }
+
+    setSearchLoading(true)
+    setSearchError('')
+    const timer = window.setTimeout(() => {
+      mediaAPI
+        .search(query, 24)
+        .then((data) => {
+          if (seq !== searchSeq.current) return
+          setSearchItems(data.items ?? [])
+          setSearchTotal(data.total ?? (data.items ?? []).length)
+        })
+        .catch(() => {
+          if (seq !== searchSeq.current) return
+          setSearchItems([])
+          setSearchTotal(0)
+          setSearchError('搜索失败，请稍后再试')
+        })
+        .finally(() => {
+          if (seq === searchSeq.current) setSearchLoading(false)
+        })
+    }, 220)
+
+    return () => window.clearTimeout(timer)
+  }, [searchFocused, searchQuery])
 
   useEffect(() => {
     if (!user) {
@@ -108,6 +159,7 @@ export function Layout() {
     e.preventDefault()
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)
+      setSearchFocused(false)
     }
   }
 
@@ -349,8 +401,10 @@ export function Layout() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onMouseDown={() => setSearchFocused(true)}
+                onClick={() => setSearchFocused(true)}
                 onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
+                onBlur={() => window.setTimeout(() => setSearchFocused(false), 120)}
                 placeholder="搜索电影、电视剧、演员、种子站点..."
                 className="w-full rounded-full border border-gray-200 bg-gray-50/50 py-2.5 pl-11 pr-12 text-sm text-gray-900 placeholder-gray-500 outline-none transition-all duration-300 focus:border-brand-500 focus:bg-white focus:ring-4 focus:ring-brand-100/40"
               />
@@ -359,6 +413,79 @@ export function Layout() {
                   Enter
                 </span>
               </div>
+              <AnimatePresence>
+                {searchFocused && searchQuery.trim() && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                    transition={{ duration: 0.14 }}
+                    onMouseDown={(event) => event.preventDefault()}
+                    className="absolute left-0 right-0 top-full z-50 mt-3 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+                  >
+                    <div className="max-h-[420px] overflow-y-auto p-2">
+                      {searchLoading && (
+                        <div className="flex items-center gap-2 px-3 py-4 text-sm text-gray-500">
+                          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+                          搜索中...
+                        </div>
+                      )}
+                      {!searchLoading && searchError && (
+                        <div className="px-3 py-4 text-sm text-red-500">{searchError}</div>
+                      )}
+                      {!searchLoading && !searchError && searchCards.length === 0 && (
+                        <div className="px-3 py-4 text-sm text-gray-500">没有找到匹配的本地媒体</div>
+                      )}
+                      {!searchLoading && !searchError && searchCards.length > 0 && (
+                        <div className="space-y-1">
+                          {searchCards.map((card) => (
+                            <Link
+                              key={card.key}
+                              to={seriesCardLink(card)}
+                              onClick={() => setSearchFocused(false)}
+                              className="flex items-center gap-3 rounded-xl px-2.5 py-2 transition-colors hover:bg-gray-50"
+                            >
+                              <div className="h-14 w-10 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                                {card.rep.poster_url ? (
+                                  <img
+                                    src={imageURL(card.rep.poster_url)}
+                                    alt={card.rep.title}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-gray-400">
+                                    <LibraryIcon size={16} />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold text-gray-900">
+                                  {card.rep.title || card.rep.original_name || '未命名媒体'}
+                                </div>
+                                <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
+                                  {card.rep.year ? <span>{card.rep.year}</span> : null}
+                                  <span>{card.count > 1 ? `${card.count} 集/条目` : '单条媒体'}</span>
+                                  {card.rep.width ? <span>{card.rep.width}x{card.rep.height}</span> : null}
+                                </div>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <Link
+                      to={`/search?q=${encodeURIComponent(searchQuery.trim())}`}
+                      onClick={() => setSearchFocused(false)}
+                      className="flex items-center justify-between border-t border-gray-100 px-4 py-3 text-sm font-semibold text-brand-600 hover:bg-brand-50/60"
+                    >
+                      <span>查看全部搜索结果</span>
+                      <span className="text-xs text-gray-500">
+                        {searchTotal > 0 ? `${searchTotal} 个条目` : 'Enter'}
+                      </span>
+                    </Link>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </form>
           </div>
 

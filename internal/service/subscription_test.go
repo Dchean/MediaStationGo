@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
+	"github.com/ShukeBta/MediaStationGo/internal/config"
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 	"github.com/ShukeBta/MediaStationGo/internal/repository"
 )
@@ -125,6 +126,101 @@ func TestStableSiteSearchGUIDIgnoresPrivateTokenChanges(t *testing.T) {
 	}
 	if strings.Contains(first, "passkey") || strings.Contains(first, "old") || strings.Contains(first, "new") {
 		t.Fatalf("stableSiteSearchGUID leaked private token: %q", first)
+	}
+}
+
+func TestDeleteSubscriptionRemovesDownloaderTaskAndSeenState(t *testing.T) {
+	const title = "Delete Subscription Show S01E01 1080p"
+	const hash = "abcdef1234567890abcdef1234567890abcdef12"
+	var deleteCalls atomic.Int32
+	qb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			_, _ = w.Write([]byte("Ok."))
+		case "/api/v2/torrents/info":
+			_, _ = w.Write([]byte(`[{"hash":"` + hash + `","name":"` + title + `","state":"downloading","progress":0.2}]`))
+		case "/api/v2/torrents/delete":
+			deleteCalls.Add(1)
+			if got := r.FormValue("deleteFiles"); got != "false" {
+				t.Fatalf("deleteFiles = %q, want false", got)
+			}
+			_, _ = w.Write([]byte("Ok."))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer qb.Close()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Subscription{}, &model.DownloadTask{}, &model.DownloadClient{}, &model.Setting{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	configureTestDefaultQB(t, repos, qb.URL)
+	downloads := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	if err := downloads.ReloadConfig(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewSubscriptionService(nil, zap.NewNop(), repos, downloads, nil, NewHub(zap.NewNop()))
+	sub := &model.Subscription{Name: "Delete Subscription Show 自动订阅", Filter: "Delete Subscription Show", FeedURL: "https://rss.example/feed", UserID: "u1", SavePath: "/downloads/tv"}
+	if err := repos.Subscription.Create(t.Context(), sub); err != nil {
+		t.Fatal(err)
+	}
+	task := &model.DownloadTask{
+		UserID:         "u1",
+		SubscriptionID: sub.ID,
+		Source:         "qbittorrent",
+		URL:            "https://pt.example/download?id=1",
+		Title:          title,
+		SavePath:       "/downloads/tv",
+		Status:         "downloading",
+		Progress:       0.2,
+	}
+	if err := repos.Download.Create(t.Context(), task); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Setting.Set(t.Context(), "subscription."+sub.ID+".seen", "guid-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.Delete(t.Context(), sub.ID); err != nil {
+		t.Fatalf("delete subscription: %v", err)
+	}
+	if got := deleteCalls.Load(); got != 1 {
+		t.Fatalf("qb delete calls = %d, want 1", got)
+	}
+	var updated model.DownloadTask
+	if err := db.Where("id = ?", task.ID).First(&updated).Error; err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != "deleted" {
+		t.Fatalf("download task status = %q, want deleted", updated.Status)
+	}
+	seen, err := repos.Setting.Get(t.Context(), "subscription."+sub.ID+".seen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen != "" {
+		t.Fatalf("seen state = %q, want cleared", seen)
+	}
+	var count int64
+	if err := db.Model(&model.Subscription{}).Where("id = ?", sub.ID).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("active subscription count = %d, want 0", count)
+	}
+}
+
+func TestDeletedDownloadTaskDoesNotBlockSubscriptionReadd(t *testing.T) {
+	if downloadTaskBlocksReadd("deleted") {
+		t.Fatal("deleted download task must not block subscription re-add")
+	}
+	if downloadTaskBlocksReadd("removed") {
+		t.Fatal("removed download task must not block subscription re-add")
 	}
 }
 
@@ -390,7 +486,7 @@ func TestSubscriptionLocalAvailabilityMatchesMediaPath(t *testing.T) {
 	}
 }
 
-func TestSubscriptionPendingDownloadAvailabilityIncludesUserDeletedTasks(t *testing.T) {
+func TestSubscriptionPendingDownloadAvailabilityIgnoresDeletedTasks(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -418,16 +514,16 @@ func TestSubscriptionPendingDownloadAvailabilityIncludesUserDeletedTasks(t *test
 	}
 
 	availability := svc.pendingDownloadAvailability(t.Context(), sub)
-	if _, ok := availability.ExistingEpisodeKeys[episodeKey(1, 2)]; !ok {
-		t.Fatalf("missing user-deleted E02 key: %#v", availability.ExistingEpisodeKeys)
+	if _, ok := availability.ExistingEpisodeKeys[episodeKey(1, 2)]; ok {
+		t.Fatalf("deleted E02 task should not count as available: %#v", availability.ExistingEpisodeKeys)
 	}
 	results := []SearchResult{
 		{Title: "间谍过家家 S01E02 1080p WEB-DL", DownloadURL: "https://pt/download/2", Seeders: 80},
 		{Title: "间谍过家家 S01E03 1080p WEB-DL", DownloadURL: "https://pt/download/3", Seeders: 70},
 	}
 	got := selectSiteSearchCandidates(results, sub, map[string]struct{}{}, availability)
-	if len(got) != 1 || got[0].Episode != 3 {
-		t.Fatalf("selected %#v, want only not-yet-deleted episode 3", got)
+	if len(got) != 2 || got[0].Episode != 2 || got[1].Episode != 3 {
+		t.Fatalf("selected %#v, want deleted episode 2 and new episode 3", got)
 	}
 }
 
@@ -601,6 +697,70 @@ func TestSubscriptionArchiveCompletedSingleEpisodeTV(t *testing.T) {
 	}
 	if len(history) != 1 || history[0].ArchiveReason == "" {
 		t.Fatalf("history = %#v, want archived single episode", history)
+	}
+}
+
+func TestSubscriptionArchiveKeepsGenericUnknownTotalSeriesActive(t *testing.T) {
+	sub := &model.Subscription{
+		Name:      "Some Show 自动订阅",
+		Filter:    "Some Show",
+		MediaType: "tv",
+	}
+	availability := LocalAvailability{
+		DownloadedEpisodes: 1,
+		LocalMediaCount:    1,
+		InLibrary:          true,
+		ExistingEpisodeKeys: map[string]struct{}{
+			episodeKey(1, 1): {},
+		},
+	}
+	if subscriptionShouldArchive(sub, availability) {
+		t.Fatal("generic series with unknown total should stay active for incremental episodes")
+	}
+}
+
+func TestInferSubscriptionTotalEpisodesFromSearchAndRSS(t *testing.T) {
+	sub := &model.Subscription{Name: "Some Show 自动订阅", Filter: "Some Show", MediaType: "tv"}
+	results := []SearchResult{
+		{Title: "Some Show S01E01 1080p"},
+		{Title: "Some Show S01E12 1080p"},
+		{Title: "Other Show S01E99 1080p"},
+	}
+	if got := inferSearchTotalEpisodes(results, sub); got != 12 {
+		t.Fatalf("search inferred total = %d, want 12", got)
+	}
+	items := []rssItem{
+		{Title: "Some Show S01E02 WEB-DL"},
+		{Title: "Some Show S01E10 WEB-DL"},
+	}
+	if got := inferRSSTotalEpisodes(items, sub, compileFilter("Some Show")); got != 10 {
+		t.Fatalf("rss inferred total = %d, want 10", got)
+	}
+}
+
+func TestResolveSubscriptionTotalEpisodesPrefersTMDbOverTitleFallback(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/search/tv":
+			_, _ = w.Write([]byte(`{"results":[{"id":42,"name":"Some Show","first_air_date":"2026-01-01"}]}`))
+		case "/tv/42":
+			_, _ = w.Write([]byte(`{"number_of_episodes":13}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	cfg := &config.Config{}
+	cfg.Secrets.TMDbAPIKey = "test"
+	cfg.Secrets.TMDbAPIProxy = upstream.URL
+	tmdb := NewTMDbProvider(cfg, zap.NewNop(), nil)
+	svc := NewSubscriptionService(cfg, zap.NewNop(), nil, nil, nil, NewHub(zap.NewNop()))
+	svc.SetScraper(NewScraperService(cfg, zap.NewNop(), nil, tmdb, nil, nil, nil, NewHub(zap.NewNop())))
+
+	sub := &model.Subscription{Name: "Some Show 自动订阅", Filter: "Some Show", MediaType: "tv"}
+	if got := svc.resolveSubscriptionTotalEpisodes(t.Context(), sub, 10); got != 13 {
+		t.Fatalf("resolved total = %d, want TMDb total 13", got)
 	}
 }
 

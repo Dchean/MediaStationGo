@@ -136,6 +136,18 @@ func normalizeMediaType(mediaType, title, category string) string {
 	case "adult", "nsfw":
 		return "adult"
 	}
+	switch {
+	case containsAnyText(raw, "成人", "番号", "jav", "nsfw"):
+		return "adult"
+	case containsAnyText(raw, "综艺", "真人秀"):
+		return "variety"
+	case containsAnyText(raw, "国漫", "日漫", "日番", "动漫", "动画", "anime", "bangumi") && !containsAnyText(raw, "动画电影"):
+		return "anime"
+	case containsAnyText(raw, "电视剧", "国产剧", "欧美剧", "日韩剧", "日剧", "韩剧", "剧集", "tv", "series"):
+		return "tv"
+	case containsAnyText(raw, "电影", "movie", "film"):
+		return "movie"
+	}
 	text := strings.ToLower(title + " " + category)
 	switch {
 	case strings.Contains(text, "adult") || strings.Contains(text, "nsfw") || strings.Contains(text, "成人") || strings.Contains(text, "番号") || strings.Contains(text, "jav") || strings.Contains(text, "9kg") || classifierJAVCodeRE.MatchString(strings.ToUpper(title+" "+category)):

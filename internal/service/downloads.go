@@ -102,6 +102,7 @@ func IsDownloadDedupError(err error) bool {
 // deliberately separate from the private torrent URL so API responses never
 // need to expose tracker tokens.
 type DownloadTaskMeta struct {
+	SubscriptionID       string
 	Title                string
 	PosterURL            string
 	BackdropURL          string
@@ -288,7 +289,7 @@ func (d *DownloadService) AddDownloadWithMeta(ctx context.Context, userID, urlSt
 	if !meta.AllowExistingLibrary && d.localMediaAlreadyExists(ctx, title) {
 		return nil, ErrMediaAlreadyInLibrary
 	}
-	if existing, ok := d.findExistingDownloadTask(ctx, title); ok {
+	if existing, ok := d.findExistingDownloadTask(ctx, title, strings.TrimSpace(meta.SubscriptionID) != ""); ok {
 		return existing, ErrDownloadAlreadyExists
 	}
 	_ = d.ReloadConfig(ctx)
@@ -443,7 +444,7 @@ func localAvailabilityTitleCandidates(title string) []string {
 	return out
 }
 
-func (d *DownloadService) findExistingDownloadTask(ctx context.Context, title string) (*model.DownloadTask, bool) {
+func (d *DownloadService) findExistingDownloadTask(ctx context.Context, title string, allowDeletedReadd bool) (*model.DownloadTask, bool) {
 	key := downloadTaskIdentityKey(title)
 	if key == "" || d == nil || d.repo == nil || d.repo.Download == nil {
 		return nil, false
@@ -453,7 +454,11 @@ func (d *DownloadService) findExistingDownloadTask(ctx context.Context, title st
 		return nil, false
 	}
 	for i := range rows {
-		if !downloadTaskBlocksReadd(rows[i].Status) {
+		if allowDeletedReadd {
+			if !downloadTaskBlocksReadd(rows[i].Status) {
+				continue
+			}
+		} else if !downloadTaskBlocksDuplicate(rows[i].Status) {
 			continue
 		}
 		current := downloadTaskIdentityKey(rows[i].Title)
@@ -464,9 +469,18 @@ func (d *DownloadService) findExistingDownloadTask(ctx context.Context, title st
 	return nil, false
 }
 
+func downloadTaskBlocksDuplicate(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "error", "removed", "cancelled", "canceled":
+		return false
+	default:
+		return true
+	}
+}
+
 func downloadTaskBlocksReadd(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "failed", "error":
+	case "failed", "error", "deleted", "removed", "cancelled", "canceled":
 		return false
 	default:
 		return true
@@ -546,6 +560,7 @@ func (d *DownloadService) createTask(ctx context.Context, userID, urlStr, savePa
 	}
 	t := &model.DownloadTask{
 		UserID:               userID,
+		SubscriptionID:       strings.TrimSpace(meta.SubscriptionID),
 		Source:               "qbittorrent",
 		URL:                  urlStr,
 		Title:                title,

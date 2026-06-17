@@ -74,6 +74,10 @@ func qbitLoginOnce(ctx context.Context, client *http.Client, baseURL, username, 
 	switch {
 	case resp.StatusCode == http.StatusOK && text == "Ok.":
 		return nil
+	case resp.StatusCode == http.StatusOK && text == "Ok":
+		return nil
+	case resp.StatusCode == http.StatusNoContent:
+		return nil
 	case resp.StatusCode == http.StatusOK && text == "Fails.":
 		return errQbitBadCredentials
 	case resp.StatusCode == http.StatusForbidden:

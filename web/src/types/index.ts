@@ -127,6 +127,8 @@ export interface Media {
   scrape_status: string
   tmdb_id: number
   bangumi_id: number
+  douban_id?: string
+  thetvdb_id?: string
   languages?: string
   countries?: string
   genres?: string

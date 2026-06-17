@@ -167,7 +167,7 @@ func WriteMediaNFO(m *model.Media) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dst := nfoPath(m.Path)
+	dst := nfoPath(resolveMappedDestinationPath(m.Path))
 	if err := os.WriteFile(dst, []byte(xml.Header+string(out)+"\n"), 0o644); err != nil { // #nosec G306 -- NFO sidecars must remain readable by media players.
 		return "", err
 	}

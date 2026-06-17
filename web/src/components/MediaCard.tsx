@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Film, Play, Layers, Star } from 'lucide-react'
@@ -6,7 +6,7 @@ import { imageURL } from '../api/client'
 import type { Media } from '../types'
 
 export const MediaCard = ({
-  media, progress, count, rating, linkTo, onClick,
+  media, progress, count, rating, linkTo, onClick, actions,
 }: {
   media: Media
   progress?: number
@@ -14,6 +14,7 @@ export const MediaCard = ({
   rating?: number
   linkTo?: string
   onClick?: () => void
+  actions?: ReactNode
 }) => {
   const ref = useRef<HTMLDivElement>(null)
   const href = linkTo ?? `/media/${media.id}`
@@ -131,15 +132,35 @@ export const MediaCard = ({
 
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className="group block w-full text-left">
-        {card}
-      </button>
+      <div className="group relative block w-full">
+        <button type="button" onClick={onClick} className="block w-full text-left">
+          {card}
+        </button>
+        {actions && (
+          <div className="absolute right-2 top-2 z-20 flex flex-wrap justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            {actions}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (actions) {
+    return (
+      <div className="group relative block">
+        <Link to={href} className="block">
+          {card}
+        </Link>
+        <div className="absolute right-2 top-2 z-20 flex flex-wrap justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          {actions}
+        </div>
+      </div>
     )
   }
 
   return (
     <Link to={href} className="group block">
-      {card}
+        {card}
     </Link>
   )
 }

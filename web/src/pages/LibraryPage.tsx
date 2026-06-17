@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Play, Film } from 'lucide-react'
+import { ArrowLeft, Play, Film, Database, FileText, Search, Sparkles, Trash2 } from 'lucide-react'
 
 import { libraryAPI } from '../api/library'
 import { storageAPI, type CloudScanStatus } from '../api/storage_config'
+import { api } from '../api/client'
+import { recycleAPI } from '../api/recycle'
 import type { Library, Media } from '../types'
 import { MediaCard } from '../components/MediaCard'
 import { ExternalPlayerButton } from '../components/ExternalPlayerButton'
@@ -13,6 +15,8 @@ import { imageURL } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { getSeriesKey, groupSeries, isEpisodeLike, seriesTitle, type SeriesCard } from '../utils/groupSeries'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { confirmAction } from '../components/ConfirmDialog'
+import { ManualScrapeDialog } from '../components/ManualScrapeDialog'
 
 export function LibraryPage() {
   const { id = '' } = useParams()
@@ -27,6 +31,10 @@ export function LibraryPage() {
   const [scanning, setScanning] = useState(false)
   const [scanProgress, setScanProgress] = useState('')
   const [scraping, setScraping] = useState(false)
+  const [seriesToolBusy, setSeriesToolBusy] = useState('')
+  const [manualSeriesScrapeOpen, setManualSeriesScrapeOpen] = useState(false)
+  const [manualMovie, setManualMovie] = useState<Media | null>(null)
+  const [movieToolBusy, setMovieToolBusy] = useState('')
 
   // 剧集模式：选中某个剧集后展开详情
   const [selectedSeries, setSelectedSeries] = useState<SeriesCard | null>(null)
@@ -64,6 +72,16 @@ export function LibraryPage() {
     if (selectedSeason == null) return selectedEpisodes[0]?.episodes ?? []
     return selectedEpisodes.find((s) => s.season === selectedSeason)?.episodes ?? []
   }, [selectedEpisodes, selectedSeason])
+
+  const selectedSeriesEpisodes = useMemo(
+    () => selectedEpisodes.flatMap((season) => season.episodes),
+    [selectedEpisodes],
+  )
+
+  const selectedSeriesMediaIDs = useMemo(
+    () => selectedSeriesEpisodes.map((ep) => ep.id),
+    [selectedSeriesEpisodes],
+  )
 
   useEffect(() => {
     if (!id) return
@@ -255,6 +273,107 @@ export function LibraryPage() {
     finally { setScraping(false) }
   }
 
+  const runSeriesTool = async (key: string, label: string, action: (media: Media) => Promise<unknown>) => {
+    if (selectedSeriesEpisodes.length === 0) return
+    setSeriesToolBusy(key)
+    try {
+      for (const ep of selectedSeriesEpisodes) {
+        await action(ep)
+      }
+      toast.success(`${label}完成：${selectedSeriesEpisodes.length} 个媒体`)
+      reloadCurrentLibrary()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || `${label}失败`
+      toast.error(msg)
+    } finally {
+      setSeriesToolBusy('')
+    }
+  }
+
+  const handleSeriesSmartScrape = () => {
+    runSeriesTool('scrape', '整剧智能刮削', (media) => api.post(`/media/${media.id}/scrape`))
+  }
+
+  const handleSeriesProbe = () => {
+    runSeriesTool('probe', '整剧媒体轨探测', (media) => api.post(`/media/${media.id}/probe`))
+  }
+
+  const handleSeriesNFO = () => {
+    runSeriesTool('nfo', '整剧 NFO 写出', (media) => recycleAPI.exportNFO(media.id))
+  }
+
+  const handleSeriesSoftDelete = async () => {
+    if (!selectedSeries || selectedSeriesEpisodes.length === 0) return
+    if (!(await confirmAction({
+      title: '移入回收站',
+      message: `将「${seriesTitle(selectedSeries.rep)}」的 ${selectedSeriesEpisodes.length} 个媒体移至回收站? (磁盘文件保留)`,
+      confirmText: '移入回收站',
+    }))) return
+    await runSeriesTool('delete', '整剧移入回收站', (media) => recycleAPI.softDelete(media.id))
+    clearSelectedSeries()
+  }
+
+  const runMovieTool = async (media: Media, key: string, label: string, action: (media: Media) => Promise<unknown>) => {
+    const busyKey = `${key}:${media.id}`
+    setMovieToolBusy(busyKey)
+    try {
+      await action(media)
+      toast.success(`${label}完成：${media.title}`)
+      reloadCurrentLibrary()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || `${label}失败`
+      toast.error(msg)
+    } finally {
+      setMovieToolBusy('')
+    }
+  }
+
+  const handleMovieSmartScrape = (media: Media) => {
+    runMovieTool(media, 'scrape', '智能刮削', (item) => api.post(`/media/${item.id}/scrape`))
+  }
+
+  const handleMovieProbe = (media: Media) => {
+    runMovieTool(media, 'probe', '媒体轨探测', (item) => api.post(`/media/${item.id}/probe`))
+  }
+
+  const handleMovieNFO = (media: Media) => {
+    runMovieTool(media, 'nfo', 'NFO 写出', (item) => recycleAPI.exportNFO(item.id))
+  }
+
+  const handleMovieSoftDelete = async (media: Media) => {
+    if (!(await confirmAction({
+      title: '移入回收站',
+      message: `将「${media.title}」移至回收站? (磁盘文件保留)`,
+      confirmText: '移入回收站',
+    }))) return
+    await runMovieTool(media, 'delete', '移入回收站', (item) => recycleAPI.softDelete(item.id))
+  }
+
+  const movieActions = (media: Media) => {
+    if (role !== 'admin') return undefined
+    const busy = movieToolBusy.endsWith(`:${media.id}`)
+    const buttonClass = 'flex h-8 w-8 items-center justify-center rounded-lg border border-white/70 bg-white/90 text-gray-700 shadow-sm backdrop-blur transition hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50'
+    return (
+      <>
+        <button title="智能刮削" disabled={busy} onClick={() => handleMovieSmartScrape(media)} className={buttonClass}>
+          <Sparkles size={13} />
+        </button>
+        <button title="手动匹配刮削" disabled={busy} onClick={() => setManualMovie(media)} className={buttonClass}>
+          <Search size={13} />
+        </button>
+        <button title="探测媒体轨" disabled={busy} onClick={() => handleMovieProbe(media)} className={buttonClass}>
+          <Database size={13} />
+        </button>
+        <button title="写出本地 NFO" disabled={busy} onClick={() => handleMovieNFO(media)} className={buttonClass}>
+          <FileText size={13} />
+        </button>
+        <button title="移入回收站" disabled={busy} onClick={() => handleMovieSoftDelete(media)} className={`${buttonClass} hover:!bg-red-50 hover:!text-red-500`}>
+          <Trash2 size={13} />
+        </button>
+      </>
+    )
+  }
+
   const handleSeriesClick = (card: SeriesCard) => {
     setSelectedSeries(card)
     const next = new URLSearchParams(searchParams)
@@ -309,7 +428,7 @@ export function LibraryPage() {
       {!isSeries && items.length > 0 && (
         <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
           {items.map((m) => (
-            <MediaCard key={m.id} media={m} />
+            <MediaCard key={m.id} media={m} actions={movieActions(m)} />
           ))}
         </div>
       )}
@@ -386,6 +505,34 @@ export function LibraryPage() {
                     </div>
                   ) : null
                 })()}
+
+                {role === 'admin' && selectedSeriesEpisodes.length > 0 && (
+                  <div className="rounded-2xl border border-sand-200 bg-white/80 p-4 shadow-sm">
+                    <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#c9954a]">系统后台高级控制面板</p>
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={handleSeriesSmartScrape} disabled={!!seriesToolBusy} className="btn-outline py-2 px-3.5 text-xs gap-1.5">
+                        <Sparkles size={13} className="text-[#c9954a]" />
+                        <span>{seriesToolBusy === 'scrape' ? '刮削中…' : '整剧智能刮削'}</span>
+                      </button>
+                      <button onClick={() => setManualSeriesScrapeOpen(true)} disabled={!!seriesToolBusy} className="btn-outline py-2 px-3.5 text-xs gap-1.5">
+                        <Search size={13} className="text-[#c9954a]" />
+                        <span>手动匹配整剧</span>
+                      </button>
+                      <button onClick={handleSeriesProbe} disabled={!!seriesToolBusy} className="btn-outline py-2 px-3.5 text-xs gap-1.5">
+                        <Database size={13} />
+                        <span>{seriesToolBusy === 'probe' ? '探测中…' : '探测媒体轨'}</span>
+                      </button>
+                      <button onClick={handleSeriesNFO} disabled={!!seriesToolBusy} className="btn-outline py-2 px-3.5 text-xs gap-1.5">
+                        <FileText size={13} />
+                        <span>{seriesToolBusy === 'nfo' ? '写出中…' : '写出本地 NFO'}</span>
+                      </button>
+                      <button onClick={handleSeriesSoftDelete} disabled={!!seriesToolBusy} className="btn-outline py-2 px-3.5 text-xs gap-1.5 !border-red-100 !text-red-500 hover:!bg-red-50 hover:!border-red-200">
+                        <Trash2 size={13} />
+                        <span>{seriesToolBusy === 'delete' ? '处理中…' : '移入回收站'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -451,6 +598,26 @@ export function LibraryPage() {
           <p className="text-ink-50">该库尚未发现任何剧集，触发一次扫描后再来看看</p>
         </div>
       )}
+
+      <ManualScrapeDialog
+        open={manualSeriesScrapeOpen}
+        media={selectedSeries?.rep ?? null}
+        mediaIds={selectedSeriesMediaIDs}
+        defaultQuery={selectedSeries ? seriesTitle(selectedSeries.rep) : ''}
+        mediaType={library?.type || 'tv'}
+        scopeLabel={selectedSeries ? seriesTitle(selectedSeries.rep) : '当前剧集'}
+        onClose={() => setManualSeriesScrapeOpen(false)}
+        onApplied={reloadCurrentLibrary}
+      />
+      <ManualScrapeDialog
+        open={!!manualMovie}
+        media={manualMovie}
+        defaultQuery={manualMovie?.title ?? ''}
+        mediaType={library?.type || 'movie'}
+        scopeLabel={manualMovie?.title ?? '当前电影'}
+        onClose={() => setManualMovie(null)}
+        onApplied={reloadCurrentLibrary}
+      />
     </div>
   )
 }

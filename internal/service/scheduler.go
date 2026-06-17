@@ -662,7 +662,7 @@ func (s *SchedulerService) jobPurgeRecycleBin(ctx context.Context) error {
 	if res.Error != nil && !isMissingTableErr(res.Error) {
 		return res.Error
 	}
-	return nil
+	return pruneRecycleBinRows(ctx, s.repo.DB, maxRecycleBinRecords)
 }
 
 // isMissingTableErr lets the test harness ignore "no such table" errors

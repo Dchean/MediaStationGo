@@ -83,8 +83,8 @@ func telegramGetWebhookHandler(svc *service.Container) gin.HandlerFunc {
 // 路由：POST /api/admin/telegram/polling/start (需 admin 认证)
 func telegramStartPollingHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		svc.TelegramBot.StartPolling(c.Request.Context())
-		c.JSON(http.StatusOK, gin.H{"message": "polling started"})
+		result := svc.TelegramBot.StartPolling(c.Request.Context())
+		c.JSON(http.StatusOK, result)
 	}
 }
 
@@ -93,7 +93,7 @@ func telegramStartPollingHandler(svc *service.Container) gin.HandlerFunc {
 // 路由：POST /api/admin/telegram/polling/stop (需 admin 认证)
 func telegramStopPollingHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		svc.TelegramBot.StopPolling()
-		c.JSON(http.StatusOK, gin.H{"message": "polling stopped"})
+		stopped := svc.TelegramBot.StopPolling()
+		c.JSON(http.StatusOK, gin.H{"message": "polling stopped", "stopped": stopped})
 	}
 }

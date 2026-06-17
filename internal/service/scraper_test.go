@@ -45,6 +45,22 @@ func TestCleanQuery(t *testing.T) {
 	}
 }
 
+func TestManualRequestMatchFallsBackToCandidatePayload(t *testing.T) {
+	scraper := &ScraperService{}
+	match, err := scraper.manualRequestMatch(t.Context(), ManualScrapeRequest{
+		Source:   "douban",
+		Title:    "手动选择的电影",
+		DoubanID: "1234567",
+		Year:     2026,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if match.Title != "手动选择的电影" || match.DoubanID != "1234567" || match.Year != 2026 {
+		t.Fatalf("fallback match = %#v", match)
+	}
+}
+
 func TestScrapeQueryCandidatesPreferSeriesFolderAndCJKTitle(t *testing.T) {
 	lib := &model.Library{
 		Path: `F:\downloads\国产剧`,

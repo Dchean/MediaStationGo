@@ -86,6 +86,17 @@ type TelegramBotService struct {
 	pending   map[int64]pendingInput // telegram_user_id -> awaited text input
 }
 
+// TelegramPollingStartResult describes what happened when local long polling
+// was requested. The admin UI uses it to avoid a silent "started" toast when
+// no Telegram channel can actually poll.
+type TelegramPollingStartResult struct {
+	Message        string   `json:"message"`
+	Started        int      `json:"started"`
+	AlreadyRunning int      `json:"already_running"`
+	Skipped        int      `json:"skipped"`
+	Errors         []string `json:"errors,omitempty"`
+}
+
 // pendingInput tracks a button-initiated action that awaits the user's next
 // text message (e.g. tapping「注册」then sending "用户名 密码").
 type pendingInput struct {
@@ -503,8 +514,8 @@ func (s *TelegramBotService) cmdHelp(ctx context.Context, msg *TelegramMessage) 
 			"<b>/signin</b> — 签到\n" +
 			"<b>/devices</b> — 查看登录设备\n" +
 			"<b>/kick all|编号</b> — 踢下线设备\n" +
-			"<b>/setname 新用户名</b> — 修改用户名\n" +
-			"<b>/setpass 新密码</b> — 修改密码\n" +
+			"<b>/setname 当前密码 新用户名</b> — 修改用户名\n" +
+			"<b>/setpass 当前密码 新密码</b> — 修改密码\n" +
 			"<b>/redeem 兑换码</b> — 注册或续期兑换\n" +
 			"<b>/hideadult on|off</b> — 隐藏或显示成人目录\n\n" +
 			"系统状态、搜索、下载列表与统计命令仅管理员可用。"
@@ -514,7 +525,7 @@ func (s *TelegramBotService) cmdHelp(ctx context.Context, msg *TelegramMessage) 
 		"<b>/help</b> — 帮助信息\n" +
 		"<b>/account</b> / <b>/devices</b> / <b>/kick all|编号</b> — 用户自助设备管理\n" +
 		"<b>/signin</b> / <b>/redeem 兑换码</b> — 签到与兑换\n" +
-		"<b>/setname 新用户名</b> / <b>/setpass 新密码</b> — 用户自助改名改密\n" +
+		"<b>/setname 当前密码 新用户名</b> / <b>/setpass 当前密码 新密码</b> — 用户自助改名改密\n" +
 		"<b>/register 用户名 密码</b> — 注册新账号（需管理员开启）\n" +
 		"<b>/registration on [名额]|off</b> — 开启/关闭普通用户注册（管理员）\n" +
 		"<b>/capacity</b> / <b>/users</b> — 容量与用户管理（管理员）\n" +
@@ -533,17 +544,22 @@ func (s *TelegramBotService) cmdHelp(ctx context.Context, msg *TelegramMessage) 
 		"<b>/search 关键词</b> — 搜索媒体库\n" +
 		"<b>/downloads</b> — 下载列表\n" +
 		"<b>/stats</b> — 媒体库统计\n\n" +
-		"<b>Mgo 管理命令：</b>\n" +
-		"用户：<code>/ucr</code> <code>/uinfo</code> <code>/rmemby</code> <code>/only_rm_record</code> <code>/renewall</code>\n" +
-		"审计：<code>/userip</code> <code>/auditip</code> <code>/auditdevice</code> <code>/auditclient</code> <code>/udeviceid</code>\n" +
-		"清理：<code>/syncunbound</code> <code>/syncgroupm</code> <code>/check_ex</code> <code>/deleted</code> <code>/low_activity</code>\n" +
-		"权限：<code>/embyadmin</code> <code>/banall</code> <code>/unbanall</code> <code>/prouser</code> <code>/revuser</code> <code>/embylibs_blockall</code> <code>/embylibs_unblockall</code>\n" +
-		"运维：<code>/proadmin</code> <code>/revadmin</code> <code>/backup_db</code> <code>/restore_from_db</code>\n\n" +
+		telegramMgoAdminCommandHelp() + "\n\n" +
 		"<b>自动推送事件：</b>\n" +
 		"• 订阅命中新资源\n" +
 		"• 下载任务完成\n" +
 		"• 刮削失败告警\n" +
 		"• 系统异常通知"
+}
+
+func telegramMgoAdminCommandHelp() string {
+	return "<b>Mgo 管理命令（管理员可用，已注册到命令栏）：</b>\n" +
+		"用户：<code>/ucr 用户名 密码 [天数]</code> 创建账号；<code>/uinfo 用户名</code> 查询账号；<code>/rmemby 用户名 confirm</code> 删除账号；<code>/only_rm_record tg:ID|用户名</code> 仅删 Bot 绑定；<code>/renewall 天数 confirm</code> 批量续期。\n" +
+		"审计：<code>/userip 用户名</code> 查用户 IP；<code>/auditip IP</code> 按 IP 审计；<code>/auditdevice 关键词</code> 按终端设备审计；<code>/auditclient 关键词</code> 按客户端审计；<code>/udeviceid 设备ID</code> 按设备指纹审计。\n" +
+		"清理：<code>/syncunbound</code> 检查未绑定账号；<code>/syncgroupm</code> 校验群成员；<code>/check_ex</code> 检查过期账号；<code>/deleted</code> 按保号规则预览清理候选。\n" +
+		"权限：<code>/embyadmin 用户名 on|off</code> 设置管理员；<code>/banall confirm</code>/<code>/unbanall confirm</code> 批量禁用/解禁；<code>/prouser 用户名</code>/<code>/revuser 用户名</code> 管理保护名单；<code>/embylibs_blockall</code>/<code>/embylibs_unblockall</code> 批量禁用/开放媒体库权限。\n" +
+		"运维：<code>/proadmin TelegramID</code>/<code>/revadmin TelegramID</code> 管理 Bot 管理员；<code>/backup_db</code> 备份数据库；<code>/restore_from_db 文件名 confirm</code> 恢复数据库。\n" +
+		"说明：重复别名如 <code>/low_activity</code>、<code>/urm</code> 仍可兼容识别，但不显示在命令栏。"
 }
 
 // cmdStatus 处理 /status 命令。
@@ -784,36 +800,65 @@ func (s *TelegramBotService) mediaStatsQuery(libraryIDs []string) *gorm.DB {
 // ── Polling ──
 
 // StartPolling 为所有已启用的 Telegram 通知渠道启动长轮询。
-func (s *TelegramBotService) StartPolling(ctx context.Context) {
+func (s *TelegramBotService) StartPolling(ctx context.Context) TelegramPollingStartResult {
+	result := TelegramPollingStartResult{Message: "telegram polling started"}
 	channels, err := s.repo.NotifyChannel.ListByType(ctx, "telegram")
 	if err != nil {
 		s.log.Error("failed to list telegram channels for polling", zap.Error(err))
-		return
+		result.Message = "failed to list telegram channels"
+		result.Errors = append(result.Errors, err.Error())
+		return result
+	}
+	if len(channels) == 0 {
+		result.Message = "no telegram channels configured"
+		result.Errors = append(result.Errors, "没有配置 Telegram 通知渠道")
+		return result
 	}
 
 	for _, ch := range channels {
 		if !ch.Enabled {
+			result.Skipped++
+			result.Errors = append(result.Errors, ch.Name+": 通知渠道未启用")
 			continue
 		}
 		configStr := ch.Config
 		if s.crypto != nil && configStr != "" {
 			configStr = s.crypto.Decrypt(configStr)
 		}
-		var cfg map[string]string
-		if err := json.Unmarshal([]byte(configStr), &cfg); err != nil {
+		var rawCfg map[string]any
+		if err := json.Unmarshal([]byte(configStr), &rawCfg); err != nil {
+			result.Skipped++
+			result.Errors = append(result.Errors, ch.Name+": Telegram 配置解析失败: "+err.Error())
 			continue
 		}
+		cfg := telegramStringConfigFromAny(rawCfg)
 		botToken := cfg["bot_token"]
 		if botToken == "" {
+			result.Skipped++
+			result.Errors = append(result.Errors, ch.Name+": Telegram Bot Token 为空")
 			continue
 		}
+		s.pollingMu.Lock()
+		if _, running := s.pollingCancel[botToken]; running {
+			s.pollingMu.Unlock()
+			result.AlreadyRunning++
+			continue
+		}
+		s.pollingMu.Unlock()
+
 		if err := registerTelegramBotCommands(ctx, cfg); err != nil && s.log != nil {
 			s.log.Warn("telegram setMyCommands failed", zap.Error(sanitizeTelegramError(err)))
+		}
+		if err := deleteTelegramWebhook(ctx, cfg); err != nil {
+			result.Skipped++
+			result.Errors = append(result.Errors, ch.Name+": "+sanitizeTelegramError(err).Error())
+			continue
 		}
 
 		s.pollingMu.Lock()
 		if _, running := s.pollingCancel[botToken]; running {
 			s.pollingMu.Unlock()
+			result.AlreadyRunning++
 			continue
 		}
 		pollCtx, cancel := context.WithCancel(context.Background())
@@ -822,19 +867,27 @@ func (s *TelegramBotService) StartPolling(ctx context.Context) {
 
 		channel := ch
 		go s.pollLoop(pollCtx, cfg, &channel)
+		result.Started++
 		s.log.Info("started telegram polling", zap.String("channel", ch.Name))
 	}
+	if result.Started == 0 && result.AlreadyRunning == 0 {
+		result.Message = "no enabled telegram channels started"
+	}
+	return result
 }
 
 // StopPolling 停止所有 Telegram 长轮询。
-func (s *TelegramBotService) StopPolling() {
+func (s *TelegramBotService) StopPolling() int {
 	s.pollingMu.Lock()
 	defer s.pollingMu.Unlock()
+	stopped := 0
 	for token, cancel := range s.pollingCancel {
 		cancel()
 		delete(s.pollingCancel, token)
+		stopped++
 	}
 	s.log.Info("telegram polling stopped")
+	return stopped
 }
 
 // pollLoop 对单个 Bot Token 执行长轮询。

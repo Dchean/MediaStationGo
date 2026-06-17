@@ -91,7 +91,10 @@ func (s *TelegramBotService) mainMenu(ctx context.Context, channel *model.Notify
 					{Text: "🔓 开注设置", Data: "adm_openreg"},
 					{Text: "🎟 生成兑换码", Data: "adm_gencode"},
 				},
-				[]telegramInlineButton{{Text: "⚙️ 设备策略", Data: "adm_devicepolicy"}},
+				[]telegramInlineButton{
+					{Text: "⚙️ 设备策略", Data: "adm_devicepolicy"},
+					{Text: "🛠 管理命令", Data: "adm_mgo_commands"},
+				},
 			)
 		}
 		return telegramCommandReply{Text: header, Buttons: rows}
@@ -136,7 +139,10 @@ func (s *TelegramBotService) mainMenu(ctx context.Context, channel *model.Notify
 				{Text: "🔓 开注设置", Data: "adm_openreg"},
 				{Text: "🎟 生成兑换码", Data: "adm_gencode"},
 			},
-			[]telegramInlineButton{{Text: "⚙️ 设备策略", Data: "adm_devicepolicy"}},
+			[]telegramInlineButton{
+				{Text: "⚙️ 设备策略", Data: "adm_devicepolicy"},
+				{Text: "🛠 管理命令", Data: "adm_mgo_commands"},
+			},
 		)
 	}
 
@@ -244,6 +250,8 @@ func (s *TelegramBotService) handleMenuCallback(ctx context.Context, channel *mo
 		return s.replyUserRenew(ctx, strings.TrimPrefix(data, "urenew:")), true
 	case data == "adm_devicepolicy":
 		return s.replyDevicePolicy(ctx), true
+	case data == "adm_mgo_commands":
+		return telegramCommandReply{Text: telegramMgoAdminCommandHelp(), Buttons: [][]telegramInlineButton{{{Text: "⬅️ 返回菜单", Data: "menu_main"}}}}, true
 	case strings.HasPrefix(data, "dp_toggle:"):
 		return s.replyDevicePolicyToggle(ctx, strings.TrimPrefix(data, "dp_toggle:")), true
 	}

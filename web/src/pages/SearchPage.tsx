@@ -1,4 +1,5 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { CheckCircle2, Info, Rss, Sparkles } from 'lucide-react'
 
@@ -13,6 +14,8 @@ import { groupSeries, seriesCardLink } from '../utils/groupSeries'
 const LOCAL_SEARCH_PAGE_SIZE = 2000
 
 export function SearchPage() {
+  const [searchParams] = useSearchParams()
+  const urlQuery = searchParams.get('q') ?? ''
   const [q, setQ] = useState('')
   const [items, setItems] = useState<Media[]>([])
   const [loading, setLoading] = useState(false)
@@ -33,6 +36,10 @@ export function SearchPage() {
       .then((s) => setAiAvailable(s.enabled))
       .catch(() => setAiAvailable(false))
   }, [])
+
+  useEffect(() => {
+    setQ(urlQuery)
+  }, [urlQuery])
 
   const doQuickSearch = useCallback((query: string) => {
     const seq = ++searchSeq.current

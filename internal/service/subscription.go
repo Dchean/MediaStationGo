@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	"github.com/ShukeBta/MediaStationGo/internal/config"
 	"github.com/ShukeBta/MediaStationGo/internal/model"
@@ -131,6 +132,19 @@ func (s *SubscriptionService) History(ctx context.Context) ([]model.Subscription
 
 // Delete removes a subscription.
 func (s *SubscriptionService) Delete(ctx context.Context, id string) error {
+	var sub model.Subscription
+	if err := s.repo.DB.WithContext(ctx).Where("id = ?", id).First(&sub).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		return s.repo.DB.WithContext(ctx).Where("id = ?", id).Delete(&model.Subscription{}).Error
+	}
+	if err := s.deleteSubscriptionDownloads(ctx, &sub); err != nil {
+		return err
+	}
+	if s.repo.Setting != nil {
+		_ = s.repo.Setting.Delete(ctx, fmt.Sprintf("subscription.%s.seen", id))
+	}
 	return s.repo.DB.Where("id = ?", id).Delete(&model.Subscription{}).Error
 }
 
@@ -207,6 +221,7 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 	}
 
 	washOff := !sub.WashEnabled
+	s.updateSubscriptionTotalEpisodes(ctx, sub, s.resolveSubscriptionTotalEpisodes(ctx, sub, inferRSSTotalEpisodes(feed.Channel.Items, sub, filter)))
 	availQuery := availabilityQuery(subscriptionName(sub), subscriptionFilter(sub))
 	// RSS 和站点搜索统一使用候选规划：先按订阅规则过滤，再按洗版优先级/集数去重择优。
 	// 非洗版订阅成功下载一次即满足，媒体库与下载中任务会作为可用性输入避免重复下载。
@@ -230,6 +245,7 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 			continue
 		}
 		if _, err := s.downloads.AddDownloadWithMeta(ctx, sub.UserID, download, savePath, DownloadTaskMeta{
+			SubscriptionID:       sub.ID,
 			Title:                firstNonEmpty(item.Title, sub.Name),
 			PosterURL:            sub.PosterURL,
 			BackdropURL:          sub.BackdropURL,
@@ -300,6 +316,7 @@ func (s *SubscriptionService) runSiteSearch(ctx context.Context, sub *model.Subs
 		_ = s.repo.DB.Model(sub).Updates(map[string]any{"last_run_at": &now}).Error
 		return 0, nil
 	}
+	s.updateSubscriptionTotalEpisodes(ctx, sub, s.resolveSubscriptionTotalEpisodes(ctx, sub, inferSearchTotalEpisodes(results, sub)))
 
 	guidKey := fmt.Sprintf("subscription.%s.seen", sub.ID)
 	seenRaw, _ := s.repo.Setting.Get(ctx, guidKey)
@@ -335,6 +352,7 @@ func (s *SubscriptionService) runSiteSearch(ctx context.Context, sub *model.Subs
 			continue
 		}
 		if _, err := s.downloads.AddDownloadWithMeta(ctx, sub.UserID, realURL, savePath, DownloadTaskMeta{
+			SubscriptionID:       sub.ID,
 			Title:                firstNonEmpty(item.Title, sub.Name),
 			PosterURL:            sub.PosterURL,
 			BackdropURL:          sub.BackdropURL,
@@ -474,6 +492,285 @@ func subscriptionArchiveReason(sub *model.Subscription, availability LocalAvaila
 		return "单集订阅已加入下载/入库"
 	}
 	return "订阅媒体已加入下载/入库"
+}
+
+func (s *SubscriptionService) updateSubscriptionTotalEpisodes(ctx context.Context, sub *model.Subscription, total int) {
+	if s == nil || s.repo == nil || s.repo.DB == nil || sub == nil || total <= sub.TotalEpisodes {
+		return
+	}
+	sub.TotalEpisodes = total
+	_ = s.repo.DB.WithContext(ctx).Model(sub).Update("total_episodes", total).Error
+}
+
+func inferRSSTotalEpisodes(items []rssItem, sub *model.Subscription, filter *regexp.Regexp) int {
+	if !subscriptionShouldInferTotal(sub) {
+		return 0
+	}
+	maxEpisode := 0
+	for _, item := range items {
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			continue
+		}
+		if filter != nil && !filter.MatchString(title) {
+			continue
+		}
+		if !subscriptionTitleMatchesQuery(sub, title) {
+			continue
+		}
+		if !matchesSubscriptionRules(sub, title) {
+			continue
+		}
+		_, episode := ParseEpisode(title)
+		if episode > maxEpisode {
+			maxEpisode = episode
+		}
+	}
+	return maxEpisode
+}
+
+func inferSearchTotalEpisodes(results []SearchResult, sub *model.Subscription) int {
+	if !subscriptionShouldInferTotal(sub) {
+		return 0
+	}
+	maxEpisode := 0
+	for _, item := range results {
+		if !subscriptionTitleMatchesQuery(sub, item.Title) {
+			continue
+		}
+		if !matchesSubscriptionRules(sub, item.Title) {
+			continue
+		}
+		_, episode := ParseEpisode(item.Title)
+		if episode > maxEpisode {
+			maxEpisode = episode
+		}
+	}
+	return maxEpisode
+}
+
+func subscriptionShouldInferTotal(sub *model.Subscription) bool {
+	if sub == nil {
+		return false
+	}
+	mediaType := normalizeMediaType(sub.MediaType, sub.Name+" "+sub.Filter, "")
+	return isSubscriptionSeriesType(mediaType)
+}
+
+func (s *SubscriptionService) resolveSubscriptionTotalEpisodes(ctx context.Context, sub *model.Subscription, fallback int) int {
+	if !subscriptionShouldInferTotal(sub) {
+		return 0
+	}
+	if sub.TotalEpisodes > 0 {
+		return sub.TotalEpisodes
+	}
+	if total := s.resolveSubscriptionMetadataTotalEpisodes(ctx, sub); total > 0 {
+		return total
+	}
+	return fallback
+}
+
+func (s *SubscriptionService) resolveSubscriptionMetadataTotalEpisodes(ctx context.Context, sub *model.Subscription) int {
+	if s == nil || s.scraper == nil || sub == nil {
+		return 0
+	}
+	queries := subscriptionEpisodeMetadataQueries(sub)
+
+	// Priority: TMDb -> Douban -> Bangumi -> TheTVDB -> Fanart -> title fallback.
+	// Fanart.tv is artwork-only in MediaStationGo, so it intentionally does not
+	// claim episode counts and lets the title fallback handle the final layer.
+	if s.scraper.tmdb != nil {
+		if id := subscriptionExplicitTMDbID(sub); id > 0 {
+			if total, err := s.scraper.tmdb.GetTVEpisodeCount(ctx, id); err == nil && total > 0 {
+				return total
+			} else if err != nil && s.log != nil {
+				s.log.Debug("subscription tmdb episode count failed", zap.Int("tmdb_id", id), zap.Error(err))
+			}
+		}
+		for _, query := range queries {
+			match, err := s.scraper.tmdb.SearchTV(ctx, query, 0)
+			if err != nil {
+				if s.log != nil {
+					s.log.Debug("subscription tmdb search failed", zap.String("query", query), zap.Error(err))
+				}
+				continue
+			}
+			if match == nil || match.TMDbID <= 0 {
+				continue
+			}
+			total, err := s.scraper.tmdb.GetTVEpisodeCount(ctx, match.TMDbID)
+			if err != nil {
+				if s.log != nil {
+					s.log.Debug("subscription tmdb episode count failed", zap.Int("tmdb_id", match.TMDbID), zap.Error(err))
+				}
+				continue
+			}
+			if total > 0 {
+				return total
+			}
+		}
+	}
+
+	if s.scraper.douban != nil {
+		for _, query := range queries {
+			total, err := s.scraper.douban.GetEpisodeCount(ctx, query)
+			if err != nil {
+				if s.log != nil {
+					s.log.Debug("subscription douban episode count failed", zap.String("query", query), zap.Error(err))
+				}
+				continue
+			}
+			if total > 0 {
+				return total
+			}
+		}
+	}
+
+	if s.scraper.bangumi != nil {
+		for _, query := range queries {
+			match, err := s.scraper.bangumi.Search(ctx, query)
+			if err != nil {
+				if s.log != nil {
+					s.log.Debug("subscription bangumi search failed", zap.String("query", query), zap.Error(err))
+				}
+				continue
+			}
+			if match == nil || match.BangumiID <= 0 {
+				continue
+			}
+			total, err := s.scraper.bangumi.GetEpisodeCount(ctx, match.BangumiID)
+			if err != nil {
+				if s.log != nil {
+					s.log.Debug("subscription bangumi episode count failed", zap.Int("bangumi_id", match.BangumiID), zap.Error(err))
+				}
+				continue
+			}
+			if total > 0 {
+				return total
+			}
+		}
+	}
+
+	if s.scraper.thetvdb != nil {
+		for _, query := range queries {
+			match, err := s.scraper.thetvdb.SearchSeries(ctx, query)
+			if err != nil {
+				if s.log != nil {
+					s.log.Debug("subscription thetvdb search failed", zap.String("query", query), zap.Error(err))
+				}
+				continue
+			}
+			if match == nil || strings.TrimSpace(match.TheTVDBID) == "" {
+				continue
+			}
+			total, err := s.scraper.thetvdb.GetSeriesEpisodeCount(ctx, match.TheTVDBID)
+			if err != nil {
+				if s.log != nil {
+					s.log.Debug("subscription thetvdb episode count failed", zap.String("thetvdb_id", match.TheTVDBID), zap.Error(err))
+				}
+				continue
+			}
+			if total > 0 {
+				return total
+			}
+		}
+	}
+
+	return 0
+}
+
+func subscriptionTitleMatchesQuery(sub *model.Subscription, title string) bool {
+	if strings.TrimSpace(title) == "" {
+		return false
+	}
+	for _, query := range subscriptionTitleMatchQueries(sub) {
+		if strings.Contains(normalizeAvailabilityComparable(title), normalizeAvailabilityComparable(query)) {
+			return true
+		}
+	}
+	return len(subscriptionTitleMatchQueries(sub)) == 0
+}
+
+func subscriptionTitleMatchQueries(sub *model.Subscription) []string {
+	if sub == nil {
+		return nil
+	}
+	return compactUniqueStrings(
+		availabilityQuery(subscriptionName(sub), subscriptionFilter(sub)),
+		cleanAvailabilityTitle(subscriptionFilter(sub)),
+		cleanAvailabilityTitle(subscriptionName(sub)),
+	)
+}
+
+func subscriptionEpisodeMetadataQueries(sub *model.Subscription) []string {
+	if sub == nil {
+		return nil
+	}
+	raw := []string{
+		siteSearchKeyword(sub),
+		sub.Filter,
+		sub.Name,
+		availabilityQuery(subscriptionName(sub), subscriptionFilter(sub)),
+	}
+	out := make([]string, 0, len(raw)*2)
+	for _, value := range raw {
+		value = cleanAvailabilityTitle(value)
+		if value == "" {
+			continue
+		}
+		if cleaned, _ := CleanQuery(value); cleaned != "" {
+			out = append(out, cleaned)
+		}
+		out = append(out, value)
+	}
+	return compactUniqueStrings(out...)
+}
+
+func subscriptionExplicitTMDbID(sub *model.Subscription) int {
+	if sub == nil {
+		return 0
+	}
+	values := []string{sub.Name, sub.Filter, sub.FeedURL}
+	for _, raw := range values {
+		for _, pattern := range []string{`(?i)\btmdb[_:\-\s=]+(\d{2,})`, `(?i)\btmdbid[_:\-\s=]+(\d{2,})`} {
+			if m := regexp.MustCompile(pattern).FindStringSubmatch(raw); len(m) >= 2 {
+				var id int
+				if _, err := fmt.Sscanf(m[1], "%d", &id); err == nil && id > 0 {
+					return id
+				}
+			}
+		}
+		if u, err := url.Parse(raw); err == nil {
+			for _, key := range []string{"tmdb_id", "tmdb", "tmdbid"} {
+				var id int
+				if _, err := fmt.Sscanf(u.Query().Get(key), "%d", &id); err == nil && id > 0 {
+					return id
+				}
+			}
+		}
+	}
+	return 0
+}
+
+func compactUniqueStrings(values ...string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := normalizeAvailabilityComparable(value)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func subscriptionLooksSingleEpisode(sub *model.Subscription) bool {

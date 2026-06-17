@@ -105,6 +105,74 @@ func (b *BangumiProvider) Search(ctx context.Context, query string) (*Match, err
 	return m, nil
 }
 
+func (b *BangumiProvider) GetSubject(ctx context.Context, bangumiID int) (*Match, error) {
+	if bangumiID <= 0 {
+		return nil, nil
+	}
+	u := fmt.Sprintf("%s/v0/subjects/%d", b.base, bangumiID)
+	type subject struct {
+		ID      int    `json:"id"`
+		Name    string `json:"name"`
+		NameCN  string `json:"name_cn"`
+		Summary string `json:"summary"`
+		Air     string `json:"date"`
+		Eps     int    `json:"eps"`
+		Rating  struct {
+			Score float32 `json:"score"`
+		} `json:"rating"`
+		Images struct {
+			Large  string `json:"large"`
+			Common string `json:"common"`
+		} `json:"images"`
+		Tags []struct {
+			Name string `json:"name"`
+		} `json:"tags"`
+	}
+	var r subject
+	if err := b.getJSON(ctx, u, &r); err != nil {
+		return nil, err
+	}
+	title := r.NameCN
+	if title == "" {
+		title = r.Name
+	}
+	m := &Match{
+		BangumiID:    r.ID,
+		Title:        title,
+		OriginalName: r.Name,
+		Overview:     r.Summary,
+		PosterURL:    firstText(r.Images.Large, r.Images.Common),
+		Rating:       r.Rating.Score,
+	}
+	if len(r.Air) >= 4 {
+		_, _ = fmt.Sscanf(r.Air[:4], "%d", &m.Year)
+	}
+	for _, tag := range r.Tags {
+		if strings.TrimSpace(tag.Name) != "" {
+			m.Genres = append(m.Genres, tag.Name)
+		}
+	}
+	return m, nil
+}
+
+func (b *BangumiProvider) GetEpisodeCount(ctx context.Context, bangumiID int) (int, error) {
+	if bangumiID <= 0 {
+		return 0, nil
+	}
+	u := fmt.Sprintf("%s/v0/subjects/%d", b.base, bangumiID)
+	var subject struct {
+		Eps           int `json:"eps"`
+		TotalEpisodes int `json:"total_episodes"`
+	}
+	if err := b.getJSON(ctx, u, &subject); err != nil {
+		return 0, err
+	}
+	if subject.Eps > 0 {
+		return subject.Eps, nil
+	}
+	return subject.TotalEpisodes, nil
+}
+
 func (b *BangumiProvider) getJSON(ctx context.Context, u string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {

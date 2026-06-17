@@ -167,6 +167,13 @@ func telegramPostJSON(ctx context.Context, cfg map[string]string, method string,
 	return telegramDoWithFallback(ctx, cfg, http.MethodPost, apiURL, string(body), "application/json", timeout)
 }
 
+func deleteTelegramWebhook(ctx context.Context, cfg map[string]string) error {
+	payload := map[string]any{
+		"drop_pending_updates": false,
+	}
+	return telegramPostJSON(ctx, cfg, "deleteWebhook", payload, 15*time.Second)
+}
+
 func telegramDo(client *http.Client, req *http.Request) error {
 	resp, err := client.Do(req)
 	if err != nil {

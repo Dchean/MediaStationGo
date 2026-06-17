@@ -103,6 +103,33 @@ func TestQBitLoginRetriesWithRefererWhenRequired(t *testing.T) {
 	}
 }
 
+func TestQBitLoginAcceptsNoContentFromNewerWebUI(t *testing.T) {
+	var loginAttempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			loginAttempts.Add(1)
+			if r.Header.Get("Referer") == "" || r.Header.Get("Origin") == "" {
+				http.Error(w, "csrf headers required", http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	jar, _ := cookiejar.New(nil)
+	httpClient := &http.Client{Jar: jar}
+	if err := qbitLogin(context.Background(), httpClient, server.URL, "admin", "adminadmin"); err != nil {
+		t.Fatalf("expected 204 login response to succeed: %v", err)
+	}
+	if loginAttempts.Load() != 3 {
+		t.Fatalf("login attempts = %d, want 3", loginAttempts.Load())
+	}
+}
+
 func TestQBitAddTorrentRequiresVisibleNewTask(t *testing.T) {
 	oldAttempts := qbitAddVerifyAttempts
 	oldInterval := qbitAddVerifyInterval
