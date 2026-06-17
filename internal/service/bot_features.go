@@ -113,13 +113,21 @@ func (s *TelegramBotService) consumeOpenRegSlot(ctx context.Context) {
 // sets the account validity granted on redeem (0 = permanent). validDays sets
 // how long the code itself stays redeemable (0 = never expires).
 func (s *TelegramBotService) generateCode(ctx context.Context, kind string, durationDays, validDays int, createdBy string) (*model.RegistrationCode, error) {
+	return s.generateCodeWithUses(ctx, kind, durationDays, validDays, 1, createdBy)
+}
+
+func (s *TelegramBotService) generateCodeWithUses(ctx context.Context, kind string, durationDays, validDays, maxUses int, createdBy string) (*model.RegistrationCode, error) {
 	if kind != model.RegistrationCodeRegister && kind != model.RegistrationCodeRenew {
 		kind = model.RegistrationCodeRegister
+	}
+	if maxUses <= 0 {
+		maxUses = 1
 	}
 	code := &model.RegistrationCode{
 		Code:         randomCode(12),
 		Kind:         kind,
 		DurationDays: durationDays,
+		MaxUses:      maxUses,
 		CreatedByID:  createdBy,
 	}
 	if validDays > 0 {

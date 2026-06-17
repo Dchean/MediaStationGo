@@ -165,7 +165,7 @@ func TestTelegramGroupHidesAdminPanelFromRegularUsers(t *testing.T) {
 	}
 }
 
-func TestTelegramGroupAdminMenuDoesNotExposeButtonsInGroup(t *testing.T) {
+func TestTelegramGroupAdminMenuExposesButtonsOnlyToAdmins(t *testing.T) {
 	ctx := t.Context()
 	repos, bot := newBotTestService(t)
 	admin := &model.User{Username: "root", PasswordHash: "x", Role: "admin", IsActive: true}
@@ -179,19 +179,32 @@ func TestTelegramGroupAdminMenuDoesNotExposeButtonsInGroup(t *testing.T) {
 	}
 
 	menu := bot.mainMenu(ctx, channel, msg)
-	if telegramReplyHasButtonPrefix(menu, "adm_") {
-		t.Fatalf("admin group menu must not expose admin buttons publicly: %#v", menu.Buttons)
+	if !telegramReplyHasButtonPrefix(menu, "adm_") {
+		t.Fatalf("admin group menu should expose admin buttons, got %#v", menu.Buttons)
 	}
-	if !strings.Contains(menu.Text, "请私聊 Bot") {
-		t.Fatalf("admin group menu should tell admins to use private chat, got %q", menu.Text)
+	if !strings.Contains(menu.Text, "管理员入口") {
+		t.Fatalf("admin group menu should label admin section, got %q", menu.Text)
 	}
 
 	reply, handled := bot.handleMenuCallback(ctx, channel, msg, "adm_users")
 	if !handled {
 		t.Fatal("admin callback should be handled")
 	}
-	if !strings.Contains(reply.Text, "请私聊 Bot") || telegramReplyHasButtonPrefix(reply, "adm_") {
-		t.Fatalf("group admin callback should not render admin panel publicly: %#v", reply)
+	if !strings.Contains(reply.Text, "用户管理") {
+		t.Fatalf("group admin callback should render admin panel, got %#v", reply)
+	}
+
+	normal := &TelegramMessage{
+		From: TelegramUser{ID: 9002, Username: "viewer", FirstName: "Viewer"},
+		Chat: TelegramChat{ID: -100123, Type: "group"},
+	}
+	normalMenu := bot.mainMenu(ctx, channel, normal)
+	if telegramReplyHasButtonPrefix(normalMenu, "adm_") || strings.Contains(normalMenu.Text, "管理员入口") {
+		t.Fatalf("normal group user must not see admin controls: %#v", normalMenu)
+	}
+	normalReply, handled := bot.handleMenuCallback(ctx, channel, normal, "adm_users")
+	if !handled || normalReply.Text != "" || len(normalReply.Buttons) != 0 {
+		t.Fatalf("normal group user must not use admin callbacks: %#v handled=%v", normalReply, handled)
 	}
 
 	reply, err := bot.executeCommand(ctx, channel, msg, "/users")
@@ -201,8 +214,8 @@ func TestTelegramGroupAdminMenuDoesNotExposeButtonsInGroup(t *testing.T) {
 	if !strings.Contains(reply.Text, "用户管理") {
 		t.Fatalf("bound group admin text command should run, got %q", reply.Text)
 	}
-	if len(reply.Buttons) != 0 {
-		t.Fatalf("group admin text command must not expose inline buttons publicly: %#v", reply.Buttons)
+	if len(reply.Buttons) == 0 {
+		t.Fatalf("group admin text command should expose admin action buttons: %#v", reply.Buttons)
 	}
 }
 

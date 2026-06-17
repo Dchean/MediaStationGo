@@ -34,6 +34,7 @@ type SubscriptionService struct {
 	site      *SiteService
 	scraper   *ScraperService
 	hub       *Hub
+	notify    *NotifyChannelService
 	stop      chan struct{}
 }
 
@@ -52,6 +53,10 @@ func NewSubscriptionService(cfg *config.Config, log *zap.Logger, repo *repositor
 
 func (s *SubscriptionService) SetScraper(scraper *ScraperService) {
 	s.scraper = scraper
+}
+
+func (s *SubscriptionService) SetNotifyChannels(notify *NotifyChannelService) {
+	s.notify = notify
 }
 
 // Start runs the polling loop in the background.
@@ -272,6 +277,7 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 			"name":   sub.Name,
 			"queued": queued,
 		})
+		s.notifySubscriptionHit(sub, queued, nil)
 	}
 	return queued, nil
 }
@@ -377,12 +383,28 @@ func (s *SubscriptionService) runSiteSearch(ctx context.Context, sub *model.Subs
 			"keyword":   keyword,
 			"resources": resources,
 		})
+		s.notifySubscriptionHit(sub, queued, resources)
 		return queued, nil
 	}
 	if lastEnqueueErr != nil {
 		return 0, fmt.Errorf("找到 PT 资源但加入下载器失败: %w", lastEnqueueErr)
 	}
 	return 0, nil
+}
+
+func (s *SubscriptionService) notifySubscriptionHit(sub *model.Subscription, queued int, resources []string) {
+	if s == nil || s.notify == nil || sub == nil || queued <= 0 {
+		return
+	}
+	body := fmt.Sprintf("订阅：%s\n新增资源：%d", sub.Name, queued)
+	if len(resources) > 0 {
+		body += "\n资源：\n- " + strings.Join(resources, "\n- ")
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		s.notify.Broadcast(ctx, "MediaStationGo 订阅命中新资源", body, EventSubscriptionHit)
+	}()
 }
 
 func (s *SubscriptionService) archiveCompletedSubscription(ctx context.Context, sub *model.Subscription, availability LocalAvailability) error {

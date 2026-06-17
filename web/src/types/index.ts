@@ -312,7 +312,7 @@ export interface NotifyChannel {
   name: string
   type: 'telegram' | 'wechat' | 'bark' | 'webhook' | 'email'
   enabled: boolean
-  events: string
+  events: string[]
   config: Record<string, string>
   created_at: string
   updated_at: string

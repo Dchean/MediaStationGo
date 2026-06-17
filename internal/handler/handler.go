@@ -1,7 +1,7 @@
 // Package handler wires the HTTP routes to the service container.
 //
-// All routes are mounted under /api/* (matching the original MediaStation
-// surface) so the frontend dev-server can proxy a single prefix.
+// All routes are mounted under /api/* so the frontend dev-server can proxy a
+// single prefix.
 package handler
 
 import (
@@ -162,7 +162,3 @@ func sseHandler(svc *service.Container) gin.HandlerFunc {
 		}
 	}
 }
-
-
-
-

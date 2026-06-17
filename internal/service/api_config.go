@@ -4,8 +4,8 @@
 // transparently encrypts the api_key column on write and decrypts it on
 // read so values stored on disk are useless without the JWT secret.
 //
-// On first read it seeds the table with the providers MediaStation
-// supports today (TMDb / Bangumi / TheTVDB / Fanart / OpenAI / Douban).
+// On first read it seeds the table with the providers supported by
+// MediaStationGo today (TMDb / Bangumi / TheTVDB / Fanart / OpenAI / Douban).
 package service
 
 import (

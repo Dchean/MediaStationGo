@@ -16,12 +16,12 @@ const (
 	RegistrationCodeRenew = "renew"
 )
 
-// RegistrationCode 是一次性兑换码。管理员生成后发给用户，用户通过 Bot 兑换：
+// RegistrationCode 是兑换码。管理员生成后发给用户，用户通过 Bot 兑换：
 //   - register：创建并绑定一个新账号；兑换时按 DurationDays 设置账号有效期。
 //   - renew：给当前绑定账号延长 DurationDays 天有效期。
 //
-// 兑换成功后记录 UsedByUserID + UsedAt，之后不可再用。ExpiresAt 是兑换码本身
-// 的有效期（过期后即使未使用也不能再兑换）。
+// MaxUses 控制最多可兑换次数，旧数据/零值按 1 次处理。UsedAt 表示达到最大
+// 次数后的耗尽时间；ExpiresAt 是兑换码本身的有效期。
 type RegistrationCode struct {
 	Base
 	Code         string     `gorm:"uniqueIndex;size:32;not null" json:"code"`
@@ -29,6 +29,8 @@ type RegistrationCode struct {
 	DurationDays int        `gorm:"default:0" json:"duration_days"` // 账号有效期天数；0 表示永久
 	CreatedByID  string     `gorm:"size:36" json:"created_by_id,omitempty"`
 	UsedByUserID string     `gorm:"index;size:36" json:"used_by_user_id,omitempty"`
+	MaxUses      int        `gorm:"default:1" json:"max_uses"`
+	UsedCount    int        `gorm:"default:0" json:"used_count"`
 	UsedAt       *time.Time `json:"used_at,omitempty"`
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"` // 兑换码本身的有效期
 }
@@ -41,8 +43,19 @@ func (c *RegistrationCode) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
-// IsUsed 报告兑换码是否已被使用。
-func (c *RegistrationCode) IsUsed() bool { return c.UsedAt != nil }
+// EffectiveMaxUses returns the configured max uses, treating legacy zero values
+// as one-use codes.
+func (c *RegistrationCode) EffectiveMaxUses() int {
+	if c == nil || c.MaxUses <= 0 {
+		return 1
+	}
+	return c.MaxUses
+}
+
+// IsUsed 报告兑换码是否已耗尽。
+func (c *RegistrationCode) IsUsed() bool {
+	return c != nil && (c.UsedAt != nil || c.UsedCount >= c.EffectiveMaxUses())
+}
 
 // IsExpired 报告兑换码自身是否过期（与账号有效期无关）。
 func (c *RegistrationCode) IsExpired() bool {

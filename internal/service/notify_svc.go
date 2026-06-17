@@ -21,6 +21,7 @@ const (
 	EventDownloadComplete = "download_complete"
 	EventScrapeFailed     = "scrape_failed"
 	EventSystemAlert      = "system_alert"
+	EventLibraryIngest    = "library_ingest"
 )
 
 // NotifyEvent 是通知事件的数据结构。
@@ -43,7 +44,7 @@ type NotifyService struct {
 	repo   *repository.Container
 	crypto *CryptoService
 
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	providers map[string]NotifyProvider // type -> provider
 }
 

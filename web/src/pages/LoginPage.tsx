@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { Eye, EyeOff, Film, ArrowRight, ShieldCheck, Lock, User } from 'lucide-react'
+import { Eye, EyeOff, ArrowRight, ShieldCheck, Lock, User } from 'lucide-react'
 import { AppFooter } from '../components/AppFooter'
 import { authAPI } from '../api/auth'
 import { useAuthStore } from '../stores/auth'
@@ -50,14 +50,14 @@ export function LoginPage() {
           
           {/* Logo & Headline */}
           <div className="flex flex-col items-center text-center pb-8">
-            <motion.div
+            <motion.img
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.15, type: 'spring', stiffness: 200 }}
-              className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#111827] shadow-sm"
-            >
-              <Film className="h-7 w-7 text-[#c9954a]" />
-            </motion.div>
+              src="/brand/mgo-emby-icon.png"
+              alt="MediaStationGo"
+              className="mb-4 h-14 w-14 rounded-2xl object-contain shadow-sm"
+            />
             
             <motion.h1
               initial={{ opacity: 0, y: 10 }}
@@ -65,7 +65,7 @@ export function LoginPage() {
               transition={{ delay: 0.25 }}
               className="font-display text-2xl font-extrabold tracking-tight text-gray-900"
             >
-              MediaStation
+              MediaStationGo
             </motion.h1>
             
             <motion.p

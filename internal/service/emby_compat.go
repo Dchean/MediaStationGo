@@ -490,10 +490,10 @@ func (e *EmbyService) mediaItems(ctx context.Context, p ItemsParams) (map[string
 		return emptyItemsEnvelope(p.StartIndex), nil
 	}
 	if filterBySeasonNumbers && containsItemType(p.IncludeItemTypes, "Movie") && !containsItemType(p.IncludeItemTypes, "Episode") {
-		q = q.Where("season_num = 0 AND episode_num = 0")
+		q = e.filterMovieItems(ctx, q)
 	}
 	if filterBySeasonNumbers && containsItemType(p.IncludeItemTypes, "Episode") && !containsItemType(p.IncludeItemTypes, "Movie") {
-		q = q.Where("season_num > 0 OR episode_num > 0")
+		q = e.filterEpisodeItems(ctx, q)
 	}
 
 	var total int64
@@ -519,9 +519,22 @@ func (e *EmbyService) mediaItems(ctx context.Context, p ItemsParams) (map[string
 		}
 	}
 
+	fetchLimit := p.Limit
+	fetchOffset := p.StartIndex
+	if fetchLimit > 0 && e.shouldCollapseMediaVersions(ctx, p) {
+		// Duplicates across merged local/cloud libraries collapse into one Emby
+		// item with multiple MediaSources. Fetch a wider window so duplicates do
+		// not consume the whole requested page.
+		fetchOffset = 0
+		fetchLimit = p.StartIndex + maxInt(p.Limit*4, p.Limit)
+	}
 	var rows []model.Media
-	if err := q.Order(order).Offset(p.StartIndex).Limit(p.Limit).Find(&rows).Error; err != nil {
+	if err := q.Order(order).Offset(fetchOffset).Limit(fetchLimit).Find(&rows).Error; err != nil {
 		return nil, err
+	}
+	if e.shouldCollapseMediaVersions(ctx, p) {
+		rows = e.collapseMediaVersionRows(ctx, rows)
+		rows = pageSlice(rows, p.StartIndex, p.Limit)
 	}
 	items, err := e.payloadsForMedia(ctx, rows, p.UserID)
 	if err != nil {
@@ -610,6 +623,7 @@ func (e *EmbyService) episodeItems(ctx context.Context, rows []model.Media, p It
 }
 
 func (e *EmbyService) payloadsForMedia(ctx context.Context, rows []model.Media, userID string) ([]map[string]any, error) {
+	rows = e.collapseMediaVersionRows(ctx, rows)
 	userFavs := map[string]bool{}
 	userPos := map[string]int64{}
 	if userID != "" && len(rows) > 0 {
@@ -641,6 +655,44 @@ func (e *EmbyService) payloadsForMedia(ctx context.Context, rows []model.Media, 
 		items = append(items, e.itemPayload(ctx, &m, userFavs[m.ID], userPos[m.ID]))
 	}
 	return items, nil
+}
+
+func (e *EmbyService) shouldCollapseMediaVersions(ctx context.Context, p ItemsParams) bool {
+	if containsItemType(p.IncludeItemTypes, "Series") || containsItemType(p.IncludeItemTypes, "Season") {
+		return false
+	}
+	if containsItemType(p.IncludeItemTypes, "Episode") && !containsItemType(p.IncludeItemTypes, "Movie") {
+		return true
+	}
+	if p.ParentID == "" {
+		return true
+	}
+	episodic, err := e.libraryIsEpisodic(ctx, p.ParentID)
+	return err == nil && !episodic
+}
+
+func (e *EmbyService) collapseMediaVersionRows(ctx context.Context, rows []model.Media) []model.Media {
+	if len(rows) < 2 {
+		return rows
+	}
+	out := make([]model.Media, 0, len(rows))
+	indexByKey := make(map[string]int, len(rows))
+	for _, row := range rows {
+		key := e.mediaVersionKey(ctx, &row)
+		if key == "" {
+			out = append(out, row)
+			continue
+		}
+		if idx, ok := indexByKey[key]; ok {
+			if preferMediaVersion(row, out[idx]) {
+				out[idx] = row
+			}
+			continue
+		}
+		indexByKey[key] = len(out)
+		out = append(out, row)
+	}
+	return out
 }
 
 // Item 单条目详情。
@@ -908,7 +960,7 @@ func (e *EmbyService) itemPayload(ctx context.Context, m *model.Media, fav bool,
 			"Played":                played,
 			"PlayedPercentage":      pct,
 		},
-		"MediaSources": []map[string]any{e.mediaSource(ctx, m, true, false)},
+		"MediaSources": e.mediaSourcesForItem(ctx, m, true, false),
 	}
 }
 
@@ -982,6 +1034,35 @@ func embyLibraryTypeIsEpisodic(typ string) bool {
 	default:
 		return false
 	}
+}
+
+func (e *EmbyService) filterMovieItems(ctx context.Context, q *gorm.DB) *gorm.DB {
+	episodicIDs := e.episodicLibraryIDs(ctx)
+	if len(episodicIDs) == 0 {
+		return q
+	}
+	return q.Where("(media.season_num = 0 AND media.episode_num = 0) OR media.library_id NOT IN ?", episodicIDs)
+}
+
+func (e *EmbyService) filterEpisodeItems(ctx context.Context, q *gorm.DB) *gorm.DB {
+	episodicIDs := e.episodicLibraryIDs(ctx)
+	if len(episodicIDs) == 0 {
+		return q.Where("1 = 0")
+	}
+	return q.Where("media.library_id IN ? AND (media.season_num > 0 OR media.episode_num > 0)", episodicIDs)
+}
+
+func (e *EmbyService) episodicLibraryIDs(ctx context.Context) []string {
+	if e == nil || e.repo == nil || e.repo.DB == nil {
+		return nil
+	}
+	var ids []string
+	if err := e.repo.DB.WithContext(ctx).Model(&model.Library{}).
+		Where("LOWER(type) IN ?", []string{"tv", "anime", "variety"}).
+		Pluck("id", &ids).Error; err != nil {
+		return nil
+	}
+	return ids
 }
 
 func (e *EmbyService) rememberSeriesGroup(group embySeriesGroup) {
@@ -1712,7 +1793,7 @@ func (e *EmbyService) PlaybackInfo(ctx context.Context, mediaID, userID string) 
 	}
 	e.ensureCloudTrackMetadata(ctx, m)
 	return map[string]any{
-		"MediaSources":  []map[string]any{e.mediaSource(ctx, m, false, e.directPlayOnly(ctx))},
+		"MediaSources":  e.mediaSourcesForItem(ctx, m, false, e.directPlayOnly(ctx)),
 		"PlaySessionId": fmt.Sprintf("%s-%d", m.ID, time.Now().Unix()),
 	}, nil
 }
@@ -1934,6 +2015,124 @@ func (e *EmbyService) mediaSource(ctx context.Context, m *model.Media, asEmbedde
 		src["Path"] = playURL
 	}
 	return src
+}
+
+func (e *EmbyService) mediaSourcesForItem(ctx context.Context, m *model.Media, asEmbedded, directOnly bool) []map[string]any {
+	siblings := e.mediaVersionSiblings(ctx, m)
+	if len(siblings) == 0 {
+		return []map[string]any{e.mediaSource(ctx, m, asEmbedded, directOnly)}
+	}
+	sources := make([]map[string]any, 0, len(siblings))
+	for i := range siblings {
+		media := siblings[i]
+		sources = append(sources, e.mediaSource(ctx, &media, asEmbedded, directOnly))
+	}
+	return sources
+}
+
+func (e *EmbyService) mediaVersionSiblings(ctx context.Context, m *model.Media) []model.Media {
+	if e == nil || e.repo == nil || e.repo.DB == nil || m == nil || strings.TrimSpace(m.ID) == "" {
+		return nil
+	}
+	libraryIDs := e.mergedLibraryIDs(ctx, m.LibraryID)
+	if len(libraryIDs) == 0 {
+		libraryIDs = []string{m.LibraryID}
+	}
+	q := e.repo.DB.WithContext(ctx).Model(&model.Media{}).
+		Where("library_id IN ?", libraryIDs).
+		Where("season_num = ? AND episode_num = ?", m.SeasonNum, m.EpisodeNum)
+	if m.TMDbID > 0 {
+		q = q.Where("tm_db_id = ?", m.TMDbID)
+	} else if m.BangumiID > 0 {
+		q = q.Where("bangumi_id = ?", m.BangumiID)
+	} else {
+		title := strings.TrimSpace(m.Title)
+		if title == "" {
+			title = strings.TrimSpace(m.OriginalName)
+		}
+		if title == "" {
+			return []model.Media{*m}
+		}
+		q = q.Where("LOWER(title) = ?", strings.ToLower(title))
+		if m.Year > 0 {
+			q = q.Where("year = ?", m.Year)
+		}
+	}
+	var rows []model.Media
+	if err := q.Find(&rows).Error; err != nil || len(rows) == 0 {
+		return []model.Media{*m}
+	}
+	rows = e.collapseExactPathRows(rows)
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].ID == m.ID {
+			return true
+		}
+		if rows[j].ID == m.ID {
+			return false
+		}
+		return preferMediaVersion(rows[i], rows[j])
+	})
+	return rows
+}
+
+func (e *EmbyService) collapseExactPathRows(rows []model.Media) []model.Media {
+	if len(rows) < 2 {
+		return rows
+	}
+	out := rows[:0]
+	seen := map[string]struct{}{}
+	for _, row := range rows {
+		path := strings.TrimSpace(row.Path)
+		if path != "" {
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+func (e *EmbyService) mediaVersionKey(ctx context.Context, m *model.Media) string {
+	if e == nil || m == nil {
+		return ""
+	}
+	ids := e.mergedLibraryIDs(ctx, m.LibraryID)
+	sort.Strings(ids)
+	libraryGroup := strings.Join(ids, ",")
+	if libraryGroup == "" {
+		libraryGroup = strings.TrimSpace(m.LibraryID)
+	}
+	if m.TMDbID > 0 {
+		return fmt.Sprintf("%s|tmdb:%d|s:%d|e:%d", libraryGroup, m.TMDbID, m.SeasonNum, m.EpisodeNum)
+	}
+	if m.BangumiID > 0 {
+		return fmt.Sprintf("%s|bangumi:%d|s:%d|e:%d", libraryGroup, m.BangumiID, m.SeasonNum, m.EpisodeNum)
+	}
+	title := strings.ToLower(strings.TrimSpace(m.Title))
+	if title == "" {
+		title = strings.ToLower(strings.TrimSpace(m.OriginalName))
+	}
+	if title == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s|title:%s|y:%d|s:%d|e:%d", libraryGroup, title, m.Year, m.SeasonNum, m.EpisodeNum)
+}
+
+func preferMediaVersion(candidate, current model.Media) bool {
+	candidateCloud := strings.TrimSpace(candidate.STRMURL) != "" || strings.HasPrefix(strings.ToLower(strings.TrimSpace(candidate.Path)), "cloud://")
+	currentCloud := strings.TrimSpace(current.STRMURL) != "" || strings.HasPrefix(strings.ToLower(strings.TrimSpace(current.Path)), "cloud://")
+	if candidateCloud != currentCloud {
+		return !candidateCloud
+	}
+	if candidate.Width != current.Width {
+		return candidate.Width > current.Width
+	}
+	if candidate.SizeBytes != current.SizeBytes {
+		return candidate.SizeBytes > current.SizeBytes
+	}
+	return candidate.CreatedAt.After(current.CreatedAt)
 }
 
 func embySTRMStreamURL(mediaID string) string {

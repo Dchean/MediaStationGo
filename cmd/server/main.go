@@ -1,6 +1,6 @@
 // Package main is the MediaStationGo HTTP server entry point.
 //
-// MediaStationGo is a Go rewrite of the original Python MediaStation project,
+// MediaStationGo is a Go rewrite of the legacy Python implementation,
 // adopting the same tech stack as cropflre/nowen-video:
 //
 //	Backend:  Go 1.25 + Gin + GORM + PostgreSQL/SQLite + Viper + Zap + JWT

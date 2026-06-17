@@ -46,7 +46,7 @@ var (
 const MaxUsers = OpenSourceUserLimit
 
 // SeedAdmin makes sure at least one admin user exists. It mirrors the
-// MediaStation behaviour: if no admin row is found we create
+// legacy default behaviour: if no admin row is found we create
 // `admin / admin123` (overridable through ADMIN_INITIAL_PASSWORD) and warn.
 func (s *AuthService) SeedAdmin(ctx context.Context) error {
 	n, err := s.repo.User.CountAdmins(ctx)

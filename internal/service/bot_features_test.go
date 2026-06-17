@@ -176,6 +176,40 @@ func TestRegistrationCodeRedeemOnce(t *testing.T) {
 	}
 }
 
+func TestRegistrationCodeCanBeGeneratedForMultipleUses(t *testing.T) {
+	ctx := context.Background()
+	repos, bot := newBotTestService(t)
+
+	code, err := bot.generateCodeWithUses(ctx, model.RegistrationCodeRenew, 30, 0, 2, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc, msg := bot.lookupRedeemableCode(ctx, code.Code, model.RegistrationCodeRenew)
+	if rc == nil {
+		t.Fatalf("expected valid code, got msg=%q", msg)
+	}
+	if err := repos.RegCode.MarkUsed(ctx, rc.ID, "user-1"); err != nil {
+		t.Fatal(err)
+	}
+	rc, msg = bot.lookupRedeemableCode(ctx, code.Code, model.RegistrationCodeRenew)
+	if rc == nil {
+		t.Fatalf("code should remain redeemable after first use, got msg=%q", msg)
+	}
+	if err := repos.RegCode.MarkUsed(ctx, rc.ID, "user-2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, msg := bot.lookupRedeemableCode(ctx, code.Code, model.RegistrationCodeRenew); msg == "" {
+		t.Fatal("code should be exhausted after max uses")
+	}
+	var used model.RegistrationCode
+	if err := repos.DB.Where("id = ?", code.ID).First(&used).Error; err != nil {
+		t.Fatal(err)
+	}
+	if used.UsedCount != 2 || used.UsedAt == nil {
+		t.Fatalf("expected exhausted code with used_count=2, got %+v", used)
+	}
+}
+
 func TestRenewalClearsExpiry(t *testing.T) {
 	ctx := context.Background()
 	repos, bot := newBotTestService(t)
@@ -973,6 +1007,29 @@ func TestBotAdminCodeAndUserCommands(t *testing.T) {
 	}
 	if !strings.Contains(reply.Text, "需要确认") {
 		t.Fatalf("delete without confirm should be rejected, got %q", reply.Text)
+	}
+}
+
+func TestBotGroupMenuShowsAdminActionsOnlyForAdmins(t *testing.T) {
+	ctx := context.Background()
+	_, bot := newBotTestService(t)
+	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"admin_user_ids":"9301","group_chat_id":"-1001"}`}
+	adminMsg := &TelegramMessage{From: TelegramUser{ID: 9301, Username: "admin"}, Chat: TelegramChat{ID: -1001, Type: "group"}}
+	reply, err := bot.executeCommand(ctx, channel, adminMsg, "/menu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(reply.Text, "管理员入口") || len(reply.Buttons) == 0 {
+		t.Fatalf("admin group menu should expose management actions, got %#v", reply)
+	}
+
+	userMsg := &TelegramMessage{From: TelegramUser{ID: 9302, Username: "user"}, Chat: TelegramChat{ID: -1001, Type: "group"}}
+	reply, err = bot.executeCommand(ctx, channel, userMsg, "/menu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(reply.Text, "管理员入口") {
+		t.Fatalf("non-admin group menu must not expose management actions, got %#v", reply)
 	}
 }
 

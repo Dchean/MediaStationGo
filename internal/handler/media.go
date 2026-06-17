@@ -124,15 +124,33 @@ func scanLibraryHandler(svc *service.Container) gin.HandlerFunc {
 			})
 			return
 		}
-		task := startScanHTTPTask(svc, "手动扫描入库", lib.Name, lib.Path)
-		res, err := svc.Scan.ScanLibrary(c.Request.Context(), id)
-		if err != nil {
-			finishHTTPTask(task, err, "scan", "手动扫描入库失败", nil, nil)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		finishScan, ok := svc.Scan.TryBeginLocalScan(id)
+		if !ok {
+			c.JSON(http.StatusAccepted, gin.H{
+				"library_id":       id,
+				"queued":           true,
+				"already_running":  true,
+				"message":          "该媒体库正在后台扫描，请在任务面板查看进度",
+				"estimate_message": "页面关闭不会中断扫描",
+			})
 			return
 		}
-		finishHTTPTask(task, nil, "completed", "手动扫描入库结束", scanTaskMetrics(res), scanTaskDetails(res, 20))
-		c.JSON(http.StatusOK, res)
+		task := startScanHTTPTask(svc, "手动扫描入库", lib.Name, lib.Path)
+		go func(libraryID string, task *service.TaskHandle, finish func()) {
+			defer finish()
+			res, err := svc.Scan.ScanLibrary(context.Background(), libraryID)
+			if err != nil {
+				finishHTTPTask(task, err, "scan", "手动扫描入库失败", scanTaskMetrics(res), scanTaskDetails(res, 20))
+				return
+			}
+			finishHTTPTask(task, nil, "completed", "手动扫描入库结束", scanTaskMetrics(res), scanTaskDetails(res, 20))
+		}(id, task, finishScan)
+		c.JSON(http.StatusAccepted, gin.H{
+			"library_id":       id,
+			"queued":           true,
+			"message":          "本地媒体库扫描已在后台运行，页面关闭不会中断",
+			"estimate_message": "可在右上角任务面板查看扫描进度",
+		})
 	}
 }
 

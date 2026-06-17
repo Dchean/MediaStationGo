@@ -48,6 +48,7 @@ type DownloadService struct {
 	scanner          *ScannerService
 	site             *SiteService
 	tasks            *TaskTrackerService
+	notify           *NotifyChannelService
 
 	mu              sync.Mutex
 	stopCh          chan struct{}
@@ -69,6 +70,10 @@ func (d *DownloadService) SetOrganizePipeline(pipeline *OrganizePipelineService)
 
 func (d *DownloadService) SetTaskTracker(tasks *TaskTrackerService) {
 	d.tasks = tasks
+}
+
+func (d *DownloadService) SetNotifyChannels(notify *NotifyChannelService) {
+	d.notify = notify
 }
 
 var torrentEpisodeToken = regexp.MustCompile(`(?i)e\d{1,3}`)
@@ -1201,6 +1206,7 @@ func downloadTaskNeedsCompletion(task model.DownloadTask) bool {
 // Media rows is too late for freshly-downloaded files: they usually have not
 // been scanned into the library yet.
 func (d *DownloadService) onTorrentComplete(ctx context.Context, torrent QBitTorrent) {
+	d.notifyDownloadComplete(torrent)
 	if d.organizer == nil {
 		return
 	}
@@ -1266,6 +1272,25 @@ func (d *DownloadService) onTorrentComplete(ctx context.Context, torrent QBitTor
 		zap.Int("skipped", res.Skipped),
 		zap.Int("scrapes", len(res.Scrapes)),
 		zap.Int("errors", len(res.Errors)))
+}
+
+func (d *DownloadService) notifyDownloadComplete(torrent QBitTorrent) {
+	if d == nil || d.notify == nil {
+		return
+	}
+	name := strings.TrimSpace(torrent.Name)
+	if name == "" {
+		name = strings.TrimSpace(filepath.Base(torrent.ContentPath))
+	}
+	if name == "" {
+		name = "下载任务"
+	}
+	body := fmt.Sprintf("任务：%s\n保存路径：%s\nHash：%s", name, firstNonEmpty(torrent.ContentPath, torrent.SavePath), torrent.Hash)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		d.notify.Broadcast(ctx, "MediaStationGo 下载完成", body, EventDownloadComplete)
+	}()
 }
 
 func (d *DownloadService) downloadOrganizeTaskName(torrent QBitTorrent, allowReplace bool) string {

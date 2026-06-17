@@ -1,6 +1,6 @@
 import { api } from './client'
 
-// ── License Server types (generic, ready for MediaStationLicenseServer integration) ──
+// ── License Server types (generic, ready for MediaStationGo license integration) ──
 
 /** Response after binding/activating a license. */
 export interface LicenseActivation {

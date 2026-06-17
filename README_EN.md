@@ -1,7 +1,7 @@
 # MediaStationGo
 
 <p align="center">
-  <img src="web/public/favicon.svg" width="96" height="96" alt="MediaStationGo Logo" />
+  <img src="web/public/brand/mgo-emby-icon.png" width="96" height="96" alt="MediaStationGo Logo" />
 </p>
 
 <h3 align="center">A lightweight, polished, NAS-friendly private media center</h3>

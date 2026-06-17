@@ -39,7 +39,8 @@ services:
       - "host.docker.internal:host-gateway"
 
     volumes:
-      # 程序数据：数据库、账号、设置都在这里。升级前主要备份它。
+      # 程序运行数据：JWT 密钥、运行配置、旧 SQLite 迁移源。
+      # 主数据库在 ./postgres，升级/备份时 ./data 和 ./postgres 都要保留。
       - ./data:/data
 
       # 缓存目录：海报缓存、临时文件等。通常不用备份。
@@ -82,7 +83,9 @@ services:
       MEDIASTATION_DATABASE_TYPE: postgres
       MEDIASTATION_DATABASE_DSN: postgres://mediastation:mediastation@postgres:5432/mediastation?sslmode=disable
 
-      # SQLite 旧库位置：仅用于旧数据自动迁移和无 PG 回退。
+      # SQLite 旧库迁移源：
+      # - 首次从旧版 ./data/mediastation.db 导入时保持此路径。
+      # - 确认迁移完成后，建议改成 /data/no-sqlite-migration.db 这类不存在的路径。
       MEDIASTATION_DATABASE_DB_PATH: /data/mediastation.db
       MEDIASTATION_CACHE_CACHE_DIR: /cache
 

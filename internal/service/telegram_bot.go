@@ -981,20 +981,7 @@ func (s *TelegramBotService) replyForMessage(ctx context.Context, channel *model
 	if strings.TrimSpace(reply.Text) == "" {
 		return nil
 	}
-	if !telegramIsGroupChat(msg.Chat.Type) {
-		return s.reply(ctx, channel, msg.Chat.ID, reply)
-	}
-	if err := s.reply(ctx, channel, msg.From.ID, reply); err != nil {
-		if s.log != nil {
-			s.log.Warn("telegram private reply from group failed",
-				zap.Int("group_chat_id", msg.Chat.ID),
-				zap.Int("telegram_user_id", msg.From.ID),
-				zap.Error(sanitizeTelegramError(err)),
-			)
-		}
-		return s.reply(ctx, channel, msg.Chat.ID, telegramCommandReply{Text: telegramGroupPrivateDeliveryFailedHint()})
-	}
-	return s.reply(ctx, channel, msg.Chat.ID, telegramCommandReply{Text: telegramGroupPrivateDeliverySentHint()})
+	return s.reply(ctx, channel, msg.Chat.ID, reply)
 }
 
 func (s *TelegramBotService) deleteTelegramSourceMessage(channel *model.NotifyChannel, chatID, messageID int) {

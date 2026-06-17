@@ -20,7 +20,8 @@
 #     MEDIASTATION_IMAGE_TAG=MediaStationGo-v0.0.32
 #
 # 路径映射总览：
-#   /data      程序数据目录。保存 SQLite 数据库、JWT secret、系统配置等，必须持久化。
+#   /data      程序运行数据目录。保存 JWT secret、系统配置、旧 SQLite 迁移源，必须持久化。
+#   /postgres  PostgreSQL 主数据库目录，账号、媒体库、订阅等主数据都在这里，必须备份。
 #   /cache     缓存目录。保存海报、刮削图片、转码缓存等，建议放在空间较大的磁盘。
 #   /media     媒体库只读挂载目录。网页中添加媒体库时填写容器内路径，例如 /media/Movies。
 #   /downloads 下载目录。下载器保存路径建议填写容器内路径，例如 /downloads/Movies。
@@ -78,7 +79,8 @@ services:
       - "host.docker.internal:host-gateway"
 
     volumes:
-      # 程序持久化数据：数据库、JWT secret、运行时配置。
+      # 程序运行数据：JWT secret、运行配置、旧 SQLite 迁移源。
+      # 主数据库在 postgres 服务的 /var/lib/postgresql/data。
       - ${MEDIASTATION_DATA_DIR:-./data}:/data
 
       # 海报/背景图/转码缓存。可删除重建，但会重新下载图片和生成缓存。
@@ -118,6 +120,7 @@ services:
       MEDIASTATION_APP_DATA_DIR: /data
       MEDIASTATION_DATABASE_TYPE: ${MEDIASTATION_DATABASE_TYPE:-postgres}
       MEDIASTATION_DATABASE_DSN: ${MEDIASTATION_DATABASE_DSN:-postgres://mediastation:mediastation@postgres:5432/mediastation?sslmode=disable}
+      # SQLite 旧库迁移源。确认迁移完成后，可改成 /data/no-sqlite-migration.db。
       MEDIASTATION_DATABASE_DB_PATH: /data/mediastation.db
       MEDIASTATION_CACHE_CACHE_DIR: /cache
 

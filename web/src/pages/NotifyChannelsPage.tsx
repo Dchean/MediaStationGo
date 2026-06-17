@@ -129,6 +129,14 @@ const TYPE_LABELS: Record<NotifyChannel['type'], string> = {
   email: 'Email',
 }
 
+const EVENT_OPTIONS = [
+  { value: 'subscription_hit', label: '订阅命中新资源' },
+  { value: 'download_complete', label: '下载任务完成' },
+  { value: 'library_ingest', label: '入库完成' },
+  { value: 'scrape_failed', label: '刮削失败告警' },
+  { value: 'system_alert', label: '系统异常通知' },
+]
+
 function ChannelCard({
   channel,
   onTest,
@@ -154,6 +162,7 @@ function ChannelCard({
           )}
         </div>
         <div className="mt-1 truncate text-xs text-ink-50">{summary}</div>
+        <div className="mt-1 truncate text-xs text-sand-500">{eventSummary(channel.events)}</div>
       </div>
       <div className="flex shrink-0 gap-2">
         <button
@@ -177,6 +186,12 @@ function ChannelCard({
       </div>
     </div>
   )
+}
+
+function eventSummary(events: string[] | undefined): string {
+  if (!events || events.length === 0) return '事件：全部'
+  const labels = events.map((event) => EVENT_OPTIONS.find((item) => item.value === event)?.label ?? event)
+  return `事件：${labels.join('、')}`
 }
 
 function channelSummary(ch: NotifyChannel): string {
@@ -245,6 +260,7 @@ function ChannelFormModal({
   const [config, setConfig] = useState<Record<string, string>>(
     normalizeInitialConfig(editing?.type ?? 'telegram', editing?.config ?? {}),
   )
+  const [events, setEvents] = useState<string[]>(editing?.events ?? [])
   const [enabled, setEnabled] = useState(editing?.enabled ?? true)
   const [saving, setSaving] = useState(false)
 
@@ -275,6 +291,7 @@ function ChannelFormModal({
         name: name.trim(),
         type: type,
         config: cleanedConfig,
+        events,
         enabled,
       }
       if (editing) {
@@ -295,6 +312,12 @@ function ChannelFormModal({
 
   const updateConfig = (k: string, v: string) =>
     setConfig((c) => ({ ...c, [k]: v }))
+
+  const toggleEvent = (event: string) => {
+    setEvents((current) =>
+      current.includes(event) ? current.filter((item) => item !== event) : [...current, event],
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -531,6 +554,33 @@ function ChannelFormModal({
               </Field>
             </>
           )}
+
+          <Field label="推送事件">
+            <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-100">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary-400"
+                  checked={events.length === 0}
+                  onChange={() => setEvents([])}
+                />
+                全部事件
+              </label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {EVENT_OPTIONS.map((event) => (
+                  <label key={event.value} className="flex cursor-pointer items-center gap-2 text-sm text-ink-100">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary-400"
+                      checked={events.includes(event.value)}
+                      onChange={() => toggleEvent(event.value)}
+                    />
+                    {event.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </Field>
 
           <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-100">
             <input

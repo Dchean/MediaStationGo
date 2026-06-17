@@ -218,23 +218,23 @@ func (s *SiteService) FindByID(ctx context.Context, id string) (*model.Site, err
 // upload_bytes, download_bytes are excluded to prevent injection.
 var siteUpdatableFields = map[string]bool{
 	"name":              true,
-	"url":              true,
-	"type":             true,
-	"auth_type":        true,
-	"api_key":          true,
-	"cookie":           true,
-	"auth_header":      true,
-	"user_agent":       true,
-	"rss_url":          true,
-	"timeout":          true,
-	"priority":         true,
-	"use_proxy":        true,
-	"rate_limit":       true,
+	"url":               true,
+	"type":              true,
+	"auth_type":         true,
+	"api_key":           true,
+	"cookie":            true,
+	"auth_header":       true,
+	"user_agent":        true,
+	"rss_url":           true,
+	"timeout":           true,
+	"priority":          true,
+	"use_proxy":         true,
+	"rate_limit":        true,
 	"browser_emulation": true,
-	"downloader":       true,
-	"enabled":          true,
-	"is_default":       true,
-	"extra":            true,
+	"downloader":        true,
+	"enabled":           true,
+	"is_default":        true,
+	"extra":             true,
 }
 
 // Update applies a partial patch to an existing site.
@@ -270,7 +270,7 @@ func (s *SiteService) Delete(ctx context.Context, id string) error {
 // TestConnection tries to reach the site's base URL with the configured
 // credentials and reports success/failure.
 //
-// 测试逻辑（与参考项目 ShukeBta/MediaStation 对齐）：
+// 测试逻辑（与旧版参考实现对齐）：
 //
 //  1. 优先调用对应站点适配器的 Authenticate()，让 PT 站点（M-Team / UNIT3D /
 //     Gazelle 等）使用各自的开放 API 验证，而不是去拉首页 HTML——后者通常

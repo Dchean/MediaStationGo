@@ -228,7 +228,7 @@ func TestEmbyCloudAnimeUsesSeriesNameFromChineseSeasonFolder(t *testing.T) {
 
 func TestEmbyMovieLibrarySeasonNumbersStayMovies(t *testing.T) {
 	svc := newTestEmbyService(t)
-	lib := model.Library{Name: "动画电影", Path: `/media/movies/animation`, Type: "movie", Enabled: true}
+	lib := model.Library{Name: "动画电影", Path: `/media/movies/animation`, Type: "Movie", Enabled: true}
 	if err := svc.repo.Library.Create(t.Context(), &lib); err != nil {
 		t.Fatalf("create library: %v", err)
 	}
@@ -275,6 +275,84 @@ func TestEmbyMovieLibrarySeasonNumbersStayMovies(t *testing.T) {
 	}
 	if item["Type"] != "Movie" || item["ParentId"] != lib.ID {
 		t.Fatalf("direct item should stay Movie, got %#v", item)
+	}
+
+	rootMovies, err := svc.Items(t.Context(), ItemsParams{IncludeItemTypes: []string{"Movie"}, Recursive: true, Limit: 50})
+	if err != nil {
+		t.Fatalf("root movie query: %v", err)
+	}
+	rootItems := rootMovies["Items"].([]map[string]any)
+	if len(rootItems) != 1 || rootItems[0]["Id"] != media.ID || rootItems[0]["Type"] != "Movie" {
+		t.Fatalf("root movie query should include movie-library item despite season numbers, got %#v", rootItems)
+	}
+
+	rootEpisodes, err := svc.Items(t.Context(), ItemsParams{IncludeItemTypes: []string{"Episode"}, Recursive: true, Limit: 50})
+	if err != nil {
+		t.Fatalf("root episode query: %v", err)
+	}
+	if len(rootEpisodes["Items"].([]map[string]any)) != 0 {
+		t.Fatalf("root episode query should not expose movie-library item, got %#v", rootEpisodes)
+	}
+}
+
+func TestEmbyMergedLocalCloudMovieVersionsShareMediaSources(t *testing.T) {
+	svc := newTestEmbyService(t)
+	local := model.Library{Name: "国产电影", Path: `/media/国产电影`, Type: "movie", Enabled: true}
+	cloud := model.Library{Name: "OpenList · 国产电影", Path: BuildCloudLibraryPath("openlist", "/国产电影", "/国产电影"), Type: "movie", Enabled: true}
+	for _, lib := range []*model.Library{&local, &cloud} {
+		if err := svc.repo.Library.Create(t.Context(), lib); err != nil {
+			t.Fatalf("create library: %v", err)
+		}
+	}
+	for _, media := range []model.Media{
+		{
+			Base:      model.Base{ID: "local-version", CreatedAt: time.Now()},
+			LibraryID: local.ID,
+			Title:     "流浪地球",
+			Year:      2019,
+			Path:      `/media/国产电影/流浪地球.2019.1080p.mkv`,
+			Container: "mkv",
+			Width:     1920,
+		},
+		{
+			Base:      model.Base{ID: "cloud-version", CreatedAt: time.Now().Add(time.Minute)},
+			LibraryID: cloud.ID,
+			Title:     "流浪地球",
+			Year:      2019,
+			Path:      `cloud://openlist/国产电影/流浪地球.2019.2160p.mkv`,
+			Container: "mkv",
+			STRMURL:   "https://example.invalid/cloud",
+			Width:     3840,
+		},
+	} {
+		if err := svc.repo.DB.Create(&media).Error; err != nil {
+			t.Fatalf("create media: %v", err)
+		}
+	}
+
+	items, err := svc.Items(t.Context(), ItemsParams{ParentID: local.ID, IncludeItemTypes: []string{"Movie"}, Recursive: true, Limit: 10})
+	if err != nil {
+		t.Fatalf("items: %v", err)
+	}
+	rows := items["Items"].([]map[string]any)
+	if len(rows) != 1 {
+		t.Fatalf("merged local/cloud versions should show as one item, got %#v", rows)
+	}
+	if rows[0]["Id"] != "local-version" {
+		t.Fatalf("local media should be the representative item, got %#v", rows[0])
+	}
+	sources := rows[0]["MediaSources"].([]map[string]any)
+	if len(sources) != 2 {
+		t.Fatalf("merged item should expose two media sources, got %#v", sources)
+	}
+
+	playback, err := svc.PlaybackInfo(t.Context(), "local-version", "user-1")
+	if err != nil {
+		t.Fatalf("playback: %v", err)
+	}
+	playSources := playback["MediaSources"].([]map[string]any)
+	if len(playSources) != 2 {
+		t.Fatalf("playback should expose local and cloud versions, got %#v", playSources)
 	}
 }
 

@@ -129,6 +129,8 @@ func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Cont
 	backup := NewBackupService(cfg, log, repos.DB)
 	notifier := NewNotifierService(log, repos)
 	notifyChannels := NewNotifyChannelService(log, repos)
+	scanner.SetNotifyChannels(notifyChannels)
+	scraper.SetNotifyChannels(notifyChannels)
 	playProfiles := NewPlayProfileService(log, repos)
 	permissions := NewPermissionService(log, repos)
 	storageCfg := NewStorageConfigService(log, repos, crypto)
@@ -166,8 +168,10 @@ func New(cfg *config.Config, log *zap.Logger, repos *repository.Container) *Cont
 	downloads.SetScanner(scanner)
 	downloads.SetTaskTracker(tasks)
 	downloads.SetOrganizePipeline(organizePipeline)
+	downloads.SetNotifyChannels(notifyChannels)
 	subscription := NewSubscriptionService(cfg, log, repos, downloads, siteSvc, hub)
 	subscription.SetScraper(scraper)
+	subscription.SetNotifyChannels(notifyChannels)
 
 	// 让图片代理把媒体库根目录视为可读的本地图片位置：海报/封面等
 	// sidecar 资源就存放在这些（用户自定义、任意）目录下，否则会被

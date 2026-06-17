@@ -30,7 +30,7 @@ func (a *MTeamAdapter) Authenticate(ctx context.Context, cfg SiteConfig) error {
 	if strings.TrimSpace(cfg.APIKey) == "" {
 		return fmt.Errorf("M-Team 需要填写 API Access Token（控制台 → 实验室 → 存取令牌），不能使用 Cookie 访问开放 API")
 	}
-	// 与 ShukeBta/MediaStation 参考实现对齐：
+	// 与旧版参考实现对齐：
 	// 用 camelCase 参数（pageNumber / pageSize），同时接受 code 为字符串 "0"
 	// 或数值 0；兼容 M-Team v3 API 不同版本的返回。
 	u := cfg.URL + "/api/torrent/search"
@@ -181,8 +181,8 @@ func (a *MTeamAdapter) GetDetail(ctx context.Context, cfg SiteConfig, id string)
 //	POST /api/torrent/genDlToken?id={tid}     (带 x-api-key)
 //	→ {"code":"0","data":"https://api.m-team.cc/api/rss/dlv2?sign=..."}
 //
-// 拿到的 sign URL 可被任何下载客户端无认证地直接 GET。这是参考项目
-// (ShukeBta/MediaStation) 的 _download_torrent_file 方法的子集。
+// 拿到的 sign URL 可被任何下载客户端无认证地直接 GET。这是旧版参考实现
+// _download_torrent_file 方法的子集。
 func (a *MTeamAdapter) GetDownloadURL(ctx context.Context, cfg SiteConfig, id string) (string, error) {
 	u := cfg.URL + "/api/torrent/genDlToken?id=" + id
 	// genDlToken 是 POST 但参数走 query string；body 留空。
@@ -220,7 +220,7 @@ func (a *MTeamAdapter) GetDownloadURL(ctx context.Context, cfg SiteConfig, id st
 
 // parseMTeamJSON 解析 MTeam v3 JSON 响应。
 //
-// 响应结构（与 ShukeBta/MediaStation 参考项目一致）：
+// 响应结构（与旧版参考实现一致）：
 //
 //	{
 //	  "code": "0",          // 字符串 "0" 表示成功

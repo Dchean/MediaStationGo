@@ -140,7 +140,7 @@ const GROUPS: SettingGroup[] = [
   {
     key: 'license',
     label: '授权服务',
-    description: '连接私有 MediaStationLicenseServer；开源版默认最多 20 个用户，激活后按授权策略提升额度。',
+    description: '连接私有 MediaStationGo 授权服务；开源版默认最多 20 个用户，激活后按授权策略提升额度。',
     items: [
       {
         key: 'license.server_url',

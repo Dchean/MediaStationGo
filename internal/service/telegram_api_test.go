@@ -272,7 +272,7 @@ func TestTelegramReplyAutoDeletesSentMessage(t *testing.T) {
 	waitForTelegramMethod(t, requests, "deleteMessage")
 }
 
-func TestTelegramGroupCommandSendsPanelPrivately(t *testing.T) {
+func TestTelegramGroupCommandSendsPanelInGroup(t *testing.T) {
 	var payloads []struct {
 		ChatID      any            `json:"chat_id"`
 		Text        string         `json:"text"`
@@ -319,23 +319,14 @@ func TestTelegramGroupCommandSendsPanelPrivately(t *testing.T) {
 	if err := bot.HandleWebhook(t.Context(), update); err != nil {
 		t.Fatalf("handle webhook: %v", err)
 	}
-	if len(payloads) != 2 {
+	if len(payloads) != 1 {
 		t.Fatalf("sendMessage count = %d, payloads=%#v", len(payloads), payloads)
 	}
-	if got := fmt.Sprint(payloads[0].ChatID); got != "9002" {
-		t.Fatalf("first message should be private to requester, chat_id=%s payload=%#v", got, payloads[0])
+	if got := fmt.Sprint(payloads[0].ChatID); got != "-100123" {
+		t.Fatalf("message should stay in group, chat_id=%s payload=%#v", got, payloads[0])
 	}
-	if payloads[0].ReplyMarkup == nil {
-		t.Fatalf("private panel should include inline keyboard: %#v", payloads[0])
-	}
-	if got := fmt.Sprint(payloads[1].ChatID); got != "-100123" {
-		t.Fatalf("second message should be group ack, chat_id=%s payload=%#v", got, payloads[1])
-	}
-	if payloads[1].ReplyMarkup != nil {
-		t.Fatalf("group ack must not expose buttons: %#v", payloads[1])
-	}
-	if !strings.Contains(payloads[1].Text, "私聊") {
-		t.Fatalf("group ack should explain private delivery, got %q", payloads[1].Text)
+	if strings.Contains(payloads[0].Text, "管理员入口") {
+		t.Fatalf("normal group user must not see admin panel: %#v", payloads[0])
 	}
 }
 

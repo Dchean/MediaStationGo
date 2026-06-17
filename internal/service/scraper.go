@@ -38,6 +38,7 @@ type ScraperService struct {
 	fanart  *FanartProvider
 	adult   *AdultProvider
 	hub     *Hub
+	notify  *NotifyChannelService
 }
 
 // NewScraperService is the constructor.
@@ -64,6 +65,12 @@ func NewScraperService(
 
 func (s *ScraperService) SetDouban(douban *DoubanProvider) {
 	s.douban = douban
+}
+
+func (s *ScraperService) SetNotifyChannels(notify *NotifyChannelService) {
+	if s != nil {
+		s.notify = notify
+	}
 }
 
 // yearPattern extracts a 4-digit year (1900-2099).
@@ -780,6 +787,7 @@ func (s *ScraperService) EnrichLibrary(ctx context.Context, libraryID string, re
 		}
 		if err := s.EnrichOne(ctx, &rows[i]); err != nil {
 			s.log.Warn("enrich failed", zap.String("media", rows[i].ID), zap.Error(err))
+			s.notifyScrapeFailed(rows[i], err)
 			continue
 		}
 		processed++
@@ -803,6 +811,22 @@ func (s *ScraperService) EnrichLibrary(ctx context.Context, libraryID string, re
 		"processed":  processed,
 	})
 	return matched, nil
+}
+
+func (s *ScraperService) notifyScrapeFailed(m model.Media, err error) {
+	if s == nil || s.notify == nil || err == nil {
+		return
+	}
+	body := strings.TrimSpace(m.Title)
+	if body == "" {
+		body = m.Path
+	}
+	body = "媒体：" + body + "\n错误：" + err.Error()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		s.notify.Broadcast(ctx, "MediaStationGo 刮削失败", body, EventScrapeFailed)
+	}()
 }
 
 func (s *ScraperService) scrapeDelay(ctx context.Context) time.Duration {

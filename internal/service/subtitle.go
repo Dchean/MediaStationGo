@@ -4,7 +4,7 @@
 // converts SRT to WebVTT on the fly so the browser <track> element can
 // load them directly.
 //
-// External-subtitle discovery rules (matching MediaStation Python defaults):
+// External-subtitle discovery rules (matching the legacy Python defaults):
 //
 //  1. Same directory, same basename, different extension.
 //  2. Same directory, ".sub/" or "subs/" subdirectory.

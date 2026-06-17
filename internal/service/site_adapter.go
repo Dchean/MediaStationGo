@@ -119,7 +119,7 @@ func buildRequest(ctx context.Context, method, rawURL string, cfg SiteConfig, bo
 			req.Header.Set("Cookie", cfg.Cookie)
 		}
 	case "api_key":
-		// 与参考项目（ShukeBta/MediaStation）的 ApplySiteAuthHeaders 对齐：
+		// 与旧版参考实现的 ApplySiteAuthHeaders 对齐：
 		// M-Team / UNIT3D 等开放 API 的 PT 站点都使用 `x-api-key` 头部，
 		// 不要再为 mteam 单独走 Authorization: Bearer，否则服务端会 401。
 		if cfg.APIKey != "" {

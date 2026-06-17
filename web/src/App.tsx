@@ -113,7 +113,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('MediaStation UI crashed', error, info)
+    console.error('MediaStationGo UI crashed', error, info)
   }
 
   render() {

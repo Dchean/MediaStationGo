@@ -25,12 +25,12 @@ func (s *TelegramBotService) telegramCommandDefinitions(ctx context.Context, cha
 	return []telegramCommandDefinition{
 		{Aliases: []string{"/start"}, GroupAllowed: true, Handle: func(args []string) (telegramCommandReply, error) {
 			if len(args) == 0 {
-				return s.mainMenu(ctx, channel, telegramPrivateMessageForUser(msg)), nil
+				return s.mainMenu(ctx, channel, msg), nil
 			}
 			return s.cmdStart(ctx, msg, args), nil
 		}},
 		{Aliases: []string{"/menu"}, GroupAllowed: true, Handle: func(args []string) (telegramCommandReply, error) {
-			return s.mainMenu(ctx, channel, telegramPrivateMessageForUser(msg)), nil
+			return s.mainMenu(ctx, channel, msg), nil
 		}},
 		{Aliases: []string{"/cancel"}, GroupAllowed: true, Handle: func(args []string) (telegramCommandReply, error) {
 			s.takePending(int64(msg.From.ID))
@@ -176,7 +176,9 @@ func (s *TelegramBotService) executeCommand(ctx context.Context, channel *model.
 	}
 	reply, err := def.Handle(args)
 	if telegramIsGroupChat(msg.Chat.Type) && def.AdminOnly && !def.GroupAllowed {
-		reply.Buttons = nil
+		if !s.telegramUserIsAdmin(ctx, channel, msg.From.ID) {
+			reply.Buttons = nil
+		}
 	}
 	return reply, err
 }
@@ -273,6 +275,7 @@ func registerTelegramBotCommands(ctx context.Context, cfg map[string]string) err
 	if err := telegramSetBotCommands(ctx, cfg, telegramGroupBotCommandMenu(), map[string]interface{}{"type": "all_group_chats"}); err != nil {
 		return err
 	}
+	_ = telegramSetBotCommands(ctx, cfg, telegramAdminBotCommandMenu(), map[string]interface{}{"type": "all_chat_administrators"})
 
 	adminCommands := telegramAdminBotCommandMenu()
 	for _, adminID := range telegramConfiguredUserIDs(cfg["admin_user_ids"]) {

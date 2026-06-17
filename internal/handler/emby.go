@@ -645,7 +645,7 @@ func embyFallbackUser(id string) gin.H {
 	}
 	return gin.H{
 		"Id":                        id,
-		"Name":                      "MediaStation",
+		"Name":                      "MediaStationGo",
 		"ServerId":                  "mediastation-go-001",
 		"HasPassword":               true,
 		"HasConfiguredPassword":     true,

@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { AnimatePresence, motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import {
-  Activity, Bell, Clock, CloudDownload, Compass, Film,
+  Activity, Bell, Clock, CloudDownload, Compass,
   Cast, Globe, HardDrive, Heart, Home, Image, KeySquare,
   ListMusic, LogOut, Rss, Search, Trash2,
   Settings, Sliders, Sparkles, UserCog,
@@ -139,16 +139,18 @@ export function Layout() {
       {/* Brand Logo & Brand Title */}
       <div className="flex h-20 items-center justify-between px-6 border-b border-gray-100">
         <Link to="/" className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#111827] to-[#1f2937] shadow-sm">
-            <Film className="h-5 w-5 text-[#c9954a]" />
-          </div>
+          <img
+            src="/brand/mgo-emby-icon.png"
+            alt="MediaStationGo"
+            className="h-10 w-10 shrink-0 rounded-xl object-contain shadow-sm"
+          />
           {(isSidebarOpen || isMobileDrawerOpen) && (
             <motion.span 
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               className="font-display text-lg font-extrabold tracking-tight text-[#111827]"
             >
-              MediaStation
+              MediaStationGo
             </motion.span>
           )}
         </Link>

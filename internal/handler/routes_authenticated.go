@@ -23,7 +23,7 @@ func registerAuthenticatedRoutes(api *gin.RouterGroup, cfg *config.Config, svc *
 		// Permissions.
 		authed.GET("/auth/permissions", getMyPermissionsHandler(svc))
 
-		// License activation bridge (admin only; talks to MediaStationLicenseServer).
+		// License activation bridge (admin only; talks to the configured license server).
 		authed.GET("/license/status", middleware.AdminRequired(), licenseStatusHandler(svc))
 		authed.POST("/license/activate", middleware.AdminRequired(), licenseActivateHandler(svc))
 		authed.POST("/license/heartbeat", middleware.AdminRequired(), licenseHeartbeatHandler(svc))

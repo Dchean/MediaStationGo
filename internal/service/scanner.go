@@ -30,7 +30,7 @@ import (
 )
 
 // videoExtensions lists the file extensions treated as media. Matches the
-// MediaStation Python defaults.
+// legacy Python defaults.
 var videoExtensions = map[string]struct{}{
 	".mkv":  {},
 	".mp4":  {},
@@ -57,6 +57,7 @@ type ScannerService struct {
 	scraper *ScraperService
 	storage *StorageConfigService
 	cache   *RuntimeCacheService
+	notify  *NotifyChannelService
 
 	imageProxy *ImageProxy
 
@@ -78,6 +79,8 @@ type ScannerService struct {
 	localMediaProbeQueue    chan localMediaProbeTask
 	localMediaProbeMu       sync.Mutex
 	localMediaProbing       map[string]struct{}
+	localScanMu             sync.Mutex
+	localScans              map[string]struct{}
 }
 
 // NewScannerService is the constructor.
@@ -102,6 +105,7 @@ func NewScannerService(
 		cloudMediaProbeBackoff:  make(map[string]time.Time),
 		localMediaProbeQueue:    make(chan localMediaProbeTask, 1024),
 		localMediaProbing:       make(map[string]struct{}),
+		localScans:              make(map[string]struct{}),
 	}
 }
 
@@ -123,6 +127,12 @@ func (s *ScannerService) SetStorageConfig(storage *StorageConfigService) {
 func (s *ScannerService) SetRuntimeCache(cache *RuntimeCacheService) {
 	if s != nil {
 		s.cache = cache
+	}
+}
+
+func (s *ScannerService) SetNotifyChannels(notify *NotifyChannelService) {
+	if s != nil {
+		s.notify = notify
 	}
 }
 
@@ -281,6 +291,7 @@ type ScanResult struct {
 }
 
 var ErrCloudScanAlreadyRunning = errors.New("cloud scan already running")
+var ErrLocalScanAlreadyRunning = errors.New("local scan already running")
 
 const maxScanErrorDetails = 20
 
@@ -594,6 +605,7 @@ func (s *ScannerService) beginCloudScan(ctx context.Context, lib *model.Library,
 				"errors":      current.status.Errors,
 			})
 		}
+		s.notifyScanFinished(lib, res, err, true)
 	}
 	return runCtx, finish, nil
 }
@@ -832,6 +844,27 @@ func (s *ScannerService) ScanLibraryWithoutAutoScrape(ctx context.Context, libra
 	return s.scanLibrary(ctx, libraryID, false)
 }
 
+func (s *ScannerService) TryBeginLocalScan(libraryID string) (func(), bool) {
+	if s == nil || strings.TrimSpace(libraryID) == "" {
+		return func() {}, true
+	}
+	s.localScanMu.Lock()
+	if s.localScans == nil {
+		s.localScans = make(map[string]struct{})
+	}
+	if _, ok := s.localScans[libraryID]; ok {
+		s.localScanMu.Unlock()
+		return nil, false
+	}
+	s.localScans[libraryID] = struct{}{}
+	s.localScanMu.Unlock()
+	return func() {
+		s.localScanMu.Lock()
+		delete(s.localScans, libraryID)
+		s.localScanMu.Unlock()
+	}, true
+}
+
 func (s *ScannerService) scanLibrary(ctx context.Context, libraryID string, autoScrape bool) (*ScanResult, error) {
 	lib, err := s.repo.Library.FindByID(ctx, libraryID)
 	if err != nil || lib == nil {
@@ -940,6 +973,7 @@ func (s *ScannerService) scanLibrary(ctx context.Context, libraryID string, auto
 		"error_count": res.ErrorCount,
 		"errors":      res.Errors,
 	})
+	s.notifyScanFinished(lib, res, nil, false)
 	s.invalidateMediaCache(ctx)
 	s.maybeGenerateSTRMAfterScan(lib.ID)
 
@@ -949,6 +983,33 @@ func (s *ScannerService) scanLibrary(ctx context.Context, libraryID string, auto
 		s.startAutoScrape(ctx, lib.ID)
 	}
 	return res, nil
+}
+
+func (s *ScannerService) notifyScanFinished(lib *model.Library, res *ScanResult, err error, cloud bool) {
+	if s == nil || s.notify == nil || lib == nil || res == nil {
+		return
+	}
+	if err != nil {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			s.notify.Broadcast(ctx, "MediaStationGo 扫描异常", fmt.Sprintf("媒体库：%s\n错误：%s", lib.Name, err.Error()), EventSystemAlert)
+		}()
+		return
+	}
+	if res.Added+res.Updated <= 0 {
+		return
+	}
+	source := "本地媒体库"
+	if cloud {
+		source = "网盘媒体库"
+	}
+	body := fmt.Sprintf("%s：%s\n新增：%d\n更新：%d\n跳过：%d\n移除：%d", source, lib.Name, res.Added, res.Updated, res.Skipped, res.Removed)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		s.notify.Broadcast(ctx, "MediaStationGo 入库完成", body, EventLibraryIngest)
+	}()
 }
 
 // IngestPath ingests a single file into the given library without walking the

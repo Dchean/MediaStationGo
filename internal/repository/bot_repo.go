@@ -33,14 +33,18 @@ func (r *RegistrationCodeRepository) FindByCode(ctx context.Context, code string
 	return &c, nil
 }
 
-// MarkUsed atomically marks an unused, unexpired code as consumed by userID.
-// It returns gorm.ErrRecordNotFound when the code was already used so callers
-// can avoid double-spend races.
+// MarkUsed atomically consumes one use of a redeemable code. It returns
+// gorm.ErrRecordNotFound when the code is exhausted so callers can avoid
+// double-spend races.
 func (r *RegistrationCodeRepository) MarkUsed(ctx context.Context, id, userID string) error {
 	now := time.Now()
 	res := r.db.WithContext(ctx).Model(&model.RegistrationCode{}).
-		Where("id = ? AND used_at IS NULL", id).
-		Updates(map[string]any{"used_by_user_id": userID, "used_at": &now})
+		Where("id = ? AND used_at IS NULL AND used_count < CASE WHEN max_uses > 0 THEN max_uses ELSE 1 END", id).
+		Updates(map[string]any{
+			"used_by_user_id": userID,
+			"used_count":      gorm.Expr("used_count + 1"),
+			"used_at":         gorm.Expr("CASE WHEN used_count + 1 >= CASE WHEN max_uses > 0 THEN max_uses ELSE 1 END THEN ? ELSE used_at END", now),
+		})
 	if res.Error != nil {
 		return res.Error
 	}
@@ -64,7 +68,7 @@ func (r *RegistrationCodeRepository) List(ctx context.Context, limit int) ([]mod
 func (r *RegistrationCodeRepository) CountUnused(ctx context.Context) (int64, error) {
 	var n int64
 	err := r.db.WithContext(ctx).Model(&model.RegistrationCode{}).
-		Where("used_at IS NULL").Count(&n).Error
+		Where("used_at IS NULL AND used_count < CASE WHEN max_uses > 0 THEN max_uses ELSE 1 END").Count(&n).Error
 	return n, err
 }
 

@@ -1,21 +1,21 @@
 # MediaStationGo
 
 <p align="center">
-  <img src="web/public/favicon.svg" width="96" height="96" alt="MediaStationGo Logo" />
+  <img src="web/public/brand/mgo-emby-icon.png" width="96" height="96" alt="MediaStationGo Logo" />
 </p>
 
-<h3 align="center">轻量、好看、适合 NAS 的私人媒体中心</h3>
+<h3 align="center">适合 NAS、家庭共享和多端播放的私人媒体中心</h3>
 
 <p align="center">
-  <strong>Docker 一键部署 · 多用户管理 · 媒体库 · 刮削 · 下载整理 · Emby 协议兼容 · 网盘播放</strong>
+  <strong>Docker 一键部署 · PostgreSQL 主库 · Redis 热缓存 · OpenSearch 搜索增强 · Emby 协议兼容 · Bot 通知</strong>
 </p>
 
 <p align="center">
-  <a href="README_EN.md">English</a> ·
   <a href="#快速开始">快速开始</a> ·
-  <a href="#docker-compose-推荐部署">Docker 部署</a> ·
-  <a href="#常见问题">常见问题</a> ·
-  <a href="https://mgo.3jzs.com">在线演示</a>
+  <a href="#三挡部署">三挡部署</a> ·
+  <a href="#路径映射">路径映射</a> ·
+  <a href="#旧-sqlite-迁移">旧 SQLite 迁移</a> ·
+  <a href="#开发构建">开发构建</a>
 </p>
 
 <p align="center">
@@ -27,548 +27,300 @@
 
 ---
 
-## 一句话介绍
+## 项目简介
 
-MediaStationGo 是一个给个人、家庭 NAS、影音爱好者使用的媒体管理系统。
+MediaStationGo 是一个自托管媒体管理系统，面向 NAS、小主机、家庭影音和多用户共享场景。它把媒体库、刮削、下载整理、订阅、网盘播放、Emby 协议兼容、用户权限和 Bot 通知放在一个后台里，目标是让用户只维护一套服务，就能给网页端、手机端、电视端和第三方播放器使用。
 
-你可以用它做这些事：
+核心能力：
 
-- 把电影、电视剧、动漫、综艺、音乐整理成漂亮的媒体库。
-- 创建多个用户账号，给家人、朋友或不同设备分别管理登录和权限。
-- 自动识别文件、补全海报、简介、年份、季集信息。
-- 在网页里播放，也可以直接用 MediaStationGo 账号登录 Infuse、VidHub、SenPlayer、Emby 客户端等支持 Emby 协议的第三方播放器。
-- 连接 qBittorrent，做搜索、订阅、下载、整理入库。
-- 接入 OpenList / CloudDrive2 / WebDAV 等外部存储，支持 STRMURL 与 302 反代播放。
-- 在 NAS、小主机、VPS、Windows Docker Desktop 上用 Docker Compose 快速运行。
-
-> 项目还在快速迭代。默认 PostgreSQL 部署请同时备份 `data/` 和 `postgres/`。
-
----
-
-## 核心特点
-
-- **一个服务端，多端播放**：只部署一次 MediaStationGo，不需要再重复部署 Emby 服务端。
-- **兼容 Emby 协议客户端**：第三方播放器按 Emby/Jellyfin 方式添加服务器，直接用 MediaStationGo 账号密码登录。
-- **多用户管理**：支持管理员、普通用户、账号启停、有效期、设备管理、Bot 注册/兑换码等家庭共享场景。
-- **本地媒体 + 网盘媒体统一管理**：本地硬盘、下载目录、OpenList、CloudDrive2、WebDAV 等资源可以放在同一个后台管理。
-- **下载到入库一条龙**：连接 qBittorrent 后，可做搜索、订阅、下载完成整理、刮削入库。
-- **NAS 友好**：Docker Compose 部署简单，主数据库在 `postgres/`，运行密钥和配置在 `data/`，适合低功耗 NAS 和小主机长期运行。
-
----
-
-## 适合谁
-
-- **新手用户**：只想复制一份 `docker-compose.yml`，改几个路径就跑起来。
-- **NAS 用户**：想用低资源占用的媒体中心管理本地硬盘和网盘资源。
-- **PT / 下载用户**：想把下载、整理、刮削、播放放到一个后台。
-- **外部播放器用户**：想用一个 MediaStationGo 账号登录支持 Emby 协议的第三方播放器 APP。
-- **家庭共享用户**：想给不同用户分配账号，不想为每个人重复搭一套媒体服务。
-- **开发者**：想研究 Go + React 的自托管媒体项目。
-
----
-
-## 在线演示
-
-- 地址：[https://mgo.3jzs.com](https://mgo.3jzs.com)
-- 账号：`admin`
-- 密码：`admin123`
-
-> 演示站只用于看功能，请不要填写私人 API Key、站点 Cookie 或真实隐私信息。
-
----
+- **媒体库管理**：电影、电视剧、动漫、综艺、音乐和自定义媒体库统一管理。
+- **Emby 协议兼容**：Infuse、VidHub、SenPlayer、Fileball 等客户端可按 Emby/Jellyfin 方式添加服务器。
+- **本地 + 网盘**：支持本地硬盘、下载目录、OpenList、CloudDrive2、WebDAV、STRMURL 和 302 反代播放。
+- **订阅下载入库**：连接 qBittorrent 后支持搜索、订阅、下载完成整理、刮削和入库通知。
+- **多用户与权限**：管理员/普通用户、有效期、成人内容开关、设备管理、注册码和 Telegram Bot 绑定。
+- **三挡部署**：按规模选择 PostgreSQL、Redis、OpenSearch，低配 NAS 到大库检索都能覆盖。
 
 ## 快速开始
 
-最推荐新手使用 Docker Compose。不要一开始就折腾 `.env`、裸机运行、源码编译。
+最推荐使用 Docker Compose。默认模板不依赖 `.env`，复制后按自己的 NAS 路径改 `volumes` 和路径环境变量即可。
 
 ```bash
 mkdir -p MediaStationGo
 cd MediaStationGo
 curl -fsSL https://raw.githubusercontent.com/ShukeBta/MediaStationGo/main/docker-compose.yml -o docker-compose.yml
-```
-
-编辑 `docker-compose.yml`：
-
-```bash
-vi docker-compose.yml
-```
-
-然后启动：
-
-```bash
 docker compose up -d
 ```
 
-浏览器打开：
+启动后访问：
 
 ```text
 http://服务器IP:18080
 ```
 
-默认登录：
+默认账号：
 
 ```text
-账号：admin
-密码：admin123
+admin / admin123
 ```
 
----
+首次登录后请立刻修改管理员密码。
 
-## Docker Compose 推荐部署
+镜像地址：
 
-仓库里的 `docker-compose.yml` 已经是轻量推荐模板：默认不用 `.env`，默认只启动 `MediaStationGo + PostgreSQL`，适合大多数 NAS。
-
-旧版本如果已经有 `./data/mediastation.db`，首次使用新版 compose 启动时会自动导入到 PostgreSQL；`./data` 仍然要保留，用来保存 JWT 密钥、旧库迁移源和运行数据。
-
-### 三种部署模式
-
-| 模式 | 命令 | 适合场景 |
-| --- | --- | --- |
-| 轻量模式：PG only | `docker compose up -d` | 大多数 NAS，资源占用最低 |
-| 标准模式：PG + Redis | `docker compose -f docker-compose.yml -f docker-compose.standard.yml up -d` | 多用户、Emby 客户端频繁刷新 |
-| 搜索增强：PG + Redis + OpenSearch | `docker compose -f docker-compose.yml -f docker-compose.standard.yml -f docker-compose.search.yml up -d` | 超大库、后续独立搜索索引 |
-
-建议从轻量模式开始。Redis 和 OpenSearch 都是增强层，不是源数据库；低配 NAS 不要默认开启 OpenSearch。
-
-### 数据库选择与不再使用 SQLite
-
-新版 Docker Compose 默认使用 PostgreSQL，不再把 SQLite 作为主数据库。判断运行时主库只看这两个配置：
-
-```yaml
-environment:
-  MEDIASTATION_DATABASE_TYPE: postgres
-  MEDIASTATION_DATABASE_DSN: postgres://mediastation:mediastation@postgres:5432/mediastation?sslmode=disable
+```text
+GHCR：ghcr.io/shukebta/mediastation-go:latest
+Docker Hub 备用：shukbet/mediastationgo:latest
 ```
 
-`MEDIASTATION_DATABASE_DB_PATH` 只用于旧 SQLite 数据库的一次性导入：
+## 三挡部署
 
-- 新部署：直接 `docker compose up -d`，会使用 PostgreSQL，不会创建新的 SQLite 主库。
-- 旧版本升级：如果存在 `./data/mediastation.db`，首次启动新版 compose 时会自动导入到 PostgreSQL。
-- 导入按主键补齐缺失数据，已有行会跳过；如果中途失败，修复后再次启动会继续补剩余表。
-- 成功导入后会在 PostgreSQL 的 `settings` 表写入完成标记，之后即使旧 SQLite 文件还在也不会重复导入。
-- Redis 是热缓存，OpenSearch 是搜索索引；它们都不是源数据库，丢失后可以重建。
+MediaStationGo 推荐按机器资源和用户规模选择部署档位。三挡都使用 PostgreSQL 作为主数据库；Redis 和 OpenSearch 是增强组件，不替代 PostgreSQL。
 
-旧 SQLite 升级到 PostgreSQL 的建议步骤：
+| 档位 | 组件 | 适合场景 | 启动命令 |
+| --- | --- | --- | --- |
+| 第一档 | MediaStationGo + PostgreSQL | 大多数 NAS、个人/家庭使用、低内存机器 | `docker compose up -d` |
+| 第二档 | MediaStationGo + PostgreSQL + Redis | 多用户、Emby 客户端频繁刷新、首页/媒体列表访问较多 | `docker compose -f docker-compose.yml -f docker-compose.standard.yml up -d` |
+| 第三档 | MediaStationGo + PostgreSQL + Redis + OpenSearch | 超大媒体库、复杂全文搜索、后续需要独立搜索索引 | `docker compose -f docker-compose.yml -f docker-compose.standard.yml -f docker-compose.search.yml up -d` |
+
+### 第一档：PostgreSQL
+
+第一档是默认推荐部署。它只启动主服务和 PostgreSQL，资源占用最低，适合绝大多数 NAS。
 
 ```bash
+# 拉取最新镜像
 docker compose pull
+
+# 启动第一档：MediaStationGo + PostgreSQL
 docker compose up -d
-docker compose logs -f mediastation-go
 ```
 
-看到 `sqlite data migrated to postgres`，或确认网页里的用户、媒体库、设置都正常后，再处理旧 SQLite 文件。
-
-如果你确认以后不再使用 SQLite，也不希望应用再把旧 SQLite 当迁移源，可以这样做：
-
-> 只有在网页确认用户、媒体库、设置、媒体条目都已经出现在 PostgreSQL 后，才做下面这一步。
-
-```yaml
-environment:
-  MEDIASTATION_DATABASE_TYPE: postgres
-  MEDIASTATION_DATABASE_DSN: postgres://mediastation:mediastation@postgres:5432/mediastation?sslmode=disable
-  MEDIASTATION_DATABASE_DB_PATH: /data/disabled-sqlite-migration.db
-```
-
-然后把宿主机上的旧文件改名或移走作为离线备份：
-
-```bash
-mv data/mediastation.db data/mediastation.sqlite.bak
-```
-
-裸机或自定义 `config.yaml` 部署时同理：
-
-```yaml
-database:
-  type: postgres
-  dsn: postgres://mediastation:mediastation@127.0.0.1:5432/mediastation?sslmode=disable
-  db_path: ""
-```
-
-注意：不要删除 `./postgres`。迁移完成后真正的主数据库在 `./postgres`，`./data` 仍要保留，因为里面有 JWT 密钥和运行配置。
-
-### 镜像地址怎么选
-
-两种镜像地址都可以用，选择其中一种写到 `image:` 即可：
-
-| 来源 | 镜像地址 | 适合场景 |
-| --- | --- | --- |
-| GitHub 仓库镜像 GHCR | `ghcr.io/shukebta/mediastation-go:latest` | 默认推荐，跟随仓库发布 |
-| Docker Hub | `shukbet/mediastationgo:latest` | 备用镜像，GHCR 拉取慢或不可用时使用 |
-
-如果想固定版本，请先到仓库 Packages 页面确认 GHCR 是否有对应标签。写法如下：
-
-```yaml
-image: ghcr.io/shukebta/mediastation-go:<版本标签>
-# GHCR 没有对应标签时，可以用 Docker Hub 备用：
-# image: shukbet/mediastationgo:MediaStationGo-v0.0.72
-```
-
-如果只想简单部署，直接使用 GHCR 的 `latest` 即可。
-
-手动拉取示例：
-
-```bash
-# GitHub 仓库镜像
-docker pull ghcr.io/shukebta/mediastation-go:latest
-
-# Docker Hub 备用
-docker pull shukbet/mediastationgo:latest
-```
-
-你只需要重点看 `volumes` 这一段：
-
-```yaml
-volumes:
-  - ./data:/data
-  - ./cache:/cache
-  - ./media:/media
-  - ./downloads:/downloads
-```
-
-含义很简单：
-
-| 左边 | 右边 | 说明 |
-| --- | --- | --- |
-| `./data` | 主程序 `/data` | 程序配置、JWT 密钥、旧 SQLite 迁移源；主数据库在 `./postgres` |
-| `./cache` | 主程序 `/cache` | 缓存目录；可清理 |
-| `./media` | `/media` | 媒体库目录；自动整理入库需要可写，网页里添加媒体库时填 `/media/...` |
-| `./downloads` | `/downloads` | 下载目录；文件管理和自动整理会用 |
-| `./postgres` | PostgreSQL `/var/lib/postgresql/data` | 新版默认主数据库；一定要备份 |
-| `./redis` | Redis `/data` | 标准模式才会使用；热缓存，丢失可重建 |
-| `./opensearch` | OpenSearch `/usr/share/opensearch/data` | 搜索增强模式才会使用；占用内存较高 |
-
-如果你的媒体在 NAS 真实目录，例如：
+关键数据目录：
 
 ```text
-/vol1/1000/Media
-/vol1/1000/Downloads
+./postgres   PostgreSQL 主数据库，必须备份
+./data       JWT 密钥、运行配置、旧 SQLite 迁移源
+./cache      海报、临时文件、转码缓存，可删除重建
 ```
 
-就把 compose 改成：
+### 第二档：PostgreSQL + Redis
 
-```yaml
-volumes:
-  - ./data:/data
-  - ./cache:/cache
-  - /vol1/1000/Media:/media
-  - /vol1/1000/Downloads:/downloads
+第二档在第一档基础上叠加 Redis。Redis 用作热缓存，能减轻多用户和 Emby 客户端频繁刷新时的数据库压力。
 
-environment:
-  MEDIASTATION_MEDIA_DIR: /vol1/1000/Media
-  MEDIASTATION_DOWNLOAD_DIR: /vol1/1000/Downloads
+```bash
+# 启动第二档：基础 compose + Redis 叠加文件
+docker compose -f docker-compose.yml -f docker-compose.standard.yml up -d
 ```
 
-注意：
+Redis 数据目录是 `./redis`。它主要保存缓存，通常可重建；真正需要备份的仍然是 `./postgres` 和 `./data`。
 
-- `volumes` 左边是宿主机 / NAS 的真实路径。
-- `volumes` 右边是容器里的路径，建议固定用 `/media` 和 `/downloads`。
-- 在网页里新建媒体库时，填容器路径，例如 `/media/电影`、`/media/电视剧`。
-- 不要把 NAS 绝对路径写成 `./vol1/...`，`./` 表示当前部署目录下面的相对路径。
-- Windows Docker Desktop 可以写成 `D:/Media:/media`、`D:/Downloads:/downloads`。
-- 如果你只想扫描/播放、不使用自动整理入库，可以手动加 `:ro` 变成只读；只要要整理、重命名、入库，媒体库挂载必须保持读写。
+### 第三档：PostgreSQL + Redis + OpenSearch
 
-### 最简单 compose 示例
+第三档在第二档基础上叠加 OpenSearch，用于大库全文搜索和独立搜索索引。OpenSearch 常驻内存明显更高，低配 NAS 不建议开启。
 
-仓库根目录的 `docker-compose.yml` 就是这个思路。你也可以手动创建：
+```bash
+# 启动第三档：基础 compose + Redis + OpenSearch
+docker compose -f docker-compose.yml -f docker-compose.standard.yml -f docker-compose.search.yml up -d
+```
+
+OpenSearch 数据目录是 `./opensearch`。搜索索引可重建，但重建大库索引会花时间；机器资源足够时再开启第三档。
+
+## 配置示例
+
+仓库内提供三份推荐 Compose 文件：
+
+```text
+docker-compose.yml            第一档：MediaStationGo + PostgreSQL
+docker-compose.standard.yml   第二档叠加：Redis 热缓存
+docker-compose.search.yml     第三档叠加：OpenSearch 搜索增强
+```
+
+常用配置片段如下，注释保留为中文，方便直接复制到 NAS 上调整：
 
 ```yaml
 services:
   mediastation-go:
-    # 镜像二选一：
-    # GitHub 仓库镜像 GHCR：
     image: ghcr.io/shukebta/mediastation-go:latest
-    # Docker Hub 备用：
-    # image: shukbet/mediastationgo:latest
-
-    restart: unless-stopped
-    init: true
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-    # 访问端口：浏览器打开 http://服务器IP:18080
     ports:
+      # 左边是宿主机访问端口，右边是容器内端口。
       - "18080:8080"
-
-    # 让容器可以访问宿主机上的 qBittorrent：
-    # qB 地址可填 http://host.docker.internal:8085
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
     volumes:
-      # 程序数据，升级前备份这个目录。
+      # 运行数据：JWT 密钥、配置、旧 SQLite 迁移源。
       - ./data:/data
+
+      # 缓存目录：海报、临时文件、转码缓存，可删除重建。
       - ./cache:/cache
 
-      # 新手先用当前目录下的 media/downloads。
-      # NAS 用户把左边改成真实绝对路径。
-      - ./media:/media
-      - ./downloads:/downloads
+      # 媒体库目录：自动整理/重命名/入库需要写权限。
+      - /vol1/1000/Media:/media
 
+      # 下载目录：qBittorrent 保存目录和自动整理源目录。
+      - /vol1/1000/Downloads:/downloads
     environment:
       TZ: Asia/Shanghai
-      PUID: "1000"
-      PGID: "1000"
 
-      MEDIASTATION_APP_HOST: 0.0.0.0
-      MEDIASTATION_APP_PORT: 8080
-      MEDIASTATION_APP_WEB_DIR: /app/web/dist
-      MEDIASTATION_APP_DATA_DIR: /data
-
-      # 轻量模式默认 PostgreSQL；旧 SQLite 会从这个路径自动迁移。
+      # PostgreSQL 主数据库。
       MEDIASTATION_DATABASE_TYPE: postgres
       MEDIASTATION_DATABASE_DSN: postgres://mediastation:mediastation@postgres:5432/mediastation?sslmode=disable
-      # 确认迁移完成后，如需彻底禁用 SQLite 迁移源，可改成 /data/disabled-sqlite-migration.db。
+
+      # 旧 SQLite 迁移源：只在从旧版 data/mediastation.db 导入时使用。
       MEDIASTATION_DATABASE_DB_PATH: /data/mediastation.db
-      MEDIASTATION_CACHE_CACHE_DIR: /cache
 
-      # 如果上面的 ./media / ./downloads 改成 NAS 真实路径，
-      # 这里也改成同样的宿主机真实路径。
-      MEDIASTATION_MEDIA_DIR: ./media
+      # 路径换算：宿主机路径和容器路径必须一一对应。
+      MEDIASTATION_MEDIA_DIR: /vol1/1000/Media
       MEDIASTATION_MEDIA_CONTAINER_DIR: /media
-      MEDIASTATION_DOWNLOAD_DIR: ./downloads
+      MEDIASTATION_DOWNLOAD_DIR: /vol1/1000/Downloads
       MEDIASTATION_DOWNLOAD_CONTAINER_DIR: /downloads
-
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: mediastation
-      POSTGRES_USER: mediastation
-      POSTGRES_PASSWORD: mediastation
-    volumes:
-      - ./postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U mediastation -d mediastation"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
 ```
 
-> 说明：PostgreSQL 是主数据库；轻量模式也有进程内短缓存。Redis 是跨进程热缓存，OpenSearch 是搜索增强层，都不是源数据库。
+## 路径映射
 
----
+路径映射是 Docker 部署里最容易填错的地方。原则是：`volumes` 左边是宿主机真实路径，右边是容器内路径；环境变量里也要保持对应关系。
 
-## 首次进入后怎么配置
+NAS 示例：
 
-1. **新建媒体库**
-   - 进入「媒体库」页面。
-   - 路径填容器路径，例如 `/media/电影`。
-   - 点扫描。
+```yaml
+volumes:
+  - /vol1/1000/Docker/moviepilot-v2/media:/vol1/1000/Docker/moviepilot-v2/media
+  - /vol1/1000/qBittorrent/downloads:/vol1/1000/qBittorrent/downloads
+environment:
+  MEDIASTATION_MEDIA_DIR: /vol1/1000/Docker/moviepilot-v2/media
+  MEDIASTATION_MEDIA_CONTAINER_DIR: /vol1/1000/Docker/moviepilot-v2/media
+  MEDIASTATION_DOWNLOAD_DIR: /vol1/1000/qBittorrent/downloads
+  MEDIASTATION_DOWNLOAD_CONTAINER_DIR: /vol1/1000/qBittorrent/downloads
+```
 
-2. **配置下载器**
-   - 进入「下载器管理」。
-   - 如果 qBittorrent 在宿主机上，地址通常填 `http://host.docker.internal:8085`。
+Windows Docker Desktop 示例：
 
-3. **配置刮削源**
-   - 进入「系统设置 / 外部 API」。
-   - 按需填写 TMDb、Bangumi、TheTVDB、Fanart、豆瓣等配置。
+```yaml
+volumes:
+  - D:/Media:/media
+  - D:/Downloads:/downloads
+environment:
+  MEDIASTATION_MEDIA_DIR: D:/Media
+  MEDIASTATION_MEDIA_CONTAINER_DIR: /media
+  MEDIASTATION_DOWNLOAD_DIR: D:/Downloads
+  MEDIASTATION_DOWNLOAD_CONTAINER_DIR: /downloads
+```
 
-4. **配置外部播放器**
-   - 第三方客户端按 Emby/Jellyfin 方式添加服务器。
-   - 地址填 `http://服务器IP:18080`。
-   - 用户名和密码填 MediaStationGo 后台创建的账号，不需要单独部署 Emby 服务端。
-   - 管理员可以在后台/Bot 创建普通用户，让不同用户用自己的账号登录第三方播放器。
+如果后台添加媒体库时填的是 `/vol1/...`，Compose 里也建议把同一个 `/vol1/...` 挂进容器，避免自动整理和下载入库时路径不可访问。
 
-5. **配置网盘播放**
-   - 进入「外部存储」配置 OpenList、CloudDrive2、WebDAV 等。
-   - 后台播放策略可以选择 STRMURL 或 302 反代。
-   - 开启哪个，就优先走哪个；都关闭时走普通服务端播放链路。
+## 旧 SQLite 迁移
 
----
+新版推荐 PostgreSQL 作为主数据库。`MEDIASTATION_DATABASE_DB_PATH` 不是主库路径，而是旧 SQLite 数据的迁移源。
 
-## 更新、备份、日志
+迁移步骤：
 
-### 更新
+1. 把旧版 `mediastation.db` 放到 `./data/mediastation.db`。
+2. 保持 `MEDIASTATION_DATABASE_DB_PATH: /data/mediastation.db`。
+3. 启动一次，确认日志显示迁移完成，网页数据正常。
+4. 备份 `./postgres` 和 `./data`。
+5. 确认不再需要 SQLite 后，把迁移源改成不存在的路径，例如：
+
+```yaml
+environment:
+  # 已完成 SQLite 迁移后，建议改成不存在的路径，避免下次启动重复检查旧库。
+  MEDIASTATION_DATABASE_DB_PATH: /data/no-sqlite-migration.db
+```
+
+不要删除 `./postgres`。PostgreSQL 已经是主数据库，删除它会丢失账号、媒体库、订阅、配置和历史数据。
+
+## 更新与备份
+
+更新镜像：
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-### 查看日志
+第二档和第三档更新时继续带上叠加文件：
 
 ```bash
-docker compose logs -f mediastation-go
+# 第二档
+docker compose -f docker-compose.yml -f docker-compose.standard.yml pull
+docker compose -f docker-compose.yml -f docker-compose.standard.yml up -d
+
+# 第三档
+docker compose -f docker-compose.yml -f docker-compose.standard.yml -f docker-compose.search.yml pull
+docker compose -f docker-compose.yml -f docker-compose.standard.yml -f docker-compose.search.yml up -d
 ```
 
-### 备份
-
-默认 PostgreSQL 部署重点备份：
+必须备份：
 
 ```text
-data/
-postgres/
+./postgres   PostgreSQL 主数据库
+./data       JWT 密钥、运行配置、旧 SQLite 迁移源
 ```
 
-`postgres/` 是主数据库，包含用户、媒体库、设置等核心数据；`data/` 保存 JWT 密钥、运行配置和旧 SQLite 迁移源，也要保留。
-
-如果启用了增强模式，还可以按需备份：
+可重建：
 
 ```text
-redis/        # 热缓存，可不备份
-opensearch/   # 搜索索引，可重建；超大库可备份以减少重建时间
+./cache      图片缓存、临时文件、转码缓存
+./redis      Redis 热缓存
+./opensearch 搜索索引
 ```
 
-`cache/` 通常不用备份。如果你仍显式使用 `database.type=sqlite` 的旧部署，主库仍在 `data/mediastation.db`。
+## Bot 与通知
 
-### 停止
+MediaStationGo 支持 Telegram Bot 绑定、用户菜单、群组管理菜单和事件通知。常见通知事件包括：
 
-```bash
-docker compose down
-```
+- 订阅命中新资源
+- 下载任务完成
+- 入库完成
+- 刮削失败告警
+- 系统异常通知
 
----
+管理员可以在后台配置 Bot Token、Chat ID、通知频道和事件类型。群组里管理类命令只允许管理员执行，普通用户只能看到和使用用户命令。
 
 ## 常见问题
 
-### 1. 页面打不开？
+**启动后还是反复迁移 SQLite？**
 
-先看容器是否启动：
+确认旧数据已经迁移成功后，把 `MEDIASTATION_DATABASE_DB_PATH` 改成不存在的路径，例如 `/data/no-sqlite-migration.db`，然后重启容器。
 
-```bash
-docker ps
-docker compose logs --tail=100 mediastation-go
-```
+**扫库或入库速度很慢？**
 
-确认浏览器访问的是：
+先确认数据库档位和路径映射正确。第一档已经足够大多数场景；第二档 Redis 能缓解频繁刷新造成的数据库压力；第三档主要增强搜索，不会替代媒体扫描本身。网盘扫描还会受网盘接口响应、目录数量和网络质量影响。
 
-```text
-http://服务器IP:18080
-```
+**qBittorrent 下载完成后无法整理？**
 
-### 2. 媒体库扫描不到文件？
+确认 qBittorrent 保存路径已经通过 `volumes` 挂载进 MediaStationGo 容器，并且 `MEDIASTATION_DOWNLOAD_DIR` 与 `MEDIASTATION_DOWNLOAD_CONTAINER_DIR` 对应正确。
 
-最常见原因是路径写错。
+**第三方播放器无法连接？**
 
-- Docker `volumes` 右边是 `/media`。
-- 网页媒体库路径就应该填 `/media/电影`，不要填 NAS 原始路径。
-- 如果 qB 下载目录是 `/downloads`，自动整理源目录也优先填 `/downloads`。
+确认播放器填写的是 `http://服务器IP:18080`，账号密码使用 MediaStationGo 用户账号。反代部署时需要正确设置外部访问地址和 HTTPS 头。
 
-### 3. qBittorrent 连不上？
+## 开发构建
 
-如果 qB 在宿主机上，地址试试：
-
-```text
-http://host.docker.internal:8085
-```
-
-如果 qB 在另一台机器上，填那台机器的局域网 IP。
-
-### 4. NAS CPU 占用高？
-
-建议先在系统设置里确认：
-
-- `ffprobe.max_concurrent` 设为 `1`。
-- 自动整理、扫描后刮削、启动后扫描网盘按需开启。
-- 大媒体库不要频繁全量扫描，优先手动扫描或夜间同步。
-
-### 5. 要不要用 `.env`？
-
-新手不建议。直接改 `docker-compose.yml` 最直观。
-
-`.env` 适合进阶用户在多台机器复用同一份 compose。仓库保留 `docker-compose.simple.env.example`，但它不是推荐主线。
-
----
-
-## 功能概览
-
-| 分类 | 功能 |
-| --- | --- |
-| 媒体库 | 电影、电视剧、动漫、综艺、音乐、成人内容 |
-| 元数据 | NFO、本地图片、TMDb、TheTVDB、Bangumi、豆瓣、Fanart、JavBus/JavDB |
-| 播放 | Web 播放、Range 拖动、HLS 转码、直链、STRMURL、302 反代 |
-| 外部客户端 | Emby 协议兼容接口，MediaStationGo 账号可直接登录第三方播放器 |
-| 用户管理 | 多用户、管理员/普通用户、账号有效期、设备管理、Bot 注册与兑换码 |
-| 下载 | qBittorrent、站点搜索、订阅、下载完成后整理 |
-| 文件管理 | 浏览、整理、复制、移动、硬链接、软链接 |
-| 运维 | 任务队列、回收站、重复文件、通知渠道、运行日志 |
-| AI | OpenAI Compatible API、AI 搜索、推荐、助手 |
-
----
-
-## 截图
-
-<details open>
-<summary><strong>界面预览</strong></summary>
-
-| 登录 | 首页 |
-| --- | --- |
-| <img src="docs/screenshots/00-login.jpg" alt="登录" width="100%"> | <img src="docs/screenshots/01-home.jpg" alt="首页" width="100%"> |
-
-| 媒体库 | 播放器 |
-| --- | --- |
-| <img src="docs/screenshots/02-libraries.jpg" alt="媒体库" width="100%"> | <img src="docs/screenshots/06-player.jpg" alt="播放器" width="100%"> |
-
-</details>
-
----
-
-## 开发者运行
-
-普通用户请优先使用 Docker。开发者可以这样运行：
+本地开发需要 Go、Node.js 和 npm。
 
 ```bash
-go run ./cmd/server
-```
-
-前端：
-
-```bash
-cd web
-npm install
-npm run dev
-```
-
-测试：
-
-```bash
+# 后端测试
 go test ./...
-cd web && npm run build
+
+# 前端依赖与构建
+npm --prefix web install
+npm --prefix web run build
+
+# 本地运行后端
+go run ./cmd/server
+
+# 本地运行前端开发服务器
+npm --prefix web run dev
 ```
 
----
+前端开发服务器默认访问：
 
-## 社区与友链
+```text
+http://127.0.0.1:3000
+```
 
-- Telegram MediaStationGo交流群：<https://t.me/MediaStationGo>
-- NodeSeek：[https://www.nodeseek.com/](https://www.nodeseek.com/)
-- LINUX DO：[https://linux.do/](https://linux.do/)
+后端健康检查：
 
----
+```text
+http://127.0.0.1:8080/api/health
+```
 
-## 赞赏
+## 许可证
 
-如果这个项目节省了你的时间，欢迎请作者吃桶泡面。
-
-<img width="200" height="200" alt="微信赞赏码" src="https://github.com/user-attachments/assets/d6077de5-8305-400d-8b82-470ef05d926e" />
-
----
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=ShukeBta%2FMediaStationGo&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ShukeBta/MediaStationGo&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ShukeBta/MediaStationGo&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=ShukeBta/MediaStationGo&type=date&legend=top-left" />
- </picture>
-</a>
-
----
-
-## 许可证与非商用声明
-
-本项目基础许可证遵循 `GPL-3.0`，详见 [LICENSE](LICENSE)。
-
-项目维护者同时声明并倡议：
-
-- 本项目主要面向个人学习、家庭 NAS、自建影音、非商业研究与社区共建场景。
-- 未经作者明确书面许可，不得将本项目或衍生版本用于商业售卖、商业托管、付费 SaaS、预装售卖设备、闭源二次分发或其他商业化牟利用途。
-- 如需商业合作、企业内部部署、定制开发、集成发行或商业授权，请先联系作者确认授权边界。
-- 若 README 的非商用声明与 `GPL-3.0` 正式许可文本存在解释差异，代码授权以 [LICENSE](LICENSE) 文件为准，商业使用请额外取得作者许可。
-
----
-
-<p align="center">Made with ❤️ by ShukeBta</p>
+本项目使用 GPL-3.0 License。详见 [LICENSE](LICENSE)。

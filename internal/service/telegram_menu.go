@@ -80,7 +80,19 @@ func (s *TelegramBotService) mainMenu(ctx context.Context, channel *model.Notify
 			)
 		}
 		if isAdmin {
-			header += "\n\n" + telegramGroupPrivateAdminHint()
+			header += "\n\n<b>管理员入口</b>"
+			rows = append(rows,
+				[]telegramInlineButton{{Text: "—— 管理员 ——", Data: "noop"}},
+				[]telegramInlineButton{
+					{Text: "📊 容量/状态", Data: "adm_capacity"},
+					{Text: "👥 用户管理", Data: "adm_users"},
+				},
+				[]telegramInlineButton{
+					{Text: "🔓 开注设置", Data: "adm_openreg"},
+					{Text: "🎟 生成兑换码", Data: "adm_gencode"},
+				},
+				[]telegramInlineButton{{Text: "⚙️ 设备策略", Data: "adm_devicepolicy"}},
+			)
 		}
 		return telegramCommandReply{Text: header, Buttons: rows}
 	}
@@ -190,10 +202,7 @@ func (s *TelegramBotService) handleMenuCallback(ctx context.Context, channel *mo
 	}
 
 	// ── 管理员专属 ──
-	if isGroup {
-		if isAdmin {
-			return telegramCommandReply{Text: telegramGroupPrivateAdminHint()}, true
-		}
+	if isGroup && !isAdmin {
 		return telegramCommandReply{}, true
 	}
 	if !isAdmin {
@@ -557,7 +566,7 @@ func (s *TelegramBotService) createUserFromRegistrationCode(ctx context.Context,
 	var created model.User
 	var claimed model.RegistrationCode
 	err := s.repo.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("code = ? AND kind = ? AND used_at IS NULL", code, model.RegistrationCodeRegister).
+		if err := tx.Where("code = ? AND kind = ? AND used_at IS NULL AND used_count < CASE WHEN max_uses > 0 THEN max_uses ELSE 1 END", code, model.RegistrationCodeRegister).
 			First(&claimed).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return errRegistrationCodeAlreadyUsed
@@ -598,8 +607,12 @@ func (s *TelegramBotService) createUserFromRegistrationCode(ctx context.Context,
 		}
 		now := time.Now()
 		res := tx.Model(&model.RegistrationCode{}).
-			Where("id = ? AND used_at IS NULL", claimed.ID).
-			Updates(map[string]any{"used_by_user_id": created.ID, "used_at": &now})
+			Where("id = ? AND used_at IS NULL AND used_count < CASE WHEN max_uses > 0 THEN max_uses ELSE 1 END", claimed.ID).
+			Updates(map[string]any{
+				"used_by_user_id": created.ID,
+				"used_count":      gorm.Expr("used_count + 1"),
+				"used_at":         gorm.Expr("CASE WHEN used_count + 1 >= CASE WHEN max_uses > 0 THEN max_uses ELSE 1 END THEN ? ELSE used_at END", now),
+			})
 		if res.Error != nil {
 			return res.Error
 		}
@@ -607,7 +620,10 @@ func (s *TelegramBotService) createUserFromRegistrationCode(ctx context.Context,
 			return errRegistrationCodeAlreadyUsed
 		}
 		claimed.UsedByUserID = created.ID
-		claimed.UsedAt = &now
+		claimed.UsedCount++
+		if claimed.UsedCount >= claimed.EffectiveMaxUses() {
+			claimed.UsedAt = &now
+		}
 		return nil
 	})
 	if err != nil {
@@ -713,7 +729,7 @@ func (s *TelegramBotService) replyGenCode(ctx context.Context, msg *TelegramMess
 
 func (s *TelegramBotService) cmdGenCode(ctx context.Context, msg *TelegramMessage, args []string) telegramCommandReply {
 	if len(args) < 2 {
-		return telegramCommandReply{Text: "用法：<code>/gencode register|renew 天数 [有效天数]</code>\n示例：<code>/gencode register 30</code>、<code>/gencode renew 90 7</code>"}
+		return telegramCommandReply{Text: "用法：<code>/gencode register|renew 天数 [有效天数] [可用次数]</code>\n示例：<code>/gencode register 30</code>、<code>/gencode renew 90 7 5</code>"}
 	}
 	kind := strings.ToLower(strings.TrimSpace(args[0]))
 	switch kind {
@@ -735,11 +751,18 @@ func (s *TelegramBotService) cmdGenCode(ctx context.Context, msg *TelegramMessag
 			return telegramCommandReply{Text: "有效天数必须是非负整数。"}
 		}
 	}
+	maxUses := 1
+	if len(args) > 3 {
+		maxUses, err = strconv.Atoi(args[3])
+		if err != nil || maxUses <= 0 {
+			return telegramCommandReply{Text: "可用次数必须是正整数。"}
+		}
+	}
 	createdBy := ""
 	if u := s.boundUser(ctx, msg.From.ID); u != nil {
 		createdBy = u.ID
 	}
-	code, err := s.generateCode(ctx, kind, days, validDays, createdBy)
+	code, err := s.generateCodeWithUses(ctx, kind, days, validDays, maxUses, createdBy)
 	if err != nil {
 		return telegramCommandReply{Text: "生成失败：" + err.Error()}
 	}
@@ -752,7 +775,11 @@ func (s *TelegramBotService) cmdGenCode(ctx context.Context, msg *TelegramMessag
 	if validDays > 0 && code.ExpiresAt != nil {
 		valid = "有效至 " + code.ExpiresAt.Format("2006-01-02 15:04")
 	}
-	return telegramCommandReply{Text: fmt.Sprintf("已生成%s（%s，%s）：\n\n<code>%s</code>", kindLabel, dur, valid, code.Code)}
+	uses := "单次使用"
+	if code.EffectiveMaxUses() > 1 {
+		uses = fmt.Sprintf("最多 %d 次", code.EffectiveMaxUses())
+	}
+	return telegramCommandReply{Text: fmt.Sprintf("已生成%s（%s，%s，%s）：\n\n<code>%s</code>", kindLabel, dur, valid, uses, code.Code)}
 }
 
 func (s *TelegramBotService) replyUserList(ctx context.Context) telegramCommandReply {
