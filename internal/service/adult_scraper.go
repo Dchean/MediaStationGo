@@ -112,21 +112,35 @@ func (p *AdultProvider) resolveBases(ctx context.Context) []string {
 		return nil
 	}
 	configured := []string{}
-	if resolved.BaseURL != "" {
-		configured = append(configured, resolved.BaseURL)
-	}
-	if resolved.Extra != "" {
-		for _, part := range strings.Split(resolved.Extra, ",") {
-			part = strings.TrimSpace(part)
-			if strings.HasPrefix(part, "http://") || strings.HasPrefix(part, "https://") {
-				configured = append(configured, part)
-			}
-		}
-	}
+	configured = append(configured, adultConfiguredBases(resolved.BaseURL)...)
+	configured = append(configured, adultConfiguredBases(resolved.Extra)...)
 	if len(configured) > 0 {
 		out = append(configured, out...)
 	}
 	return dedupeStrings(out)
+}
+
+func adultConfiguredBases(value string) []string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		switch r {
+		case ',', ';', '\n', '\r', '\t', ' ':
+			return true
+		default:
+			return false
+		}
+	})
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if !strings.HasPrefix(part, "http://") && !strings.HasPrefix(part, "https://") {
+			part = "https://" + part
+		}
+		out = append(out, strings.TrimRight(part, "/"))
+	}
+	return out
 }
 
 func adultSourceKind(base string) string {

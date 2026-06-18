@@ -317,7 +317,7 @@ const (
 )
 
 var (
-	embySeasonDirRE    = regexp.MustCompile(`(?i)^(season[\s._-]*\d+|s\d+|第\s*[0-9一二三四五六七八九十百零两]+\s*季)$`)
+	embySeasonDirRE    = regexp.MustCompile(`(?i)^(season[\s._-]*\d+|s\d+|specials?|sp|ova|oad|extra|extras|第\s*[0-9一二三四五六七八九十百零两]+\s*季|特别篇|特別篇|番外|特典)$`)
 	embyYearSuffixRE   = regexp.MustCompile(`\s*[\(（\[]\d{4}[\)）\]]\s*$`)
 	embyEpisodeTitleRE = regexp.MustCompile(`(?i)\s*[-_ ]*s\d{1,2}e\d{1,3}.*$`)
 )
@@ -491,6 +491,9 @@ func (e *EmbyService) mediaItems(ctx context.Context, p ItemsParams) (map[string
 	}
 	if filterBySeasonNumbers && containsItemType(p.IncludeItemTypes, "Movie") && !containsItemType(p.IncludeItemTypes, "Episode") {
 		q = e.filterMovieItems(ctx, q)
+	}
+	if parentKnownNonEpisodic && containsItemType(p.IncludeItemTypes, "Movie") && !containsItemType(p.IncludeItemTypes, "Episode") {
+		q = filterLikelyEpisodicPathsFromMovieQuery(q)
 	}
 	if filterBySeasonNumbers && containsItemType(p.IncludeItemTypes, "Episode") && !containsItemType(p.IncludeItemTypes, "Movie") {
 		q = e.filterEpisodeItems(ctx, q)
@@ -892,7 +895,7 @@ func (e *EmbyService) itemPayload(ctx context.Context, m *model.Media, fav bool,
 	seriesID := m.SeriesID
 	seriesName := ""
 	seasonID := ""
-	if e.mediaBelongsToEpisodicLibrary(ctx, m) && (m.SeasonNum > 0 || m.EpisodeNum > 0) {
+	if e.mediaShouldBeEpisode(ctx, m) {
 		itemType = "Episode"
 		seriesID = e.seriesIDForMedia(m)
 		seriesName = e.seriesNameForMedia(m)
@@ -1027,6 +1030,16 @@ func (e *EmbyService) mediaBelongsToEpisodicLibrary(ctx context.Context, m *mode
 	return embyLibraryTypeIsEpisodic(lib.Type)
 }
 
+func (e *EmbyService) mediaShouldBeEpisode(ctx context.Context, m *model.Media) bool {
+	if m == nil || (m.SeasonNum <= 0 && m.EpisodeNum <= 0) {
+		return false
+	}
+	if e.mediaBelongsToEpisodicLibrary(ctx, m) {
+		return true
+	}
+	return embyMediaPathLooksEpisodic(m.Path)
+}
+
 func embyLibraryTypeIsEpisodic(typ string) bool {
 	switch strings.ToLower(strings.TrimSpace(typ)) {
 	case "tv", "anime", "variety":
@@ -1039,9 +1052,10 @@ func embyLibraryTypeIsEpisodic(typ string) bool {
 func (e *EmbyService) filterMovieItems(ctx context.Context, q *gorm.DB) *gorm.DB {
 	episodicIDs := e.episodicLibraryIDs(ctx)
 	if len(episodicIDs) == 0 {
-		return q
+		return filterLikelyEpisodicPathsFromMovieQuery(q)
 	}
-	return q.Where("(media.season_num = 0 AND media.episode_num = 0) OR media.library_id NOT IN ?", episodicIDs)
+	q = q.Where("(media.season_num = 0 AND media.episode_num = 0) OR media.library_id NOT IN ?", episodicIDs)
+	return filterLikelyEpisodicPathsFromMovieQuery(q)
 }
 
 func (e *EmbyService) filterEpisodeItems(ctx context.Context, q *gorm.DB) *gorm.DB {
@@ -1063,6 +1077,63 @@ func (e *EmbyService) episodicLibraryIDs(ctx context.Context) []string {
 		return nil
 	}
 	return ids
+}
+
+func filterLikelyEpisodicPathsFromMovieQuery(q *gorm.DB) *gorm.DB {
+	clause, args := embyLikelyEpisodicPathSQL()
+	if clause == "" {
+		return q
+	}
+	return q.Where("NOT ((media.season_num > 0 OR media.episode_num > 0) AND ("+clause+"))", args...)
+}
+
+func embyLikelyEpisodicPathSQL() (string, []any) {
+	patterns := []string{
+		"%/season %/%", "%/season.%/%", "%/season-%/%", "%/season_%/%",
+		"%/s0%/%", "%/s1%/%", "%/s2%/%", "%/s3%/%", "%/s4%/%", "%/s5%/%", "%/s6%/%", "%/s7%/%", "%/s8%/%", "%/s9%/%",
+		"%/special/%", "%/specials/%", "%/sp/%", "%/ova/%", "%/oad/%", "%/extra/%", "%/extras/%",
+		"%/电视剧/%", "%/剧集/%", "%/国产剧/%", "%/欧美剧/%", "%/日韩剧/%", "%/日剧/%", "%/韩剧/%",
+		"%/日番/%", "%/国漫/%", "%/番剧/%", "%/动漫/%", "%/特别篇/%", "%/特別篇/%", "%/番外/%", "%/特典/%",
+	}
+	clauses := make([]string, 0, len(patterns)*2)
+	args := make([]any, 0, len(patterns)*2)
+	for _, pattern := range patterns {
+		clauses = append(clauses, "LOWER(media.path) LIKE ?")
+		args = append(args, pattern)
+		if strings.Contains(pattern, "/") {
+			clauses = append(clauses, "LOWER(media.path) LIKE ?")
+			args = append(args, strings.ReplaceAll(pattern, "/", `\`))
+		}
+	}
+	return strings.Join(clauses, " OR "), args
+}
+
+func embyMediaPathLooksEpisodic(path string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(path), "\\", "/"))
+	if normalized == "" {
+		return false
+	}
+	for _, marker := range []string{
+		"/season ", "/season.", "/season-", "/season_", "/special/", "/specials/", "/sp/", "/ova/", "/oad/", "/extra/", "/extras/",
+		"/电视剧/", "/剧集/", "/国产剧/", "/欧美剧/", "/日韩剧/", "/日剧/", "/韩剧/",
+		"/日番/", "/国漫/", "/番剧/", "/动漫/", "/特别篇/", "/特別篇/", "/番外/", "/特典/",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	for _, marker := range []string{"/s0", "/s1", "/s2", "/s3", "/s4", "/s5", "/s6", "/s7", "/s8", "/s9"} {
+		if idx := strings.Index(normalized, marker); idx >= 0 {
+			after := idx + len(marker)
+			if after < len(normalized) && normalized[after] >= '0' && normalized[after] <= '9' {
+				slash := after + 1
+				if slash < len(normalized) && normalized[slash] == '/' {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (e *EmbyService) rememberSeriesGroup(group embySeriesGroup) {
@@ -1316,7 +1387,7 @@ func (e *EmbyService) seasonsForSeries(series embySeriesGroup) []embySeasonGroup
 	order := []int{}
 	for _, episode := range series.Episodes {
 		seasonNum := episode.SeasonNum
-		if seasonNum <= 0 {
+		if seasonNum < 0 {
 			seasonNum = 1
 		}
 		season, ok := bySeason[seasonNum]
@@ -1502,11 +1573,17 @@ func stableEmbyID(prefix string, parts ...string) string {
 }
 
 func seasonID(seriesID string, seasonNum int) string {
-	return stableEmbyID(embyVirtualSeasonPrefix, seriesID, strconv.Itoa(maxInt(seasonNum, 1)))
+	if seasonNum < 0 {
+		seasonNum = 1
+	}
+	return stableEmbyID(embyVirtualSeasonPrefix, seriesID, strconv.Itoa(seasonNum))
 }
 
 func seasonName(seasonNum int) string {
-	if seasonNum <= 0 {
+	if seasonNum == 0 {
+		return "特别篇"
+	}
+	if seasonNum < 0 {
 		seasonNum = 1
 	}
 	return fmt.Sprintf("第 %d 季", seasonNum)

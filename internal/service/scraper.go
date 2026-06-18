@@ -224,6 +224,9 @@ func (s *ScraperService) EnrichOne(ctx context.Context, m *model.Media) error {
 		} else if err != nil {
 			s.log.Warn("read local metadata before scrape failed", zap.String("media_id", m.ID), zap.Error(err))
 		}
+	} else if hinted, _ := pathHintMetadata(m.Path, seriesLike); hinted != nil {
+		local = mergeCloudMetadata(local, hinted)
+		applyLocalMetadata(m, local)
 	}
 
 	year := mediaYearHint(m)
@@ -299,6 +302,9 @@ func (s *ScraperService) matchFromMediaExternalIDs(ctx context.Context, m *model
 		mediaType = lib.Type
 	}
 	if m.TMDbID > 0 {
+		if mediaIsEpisodic(m, lib) {
+			mediaType = "tv"
+		}
 		if match := s.manualTMDbMatchByID(ctx, m.TMDbID, normalizeMediaType(mediaType, m.Title, "")); match != nil {
 			return match
 		}
@@ -422,6 +428,15 @@ func mergeLocalMetadataIntoMatch(match *Match, local *LocalMetadata) {
 	if local.TMDbID > 0 {
 		match.TMDbID = local.TMDbID
 	}
+	if local.BangumiID > 0 {
+		match.BangumiID = local.BangumiID
+	}
+	if local.DoubanID != "" {
+		match.DoubanID = local.DoubanID
+	}
+	if local.TheTVDBID != "" {
+		match.TheTVDBID = local.TheTVDBID
+	}
 	if local.Genres != "" {
 		match.Genres = splitNFOList(local.Genres)
 	}
@@ -483,7 +498,7 @@ func (s *ScraperService) applyProviderMatch(ctx context.Context, m *model.Media,
 	// Manual cloud/batch applies must not fail just because an optional provider
 	// details request is slow or unavailable.
 	if match.TMDbID > 0 && s.tmdb != nil && s.tmdb.Enabled() {
-		mediaType := s.determineMediaType(lib, match)
+		mediaType := s.determineMediaTypeForMedia(lib, m, match)
 		detailCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tmdbDetailsTimeout)
 		details, err := s.tmdb.GetDetails(detailCtx, match.TMDbID, mediaType)
 		cancel()
@@ -518,6 +533,50 @@ func (s *ScraperService) applyProviderMatch(ctx context.Context, m *model.Media,
 				zap.Strings("countries", details.Countries),
 				zap.Strings("genres", details.Genres))
 		}
+		if mediaType == "tv" && m != nil && m.EpisodeNum > 0 {
+			episodeCtx, episodeCancel := context.WithTimeout(context.WithoutCancel(ctx), tmdbDetailsTimeout)
+			episode, err := s.tmdb.GetTVEpisodeDetails(episodeCtx, match.TMDbID, m.SeasonNum, m.EpisodeNum)
+			episodeCancel()
+			if err != nil {
+				s.log.Debug("failed to get tmdb episode details",
+					zap.String("media_id", m.ID),
+					zap.Int("tmdb_id", match.TMDbID),
+					zap.Int("season", m.SeasonNum),
+					zap.Int("episode", m.EpisodeNum),
+					zap.Error(err))
+			} else if episode != nil {
+				episodeUpdates := map[string]any{}
+				if strings.TrimSpace(episode.Name) != "" {
+					episodeUpdates["original_name"] = strings.TrimSpace(episode.Name)
+				}
+				if strings.TrimSpace(episode.Overview) != "" {
+					episodeUpdates["overview"] = strings.TrimSpace(episode.Overview)
+				}
+				if strings.TrimSpace(episode.StillURL) != "" {
+					episodeUpdates["backdrop_url"] = strings.TrimSpace(episode.StillURL)
+				}
+				if episode.Rating > 0 {
+					episodeUpdates["rating"] = episode.Rating
+				}
+				if episode.AirYear > 0 && match.Year <= 0 {
+					episodeUpdates["year"] = episode.AirYear
+				}
+				if episode.Runtime > 0 && m.DurationSec <= 0 {
+					episodeUpdates["duration_sec"] = episode.Runtime * 60
+				}
+				if len(episodeUpdates) > 0 {
+					if err := s.repo.DB.Model(&model.Media{}).Where("id = ?", m.ID).
+						Updates(episodeUpdates).Error; err != nil {
+						s.log.Warn("failed to save tmdb episode metadata",
+							zap.String("media_id", m.ID),
+							zap.Int("tmdb_id", match.TMDbID),
+							zap.Int("season", m.SeasonNum),
+							zap.Int("episode", m.EpisodeNum),
+							zap.Error(err))
+					}
+				}
+			}
+		}
 	}
 	cloudMedia := isCloudMediaPath(m.Path) || (lib != nil && isCloudMediaPath(lib.Path))
 	if !cloudMedia {
@@ -548,9 +607,13 @@ func isCloudMediaPath(value string) bool {
 func (s *ScraperService) applyLocalMetadataMatch(ctx context.Context, m *model.Media, local *LocalMetadata) error {
 	next := *m
 	applyLocalMetadata(&next, local)
+	status := "matched"
+	if !localMetadataMarksMatched(local) {
+		status = "pending"
+	}
 	updates := map[string]any{
 		"title":         next.Title,
-		"scrape_status": "matched",
+		"scrape_status": status,
 	}
 	if next.OriginalName != "" {
 		updates["original_name"] = next.OriginalName
@@ -582,7 +645,7 @@ func (s *ScraperService) applyLocalMetadataMatch(ctx context.Context, m *model.M
 	if next.TheTVDBID != "" {
 		updates["thetvdb_id"] = next.TheTVDBID
 	}
-	if next.SeasonNum > 0 {
+	if next.SeasonNum > 0 || next.EpisodeNum > 0 {
 		updates["season_num"] = next.SeasonNum
 	}
 	if next.EpisodeNum > 0 {
@@ -644,7 +707,7 @@ func scrapeQueryCandidates(m *model.Media, lib *model.Library) []string {
 
 func seriesFolderTitle(mediaPath, libraryRoot string) string {
 	dir := filepath.Dir(mediaPath)
-	if strictSeasonFolder(filepath.Base(dir)) > 0 {
+	if strictSeasonFolderMatched(filepath.Base(dir)) {
 		dir = filepath.Dir(dir)
 	}
 	if libraryRoot != "" && samePath(dir, filepath.Clean(libraryRoot)) {
@@ -687,27 +750,15 @@ func isGenericMediaCategoryFolder(name string) bool {
 }
 
 func strictSeasonFolder(name string) int {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return 0
-	}
-	for _, pattern := range strictSeasonFolderPatterns {
-		if m := pattern.FindStringSubmatch(name); len(m) == 2 {
-			return mustAtoi(m[1])
-		}
+	if season, ok := seasonFromDir(name); ok {
+		return season
 	}
 	return 0
 }
 
-func seasonFromDir(name string) int {
-	if m := patSeasonFolder.FindStringSubmatch(name); len(m) >= 3 {
-		for _, group := range m[1:] {
-			if group != "" {
-				return mustAtoi(group)
-			}
-		}
-	}
-	return 0
+func strictSeasonFolderMatched(name string) bool {
+	_, ok := seasonFromDir(name)
+	return ok
 }
 
 func titleCandidates(title string) []string {
@@ -961,6 +1012,13 @@ func (s *ScraperService) AnyEnabled() bool {
 // determineMediaType returns "tv" for TV shows and "movie" for movies.
 // It uses the library type as the primary signal.
 func (s *ScraperService) determineMediaType(lib *model.Library, match *Match) string {
+	return s.determineMediaTypeForMedia(lib, nil, match)
+}
+
+func (s *ScraperService) determineMediaTypeForMedia(lib *model.Library, media *model.Media, match *Match) string {
+	if media != nil && mediaIsEpisodic(media, lib) {
+		return "tv"
+	}
 	if lib != nil {
 		switch lib.Type {
 		case "tv", "anime", "variety", "show", "shows":

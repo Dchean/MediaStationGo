@@ -295,6 +295,51 @@ func TestEmbyMovieLibrarySeasonNumbersStayMovies(t *testing.T) {
 	}
 }
 
+func TestEmbyMovieLibraryFiltersMisplacedSeriesPaths(t *testing.T) {
+	svc := newTestEmbyService(t)
+	lib := model.Library{Name: "电影", Path: `/media/movies`, Type: "movie", Enabled: true}
+	if err := svc.repo.Library.Create(t.Context(), &lib); err != nil {
+		t.Fatalf("create library: %v", err)
+	}
+	show := model.Media{
+		Base:       model.Base{ID: "misplaced-show"},
+		LibraryID:  lib.ID,
+		Title:      "错放剧集",
+		Path:       `/media/movies/国产剧/错放剧集/Season 01/错放剧集 - S01E01.mkv`,
+		SeasonNum:  1,
+		EpisodeNum: 1,
+	}
+	movie := model.Media{
+		Base:      model.Base{ID: "movie"},
+		LibraryID: lib.ID,
+		Title:     "普通电影",
+		Path:      `/media/movies/普通电影.2026.mkv`,
+	}
+	if err := svc.repo.DB.Create(&show).Error; err != nil {
+		t.Fatalf("create show: %v", err)
+	}
+	if err := svc.repo.DB.Create(&movie).Error; err != nil {
+		t.Fatalf("create movie: %v", err)
+	}
+
+	out, err := svc.Items(t.Context(), ItemsParams{ParentID: lib.ID, IncludeItemTypes: []string{"Movie"}, Limit: 50})
+	if err != nil {
+		t.Fatalf("items: %v", err)
+	}
+	items := out["Items"].([]map[string]any)
+	if len(items) != 1 || items[0]["Id"] != movie.ID {
+		t.Fatalf("movie library should filter misplaced series paths, got %#v", items)
+	}
+
+	item, err := svc.Item(t.Context(), show.ID, "user-1")
+	if err != nil {
+		t.Fatalf("direct item: %v", err)
+	}
+	if item["Type"] != "Episode" {
+		t.Fatalf("misplaced series path should be typed as Episode directly, got %#v", item)
+	}
+}
+
 func TestEmbyMergedLocalCloudMovieVersionsShareMediaSources(t *testing.T) {
 	svc := newTestEmbyService(t)
 	local := model.Library{Name: "国产电影", Path: `/media/国产电影`, Type: "movie", Enabled: true}

@@ -26,7 +26,7 @@ export function getSeriesKey(media: Media): string {
     if (media.bangumi_id && media.bangumi_id > 0) return `bgm:${media.bangumi_id}`
     if (media.douban_id) return `douban:${media.douban_id}`
     if (media.thetvdb_id) return `thetvdb:${media.thetvdb_id}`
-    return `lib:${media.library_id}|show:${normalizeTitle(fromPath || seriesTitle(media))}`
+    return `lib:${targetLibraryID(media)}|show:${normalizeTitle(fromPath || seriesTitle(media))}`
   }
   if (media.tmdb_id && media.tmdb_id > 0) return `tmdb:${media.tmdb_id}`
   if (media.bangumi_id && media.bangumi_id > 0) return `bgm:${media.bangumi_id}`
@@ -36,6 +36,10 @@ export function getSeriesKey(media: Media): string {
 
 export function isEpisodeLike(media: Media): boolean {
   return (media.season_num ?? 0) > 0 || (media.episode_num ?? 0) > 0
+}
+
+export function isSeriesCard(card: SeriesCard): boolean {
+  return card.count > 1 || isEpisodeLike(card.rep) || isEpisodeLike(card.linkMedia)
 }
 
 export function seriesTitle(media: Media): string {
@@ -95,8 +99,8 @@ export function groupSeries(items: Media[] = []): SeriesCard[] {
 }
 
 export function seriesCardLink(card: SeriesCard): string {
-  if (card.count > 1) {
-    return `/library/${targetLibraryID(card.linkMedia)}`
+  if (isSeriesCard(card)) {
+    return `/library/${targetLibraryID(card.linkMedia)}?series=${encodeURIComponent(card.key)}`
   }
   return `/media/${card.rep.id}`
 }

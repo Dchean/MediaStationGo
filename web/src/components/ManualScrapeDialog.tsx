@@ -23,6 +23,7 @@ const providers = [
   { value: 'douban', label: '豆瓣' },
   { value: 'bangumi', label: 'Bangumi' },
   { value: 'thetvdb', label: 'TheTVDB' },
+  { value: 'adult', label: 'Adult / 番号' },
 ]
 
 export function ManualScrapeDialog({
@@ -164,6 +165,7 @@ export function ManualScrapeDialog({
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="truncate font-semibold text-ink-600">{item.title}</h3>
                         <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-bold uppercase text-brand-700">{item.source}</span>
+                        {item.nsfw ? <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">成人</span> : null}
                         {item.year ? <span className="text-xs text-sand-500">{item.year}</span> : null}
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-ink-50">{item.overview || '暂无简介'}</p>
@@ -191,6 +193,7 @@ function candidateKey(item: ManualScrapeCandidate): string {
 function candidateIDText(item: ManualScrapeCandidate): string {
   const parts = [
     item.tmdb_id ? `TMDb ${item.tmdb_id}` : '',
+    item.original_name && item.source === 'adult' ? `番号 ${item.original_name}` : '',
     item.douban_id ? `豆瓣 ${item.douban_id}` : '',
     item.bangumi_id ? `Bangumi ${item.bangumi_id}` : '',
     item.thetvdb_id ? `TheTVDB ${item.thetvdb_id}` : '',

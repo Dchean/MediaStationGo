@@ -263,7 +263,7 @@ func findShowNFO(mediaPath, libraryRoot string) (*nfoDocument, string, error) {
 	for {
 		names := []string{"tvshow.nfo", "series.nfo"}
 		base := filepath.Base(dir)
-		if seasonFromDir(base) > 0 {
+		if _, ok := seasonFromDir(base); ok {
 			parentBase := filepath.Base(filepath.Dir(dir))
 			names = append(names, parentBase+".nfo")
 		}
@@ -447,7 +447,7 @@ func mergeEpisodeMetadata(dst, episode *LocalMetadata, doc *nfoDocument) {
 	if episode.TheTVDBID != "" {
 		dst.TheTVDBID = episode.TheTVDBID
 	}
-	if episode.SeasonNum > 0 {
+	if episode.SeasonNum > 0 || episode.EpisodeNum > 0 {
 		dst.SeasonNum = episode.SeasonNum
 	}
 	if episode.EpisodeNum > 0 {

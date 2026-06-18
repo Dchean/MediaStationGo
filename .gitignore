@@ -68,3 +68,7 @@ config.yaml
 downloads/
 media/
 *.pid
+
+# 本地开发运行产物
+.dev-cache/
+.dev-data/

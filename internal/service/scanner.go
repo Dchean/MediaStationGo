@@ -1840,16 +1840,16 @@ func cloudMetadataNeedsRefresh(existing existingCloudMedia, localMeta *LocalMeta
 	if localMeta.Year > 0 && existing.Year <= 0 {
 		return true
 	}
-	if localMeta.TMDbID > 0 && existing.TMDbID <= 0 {
+	if localMeta.TMDbID > 0 && existing.TMDbID != localMeta.TMDbID {
 		return true
 	}
-	if localMeta.BangumiID > 0 && existing.BangumiID <= 0 {
+	if localMeta.BangumiID > 0 && existing.BangumiID != localMeta.BangumiID {
 		return true
 	}
-	if strings.TrimSpace(localMeta.DoubanID) != "" && strings.TrimSpace(existing.DoubanID) == "" {
+	if strings.TrimSpace(localMeta.DoubanID) != "" && strings.TrimSpace(existing.DoubanID) != strings.TrimSpace(localMeta.DoubanID) {
 		return true
 	}
-	if strings.TrimSpace(localMeta.TheTVDBID) != "" && strings.TrimSpace(existing.TheTVDBID) == "" {
+	if strings.TrimSpace(localMeta.TheTVDBID) != "" && strings.TrimSpace(existing.TheTVDBID) != strings.TrimSpace(localMeta.TheTVDBID) {
 		return true
 	}
 	if strings.TrimSpace(localMeta.PosterURL) != "" && strings.TrimSpace(existing.PosterURL) == "" {
@@ -1897,7 +1897,7 @@ func cloudSeriesTitleFromMediaPath(mediaPath string) (string, int) {
 	}
 	base := strings.TrimSpace(dirs[len(dirs)-1])
 	usedSeasonFolder := false
-	if seasonFromDir(base) > 0 {
+	if _, ok := seasonFromDir(base); ok {
 		usedSeasonFolder = true
 		dirs = dirs[:len(dirs)-1]
 		if len(dirs) == 0 {
@@ -2387,7 +2387,7 @@ func applyLocalMetadata(m *model.Media, local *LocalMetadata) {
 	if local.TheTVDBID != "" {
 		m.TheTVDBID = local.TheTVDBID
 	}
-	if local.SeasonNum > 0 {
+	if local.SeasonNum > 0 || local.EpisodeNum > 0 {
 		m.SeasonNum = local.SeasonNum
 	}
 	if local.EpisodeNum > 0 {
@@ -2405,9 +2405,13 @@ func applyLocalMetadata(m *model.Media, local *LocalMetadata) {
 	if local.NSFW {
 		m.NSFW = true
 	}
-	if local.HasNFO || (!local.PathHint && localHasDescriptiveMetadata(local)) {
+	if localMetadataMarksMatched(local) {
 		m.ScrapeStatus = "matched"
 	}
+}
+
+func localMetadataMarksMatched(local *LocalMetadata) bool {
+	return local != nil && (local.HasNFO || (!local.PathHint && localHasDescriptiveMetadata(local)))
 }
 
 func localHasDescriptiveMetadata(local *LocalMetadata) bool {

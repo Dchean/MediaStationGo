@@ -10,9 +10,9 @@ import (
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 )
 
-// RepairCloudPathMetadata backfills external IDs from cloud paths such as
+// RepairCloudPathMetadata backfills external IDs from media paths such as
 // "Movie (2025) {tmdb-123}" so existing placeholder rows can be scraped
-// without requiring another successful cloud provider traversal.
+// without requiring another successful filesystem or cloud provider traversal.
 func (c *Container) RepairCloudPathMetadata(ctx context.Context) (int, error) {
 	if c == nil || c.Repo == nil || c.Repo.DB == nil {
 		return 0, nil
@@ -22,7 +22,6 @@ func (c *Container) RepairCloudPathMetadata(ctx context.Context) (int, error) {
 	query := c.Repo.DB.WithContext(ctx).
 		Model(&model.Media{}).
 		Select("id, title, path, year, season_num, episode_num, scrape_status, tm_db_id, bangumi_id, douban_id, thetvdb_id").
-		Where("path LIKE ?", "cloud://%").
 		Where("("+strings.Join([]string{
 			"LOWER(path) LIKE ?",
 			"LOWER(path) LIKE ?",
@@ -44,22 +43,22 @@ func (c *Container) RepairCloudPathMetadata(ctx context.Context) (int, error) {
 			updates := map[string]any{}
 			status := strings.TrimSpace(row.ScrapeStatus)
 			enrichable := status == "" || status == "pending" || status == "no_match"
-			backfilledExternalID := false
-			if meta.TMDbID > 0 && row.TMDbID <= 0 {
+			changedExternalID := false
+			if meta.TMDbID > 0 && row.TMDbID != meta.TMDbID {
 				updates["tm_db_id"] = meta.TMDbID
-				backfilledExternalID = true
+				changedExternalID = true
 			}
-			if meta.BangumiID > 0 && row.BangumiID <= 0 {
+			if meta.BangumiID > 0 && row.BangumiID != meta.BangumiID {
 				updates["bangumi_id"] = meta.BangumiID
-				backfilledExternalID = true
+				changedExternalID = true
 			}
-			if strings.TrimSpace(meta.DoubanID) != "" && strings.TrimSpace(row.DoubanID) == "" {
+			if strings.TrimSpace(meta.DoubanID) != "" && strings.TrimSpace(row.DoubanID) != strings.TrimSpace(meta.DoubanID) {
 				updates["douban_id"] = strings.TrimSpace(meta.DoubanID)
-				backfilledExternalID = true
+				changedExternalID = true
 			}
-			if strings.TrimSpace(meta.TheTVDBID) != "" && strings.TrimSpace(row.TheTVDBID) == "" {
+			if strings.TrimSpace(meta.TheTVDBID) != "" && strings.TrimSpace(row.TheTVDBID) != strings.TrimSpace(meta.TheTVDBID) {
 				updates["thetvdb_id"] = strings.TrimSpace(meta.TheTVDBID)
-				backfilledExternalID = true
+				changedExternalID = true
 			}
 			if meta.Year > 0 && row.Year <= 0 {
 				updates["year"] = meta.Year
@@ -67,7 +66,7 @@ func (c *Container) RepairCloudPathMetadata(ctx context.Context) (int, error) {
 			if enrichable && strings.TrimSpace(meta.Title) != "" && cloudPathRepairShouldReplaceTitle(row.Title, meta.Title) {
 				updates["title"] = strings.TrimSpace(meta.Title)
 			}
-			if backfilledExternalID && status == "no_match" {
+			if changedExternalID && (status == "" || status == "no_match" || status == "matched") {
 				updates["scrape_status"] = "pending"
 			}
 			if len(updates) == 0 {

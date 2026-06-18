@@ -142,9 +142,47 @@ type Match struct {
 	NSFW         bool     `json:"nsfw,omitempty"`
 }
 
+type tmdbMovieSearchResult struct {
+	ID               int     `json:"id"`
+	Title            string  `json:"title"`
+	OriginalTitle    string  `json:"original_title"`
+	OriginalLanguage string  `json:"original_language"`
+	Overview         string  `json:"overview"`
+	PosterPath       string  `json:"poster_path"`
+	BackdropPath     string  `json:"backdrop_path"`
+	ReleaseDate      string  `json:"release_date"`
+	VoteAverage      float32 `json:"vote_average"`
+	GenreIDs         []int   `json:"genre_ids"`
+}
+
+type tmdbTVSearchResult struct {
+	ID               int      `json:"id"`
+	Name             string   `json:"name"`
+	OriginalName     string   `json:"original_name"`
+	OriginalLanguage string   `json:"original_language"`
+	OriginCountry    []string `json:"origin_country"`
+	Overview         string   `json:"overview"`
+	PosterPath       string   `json:"poster_path"`
+	BackdropPath     string   `json:"backdrop_path"`
+	FirstAirDate     string   `json:"first_air_date"`
+	VoteAverage      float32  `json:"vote_average"`
+	GenreIDs         []int    `json:"genre_ids"`
+}
+
 // SearchMovie issues `/search/movie` and returns the best match, or nil
 // when no result is found. The `year` argument is optional (0 = any).
 func (t *TMDbProvider) SearchMovie(ctx context.Context, query string, year int) (*Match, error) {
+	matches, err := t.SearchMovieCandidates(ctx, query, year)
+	if err != nil || len(matches) == 0 {
+		return nil, err
+	}
+	return matches[0], nil
+}
+
+// SearchMovieCandidates returns the first TMDb result page as manual-scrape
+// candidates. Automatic scrape still uses SearchMovie's first-result behavior,
+// while manual correction can show alternatives when the top result is wrong.
+func (t *TMDbProvider) SearchMovieCandidates(ctx context.Context, query string, year int) ([]*Match, error) {
 	if query == "" {
 		return nil, errors.New("empty query")
 	}
@@ -166,20 +204,8 @@ func (t *TMDbProvider) SearchMovie(ctx context.Context, query string, year int) 
 	}
 	u := base + "/search/movie?" + q.Encode()
 
-	type result struct {
-		ID               int     `json:"id"`
-		Title            string  `json:"title"`
-		OriginalTitle    string  `json:"original_title"`
-		OriginalLanguage string  `json:"original_language"`
-		Overview         string  `json:"overview"`
-		PosterPath       string  `json:"poster_path"`
-		BackdropPath     string  `json:"backdrop_path"`
-		ReleaseDate      string  `json:"release_date"`
-		VoteAverage      float32 `json:"vote_average"`
-		GenreIDs         []int   `json:"genre_ids"`
-	}
 	type page struct {
-		Results []result `json:"results"`
+		Results []tmdbMovieSearchResult `json:"results"`
 	}
 
 	var p page
@@ -189,7 +215,14 @@ func (t *TMDbProvider) SearchMovie(ctx context.Context, query string, year int) 
 	if len(p.Results) == 0 {
 		return nil, nil
 	}
-	r := p.Results[0]
+	out := make([]*Match, 0, len(p.Results))
+	for _, r := range p.Results {
+		out = append(out, t.movieSearchResultToMatch(r))
+	}
+	return out, nil
+}
+
+func (t *TMDbProvider) movieSearchResultToMatch(r tmdbMovieSearchResult) *Match {
 	m := &Match{
 		TMDbID:       r.ID,
 		Title:        r.Title,
@@ -208,12 +241,21 @@ func (t *TMDbProvider) SearchMovie(ctx context.Context, query string, year int) 
 	if len(r.ReleaseDate) >= 4 {
 		_, _ = fmt.Sscanf(r.ReleaseDate[:4], "%d", &m.Year)
 	}
-	return m, nil
+	return m
 }
 
 // SearchTV issues `/search/tv` and returns the best match. Used by anime /
 // tv libraries before falling back to SearchMovie.
 func (t *TMDbProvider) SearchTV(ctx context.Context, query string, year int) (*Match, error) {
+	matches, err := t.SearchTVCandidates(ctx, query, year)
+	if err != nil || len(matches) == 0 {
+		return nil, err
+	}
+	return matches[0], nil
+}
+
+// SearchTVCandidates returns the first TMDb TV result page for manual scrape.
+func (t *TMDbProvider) SearchTVCandidates(ctx context.Context, query string, year int) ([]*Match, error) {
 	if query == "" {
 		return nil, errors.New("empty query")
 	}
@@ -234,21 +276,8 @@ func (t *TMDbProvider) SearchTV(ctx context.Context, query string, year int) (*M
 	}
 	u := base + "/search/tv?" + q.Encode()
 
-	type result struct {
-		ID               int      `json:"id"`
-		Name             string   `json:"name"`
-		OriginalName     string   `json:"original_name"`
-		OriginalLanguage string   `json:"original_language"`
-		OriginCountry    []string `json:"origin_country"`
-		Overview         string   `json:"overview"`
-		PosterPath       string   `json:"poster_path"`
-		BackdropPath     string   `json:"backdrop_path"`
-		FirstAirDate     string   `json:"first_air_date"`
-		VoteAverage      float32  `json:"vote_average"`
-		GenreIDs         []int    `json:"genre_ids"`
-	}
 	type page struct {
-		Results []result `json:"results"`
+		Results []tmdbTVSearchResult `json:"results"`
 	}
 
 	var p page
@@ -258,7 +287,14 @@ func (t *TMDbProvider) SearchTV(ctx context.Context, query string, year int) (*M
 	if len(p.Results) == 0 {
 		return nil, nil
 	}
-	r := p.Results[0]
+	out := make([]*Match, 0, len(p.Results))
+	for _, r := range p.Results {
+		out = append(out, t.tvSearchResultToMatch(r))
+	}
+	return out, nil
+}
+
+func (t *TMDbProvider) tvSearchResultToMatch(r tmdbTVSearchResult) *Match {
 	m := &Match{
 		TMDbID:       r.ID,
 		Title:        r.Name,
@@ -281,7 +317,7 @@ func (t *TMDbProvider) SearchTV(ctx context.Context, query string, year int) (*M
 	if len(r.FirstAirDate) >= 4 {
 		_, _ = fmt.Sscanf(r.FirstAirDate[:4], "%d", &m.Year)
 	}
-	return m, nil
+	return m
 }
 
 func (t *TMDbProvider) getJSON(ctx context.Context, url string, out any) error {
@@ -435,6 +471,55 @@ func (t *TMDbProvider) GetTVMatch(ctx context.Context, tmdbID int) (*Match, erro
 	m.Genres = deduplicate(m.Genres)
 	m.Languages = deduplicate(m.Languages)
 	return m, nil
+}
+
+// TMDbEpisodeDetails holds per-episode metadata from /tv/{id}/season/{season}/episode/{episode}.
+type TMDbEpisodeDetails struct {
+	Name     string
+	Overview string
+	StillURL string
+	AirYear  int
+	Rating   float32
+	Runtime  int
+}
+
+func (t *TMDbProvider) GetTVEpisodeDetails(ctx context.Context, tmdbID, season, episode int) (*TMDbEpisodeDetails, error) {
+	if tmdbID <= 0 || episode <= 0 {
+		return nil, nil
+	}
+	apiKey := t.resolveAPIKey(ctx)
+	if apiKey == "" {
+		return nil, nil
+	}
+	base := t.resolveBaseURL(ctx)
+	q := url.Values{}
+	q.Set("api_key", apiKey)
+	q.Set("language", "zh-CN")
+	u := base + "/tv/" + fmt.Sprint(tmdbID) + "/season/" + fmt.Sprint(season) + "/episode/" + fmt.Sprint(episode) + "?" + q.Encode()
+	var r struct {
+		Name        string  `json:"name"`
+		Overview    string  `json:"overview"`
+		StillPath   string  `json:"still_path"`
+		AirDate     string  `json:"air_date"`
+		VoteAverage float32 `json:"vote_average"`
+		Runtime     int     `json:"runtime"`
+	}
+	if err := t.getJSON(ctx, u, &r); err != nil {
+		return nil, err
+	}
+	details := &TMDbEpisodeDetails{
+		Name:     r.Name,
+		Overview: r.Overview,
+		Rating:   r.VoteAverage,
+		Runtime:  r.Runtime,
+	}
+	if r.StillPath != "" {
+		details.StillURL = t.imgCDN + "/w500" + r.StillPath
+	}
+	if len(r.AirDate) >= 4 {
+		_, _ = fmt.Sscanf(r.AirDate[:4], "%d", &details.AirYear)
+	}
+	return details, nil
 }
 
 // TMDbDetails holds extended metadata from the /movie/{id} or /tv/{id} endpoints.

@@ -221,7 +221,7 @@ func mergeCloudMetadata(dst, src *LocalMetadata) *LocalMetadata {
 	if src.TheTVDBID != "" {
 		dst.TheTVDBID = src.TheTVDBID
 	}
-	if src.SeasonNum > 0 {
+	if src.SeasonNum > 0 || src.EpisodeNum > 0 {
 		dst.SeasonNum = src.SeasonNum
 	}
 	if src.EpisodeNum > 0 {

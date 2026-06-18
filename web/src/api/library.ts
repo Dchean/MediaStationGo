@@ -19,6 +19,7 @@ export interface ManualScrapeCandidate {
   source: string
   media_type?: string
   title: string
+  original_name?: string
   overview?: string
   poster_url?: string
   backdrop_url?: string
@@ -31,6 +32,27 @@ export interface ManualScrapeCandidate {
   languages?: string[]
   countries?: string[]
   genres?: string[]
+  nsfw?: boolean
+}
+
+export interface MediaMetadataUpdate {
+  title?: string
+  original_name?: string
+  overview?: string
+  poster_url?: string
+  backdrop_url?: string
+  year?: number
+  rating?: number
+  season_num?: number
+  episode_num?: number
+  tmdb_id?: number
+  bangumi_id?: number
+  douban_id?: string
+  thetvdb_id?: string
+  languages?: string
+  countries?: string
+  genres?: string
+  nsfw?: boolean
 }
 
 export const libraryAPI = {
@@ -74,6 +96,9 @@ export const mediaAPI = {
       .then((r) => r.data),
 
   get: (id: string) => api.get<Media>(`/media/${id}`).then((r) => r.data),
+
+  updateMetadata: (id: string, payload: MediaMetadataUpdate) =>
+    api.patch<Media>(`/media/${id}/metadata`, payload, { timeout: LONG_REQUEST_TIMEOUT }).then((r) => r.data),
 
   manualScrapeSearch: (id: string, params: { query: string; provider?: string; media_type?: string }) =>
     api

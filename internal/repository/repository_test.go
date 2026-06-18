@@ -72,6 +72,52 @@ func TestMediaUpsertSkipsUnchangedExistingRow(t *testing.T) {
 	}
 }
 
+func TestMediaUpsertRefreshesCloudExternalIDFromPathHint(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := database.AutoMigrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	repos := New(db)
+	lib := model.Library{Name: "OpenList · 国产剧", Path: "cloud://openlist/国产剧", Type: "tv", Enabled: true}
+	if err := repos.Library.Create(t.Context(), &lib); err != nil {
+		t.Fatal(err)
+	}
+	path := "cloud://openlist/国产剧/折腰 (2025) {tmdb-296753}/Season 1/折腰.S01E01.mkv"
+	existing := model.Media{
+		LibraryID:    lib.ID,
+		Title:        "折腰",
+		Path:         path,
+		SeasonNum:    1,
+		EpisodeNum:   1,
+		TMDbID:       220269,
+		ScrapeStatus: "matched",
+	}
+	if err := repos.Media.Upsert(t.Context(), &existing); err != nil {
+		t.Fatal(err)
+	}
+	next := model.Media{
+		LibraryID:  lib.ID,
+		Title:      "折腰",
+		Path:       path,
+		SeasonNum:  1,
+		EpisodeNum: 1,
+		TMDbID:     296753,
+	}
+	if err := repos.Media.Upsert(t.Context(), &next); err != nil {
+		t.Fatal(err)
+	}
+	var got model.Media
+	if err := repos.DB.Where("path = ?", path).First(&got).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.TMDbID != 296753 || got.ScrapeStatus != "pending" {
+		t.Fatalf("cloud path hint should refresh tmdb and retry scrape, got tmdb=%d status=%q", got.TMDbID, got.ScrapeStatus)
+	}
+}
+
 type fakeMediaSearchBackend struct {
 	ids []string
 	err error

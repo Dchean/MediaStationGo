@@ -46,9 +46,9 @@ func TestCleanQuery(t *testing.T) {
 }
 
 func TestExternalIDHintsFromText(t *testing.T) {
-	hints := externalIDHintsFromText("国漫/折腰 (2025) {tmdb 220269}/Season 1/折腰.S01E01.mkv")
-	if hints.TMDbID != 220269 {
-		t.Fatalf("tmdb hint = %d, want 220269", hints.TMDbID)
+	hints := externalIDHintsFromText("国漫/折腰 (2025) {tmdb 296753}/Season 1/折腰.S01E01.mkv")
+	if hints.TMDbID != 296753 {
+		t.Fatalf("tmdb hint = %d, want 296753", hints.TMDbID)
 	}
 	hints = externalIDHintsFromText("Movie (2026) {tmdb-1630433} [douban=3622222] {bgm 456789} {tvdb:12345}")
 	if hints.TMDbID != 1630433 || hints.DoubanID != "3622222" || hints.BangumiID != 456789 || hints.TheTVDBID != "12345" {
@@ -57,14 +57,84 @@ func TestExternalIDHintsFromText(t *testing.T) {
 }
 
 func TestPathHintMetadataDoesNotMarkMediaMatched(t *testing.T) {
-	meta, hints := pathHintMetadata("cloud://openlist/国漫/折腰 (2025) {tmdb 220269}/Season 1/折腰.S01E01.mkv", true)
-	if meta == nil || hints.TMDbID != 220269 || meta.TMDbID != 220269 || meta.Title != "折腰" || meta.Year != 2025 {
+	meta, hints := pathHintMetadata("cloud://openlist/国漫/折腰 (2025) {tmdb 296753}/Season 1/折腰.S01E01.mkv", true)
+	if meta == nil || hints.TMDbID != 296753 || meta.TMDbID != 296753 || meta.Title != "折腰" || meta.Year != 2025 {
 		t.Fatalf("path hint metadata = %+v hints=%+v", meta, hints)
 	}
 	media := &model.Media{Title: "折腰", ScrapeStatus: "pending"}
 	applyLocalMetadata(media, meta)
 	if media.ScrapeStatus != "pending" {
 		t.Fatalf("path hints alone must not mark media matched, got %q", media.ScrapeStatus)
+	}
+}
+
+func TestEnrichOneCloudPathHintOverridesStaleTMDbID(t *testing.T) {
+	var requested []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/tv/296753":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":             296753,
+				"name":           "折腰",
+				"overview":       "正确的剧集条目",
+				"poster_path":    "/zheyao.jpg",
+				"first_air_date": "2025-05-13",
+				"origin_country": []string{"CN"},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Library{}, &model.Series{}, &model.Media{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	cfg := &config.Config{}
+	cfg.Secrets.TMDbAPIKey = "test-key"
+	cfg.Secrets.TMDbAPIProxy = upstream.URL
+	cfg.Secrets.TMDbImageProxy = upstream.URL + "/images"
+	log := zap.NewNop()
+	scraper := NewScraperService(cfg, log, repos, NewTMDbProvider(cfg, log, nil), nil, nil, nil, NewHub(log))
+
+	lib := model.Library{Name: "OpenList · 国产剧", Path: "cloud://openlist/国产剧", Type: "tv", Enabled: true}
+	if err := repos.DB.Create(&lib).Error; err != nil {
+		t.Fatal(err)
+	}
+	media := model.Media{
+		LibraryID:    lib.ID,
+		Title:        "折腰",
+		Path:         "cloud://openlist/国产剧/折腰 (2025) {tmdb-296753}/Season 1/折腰.S01E01.mkv",
+		SeasonNum:    1,
+		EpisodeNum:   1,
+		TMDbID:       220269,
+		ScrapeStatus: "pending",
+	}
+	if err := repos.DB.Create(&media).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraper.EnrichOne(t.Context(), &media); err != nil {
+		t.Fatal(err)
+	}
+	var got model.Media
+	if err := repos.DB.First(&got, "id = ?", media.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.ScrapeStatus != "matched" || got.TMDbID != 296753 || got.Title != "折腰" || got.PosterURL == "" {
+		t.Fatalf("path hint was not authoritative: status=%q tmdb=%d title=%q poster=%q", got.ScrapeStatus, got.TMDbID, got.Title, got.PosterURL)
+	}
+	for _, path := range requested {
+		if path == "/tv/220269" || path == "/movie/220269" {
+			t.Fatalf("scraper queried stale tmdb id; requests=%v", requested)
+		}
 	}
 }
 
@@ -81,6 +151,119 @@ func TestManualRequestMatchFallsBackToCandidatePayload(t *testing.T) {
 	}
 	if match.Title != "手动选择的电影" || match.DoubanID != "1234567" || match.Year != 2026 {
 		t.Fatalf("fallback match = %#v", match)
+	}
+}
+
+func TestManualSearchReturnsTMDbCandidatePage(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/search/movie" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"results": []map[string]any{
+				{
+					"id":            101,
+					"title":         "错误的同名电影",
+					"poster_path":   "/wrong.jpg",
+					"release_date":  "2021-01-01",
+					"vote_average":  5.1,
+					"genre_ids":     []int{18},
+					"backdrop_path": "/wrong-backdrop.jpg",
+				},
+				{
+					"id":            202,
+					"title":         "正确的同名电影",
+					"poster_path":   "/right.jpg",
+					"release_date":  "2021-08-01",
+					"vote_average":  8.2,
+					"genre_ids":     []int{28},
+					"backdrop_path": "/right-backdrop.jpg",
+				},
+			},
+		})
+	}))
+	defer upstream.Close()
+
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Library{}, &model.Series{}, &model.Media{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	cfg := &config.Config{}
+	cfg.Secrets.TMDbAPIKey = "test-key"
+	cfg.Secrets.TMDbAPIProxy = upstream.URL
+	log := zap.NewNop()
+	scraper := NewScraperService(cfg, log, repos, NewTMDbProvider(cfg, log, nil), nil, nil, nil, NewHub(log))
+
+	lib := model.Library{Name: "电影", Path: "/media/movie", Type: "movie", Enabled: true}
+	if err := repos.DB.Create(&lib).Error; err != nil {
+		t.Fatal(err)
+	}
+	media := model.Media{LibraryID: lib.ID, Title: "同名电影", Path: "/media/movie/同名电影.mkv"}
+	if err := repos.DB.Create(&media).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := scraper.ManualSearch(t.Context(), &media, "同名电影", "tmdb", "movie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 || results[0].TMDbID != 101 || results[1].TMDbID != 202 {
+		t.Fatalf("manual TMDb candidates = %#v", results)
+	}
+}
+
+func TestManualSearchIncludesAdultProvider(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/search":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<a class="box" href="/v/ssis001"><strong>SSIS-001 手动候选</strong></a>`))
+		case "/v/ssis001":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<h2 class="title"><strong>SSIS-001 手动成人标题</strong></h2><img class="video-cover" src="/cover.jpg">`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Library{}, &model.Series{}, &model.Media{}, &model.APIConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	apiConfig := NewAPIConfigService(zap.NewNop(), repos, NewCryptoService("", zap.NewNop()))
+	baseURL := upstream.URL
+	if _, err := apiConfig.Update(t.Context(), "adult", APIConfigPatch{BaseURL: &baseURL}); err != nil {
+		t.Fatal(err)
+	}
+	log := zap.NewNop()
+	scraper := NewScraperService(&config.Config{}, log, repos, nil, nil, nil, nil, NewHub(log), NewAdultProvider(log, apiConfig))
+
+	lib := model.Library{Name: "成人", Path: "/media/adult", Type: "movie", Enabled: true}
+	if err := repos.DB.Create(&lib).Error; err != nil {
+		t.Fatal(err)
+	}
+	media := model.Media{LibraryID: lib.ID, Title: "SSIS-001", OriginalName: "SSIS-001", Path: "/media/adult/SSIS-001.mkv"}
+	if err := repos.DB.Create(&media).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := scraper.ManualSearch(t.Context(), &media, "SSIS-001", "adult", "adult")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Source != "adult" || results[0].MediaType != "adult" || !results[0].NSFW || results[0].OriginalName != "SSIS-001" {
+		t.Fatalf("manual adult candidates = %#v", results)
 	}
 }
 
@@ -274,6 +457,46 @@ func TestEnrichOneWritesTMDbIDColumn(t *testing.T) {
 	}
 	if got.ScrapeStatus != "matched" || got.TMDbID != 12345 {
 		t.Fatalf("unexpected scraped media: status=%q tmdb=%d", got.ScrapeStatus, got.TMDbID)
+	}
+}
+
+func TestEnrichOneWritesTMDbEpisodeMetadata(t *testing.T) {
+	scraper, repos, closeServer := newTestScraper(t)
+	defer closeServer()
+
+	lib := model.Library{Name: "番剧", Path: t.TempDir(), Type: "tv", Enabled: true}
+	if err := repos.DB.Create(&lib).Error; err != nil {
+		t.Fatal(err)
+	}
+	mediaPath := filepath.Join(lib.Path, "间谍过家家 - S02E01.mkv")
+	media := model.Media{
+		LibraryID:    lib.ID,
+		Title:        "间谍过家家",
+		Path:         mediaPath,
+		SeasonNum:    2,
+		EpisodeNum:   1,
+		ScrapeStatus: "pending",
+	}
+	if err := repos.DB.Create(&media).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scraper.EnrichOne(t.Context(), &media); err != nil {
+		t.Fatal(err)
+	}
+
+	var got model.Media
+	if err := repos.DB.First(&got, "id = ?", media.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.OriginalName != "任务代号: 猫" || got.Overview != "单集剧情" {
+		t.Fatalf("episode metadata not saved: original=%q overview=%q", got.OriginalName, got.Overview)
+	}
+	if !strings.HasSuffix(got.BackdropURL, "/images/w500/still.jpg") || got.DurationSec != 24*60 {
+		t.Fatalf("episode still/runtime not saved: backdrop=%q duration=%d", got.BackdropURL, got.DurationSec)
+	}
+	if got.Rating < 9.09 || got.Rating > 9.11 {
+		t.Fatalf("episode rating = %v, want 9.1", got.Rating)
 	}
 }
 
@@ -484,6 +707,15 @@ func newTestScraper(t *testing.T) (*ScraperService, *repository.Container, func(
 					"first_air_date": "2022-04-09",
 					"vote_average":   8.6,
 				}},
+			})
+		case r.URL.Path == "/tv/12345/season/2/episode/1":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name":         "任务代号: 猫",
+				"overview":     "单集剧情",
+				"still_path":   "/still.jpg",
+				"air_date":     "2023-10-07",
+				"vote_average": 9.1,
+				"runtime":      24,
 			})
 		case strings.HasPrefix(r.URL.Path, "/tv/12345"):
 			_ = json.NewEncoder(w).Encode(map[string]any{

@@ -409,6 +409,21 @@ func TestCloudSeriesTitlePrefersShowFolder(t *testing.T) {
 	}
 }
 
+func TestCloudMetadataNeedsRefreshWhenPathHintConflicts(t *testing.T) {
+	existing := existingCloudMedia{
+		Year:   2025,
+		TMDbID: 220269,
+	}
+	local := &LocalMetadata{
+		Year:     2025,
+		TMDbID:   296753,
+		PathHint: true,
+	}
+	if !cloudMetadataNeedsRefresh(existing, local) {
+		t.Fatal("conflicting explicit cloud path hint should refresh existing media")
+	}
+}
+
 func TestScanCloudLibraryReadsRemoteSTRMTarget(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

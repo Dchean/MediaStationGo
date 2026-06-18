@@ -235,17 +235,17 @@ func TestGroupMediaVersionsMergesEpisodeByExternalIDAcrossLibraries(t *testing.T
 		Path:       "/media/国产剧/折腰 (2025)/Season 1/折腰.S01E01.mkv",
 		SeasonNum:  1,
 		EpisodeNum: 1,
-		TMDbID:     220269,
+		TMDbID:     296753,
 		SizeBytes:  100,
 		PosterURL:  "https://image.tmdb.org/t/p/w500/poster.jpg",
 	}
 	cloud := model.Media{
 		LibraryID:  "cloud-tv",
 		Title:      "折腰",
-		Path:       "cloud://openlist/国产剧/折腰 (2025) {tmdb-220269}/Season 1/折腰.S01E01.mkv",
+		Path:       "cloud://openlist/国产剧/折腰 (2025) {tmdb-296753}/Season 1/折腰.S01E01.mkv",
 		SeasonNum:  1,
 		EpisodeNum: 1,
-		TMDbID:     220269,
+		TMDbID:     296753,
 		SizeBytes:  200,
 		STRMURL:    "/api/cloud/play/openlist?ref=/国产剧/折腰/01.mkv",
 	}
@@ -259,6 +259,49 @@ func TestGroupMediaVersionsMergesEpisodeByExternalIDAcrossLibraries(t *testing.T
 	}
 }
 
+func TestUpdateMediaMetadataMarksManualMatch(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Library{}, &model.Media{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	lib := model.Library{Name: "自采集", Path: "/media/custom", Type: "movie", Enabled: true}
+	if err := repos.Library.Create(t.Context(), &lib); err != nil {
+		t.Fatal(err)
+	}
+	media := model.Media{Base: model.Base{ID: "custom-media"}, LibraryID: lib.ID, Title: "raw", Path: "/media/custom/raw.mp4", ScrapeStatus: "no_match"}
+	if err := repos.DB.Create(&media).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc := NewMediaService(&config.Config{}, zap.NewNop(), repos)
+	title := "手动标题"
+	overview := "手动简介"
+	season := 0
+	episode := 1
+	tmdbID := 12345
+	nsfw := true
+	updated, err := svc.UpdateMetadata(t.Context(), media.ID, MediaMetadataUpdate{
+		Title:      &title,
+		Overview:   &overview,
+		SeasonNum:  &season,
+		EpisodeNum: &episode,
+		TMDbID:     &tmdbID,
+		NSFW:       &nsfw,
+	})
+	if err != nil {
+		t.Fatalf("update metadata: %v", err)
+	}
+	if updated.Title != title || updated.Overview != overview || updated.ScrapeStatus != "matched" {
+		t.Fatalf("metadata not saved: %#v", updated)
+	}
+	if updated.SeasonNum != 0 || updated.EpisodeNum != 1 || updated.TMDbID != tmdbID || !updated.NSFW {
+		t.Fatalf("ids/episode metadata not saved: %#v", updated)
+	}
+}
+
 func TestMediaUpsertBackfillsExternalIDsForPendingCloudRows(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -268,7 +311,7 @@ func TestMediaUpsertBackfillsExternalIDsForPendingCloudRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	repos := repository.New(db)
-	path := "cloud://openlist/国漫/折腰 (2025) {tmdb-220269}/Season 1/折腰.S01E01.mkv"
+	path := "cloud://openlist/国漫/折腰 (2025) {tmdb-296753}/Season 1/折腰.S01E01.mkv"
 	if err := repos.DB.Create(&model.Media{
 		LibraryID:    "cloud-tv",
 		Title:        "折腰",
@@ -285,7 +328,7 @@ func TestMediaUpsertBackfillsExternalIDsForPendingCloudRows(t *testing.T) {
 		Path:         path,
 		SeasonNum:    1,
 		EpisodeNum:   1,
-		TMDbID:       220269,
+		TMDbID:       296753,
 		Year:         2025,
 		ScrapeStatus: "pending",
 	}); err != nil {
@@ -295,8 +338,50 @@ func TestMediaUpsertBackfillsExternalIDsForPendingCloudRows(t *testing.T) {
 	if err := repos.DB.First(&got, "path = ?", path).Error; err != nil {
 		t.Fatal(err)
 	}
-	if got.TMDbID != 220269 || got.Year != 2025 || got.ScrapeStatus != "pending" {
+	if got.TMDbID != 296753 || got.Year != 2025 || got.ScrapeStatus != "pending" {
 		t.Fatalf("pending cloud row was not backfilled correctly: tmdb=%d year=%d status=%q", got.TMDbID, got.Year, got.ScrapeStatus)
+	}
+}
+
+func TestMediaUpsertCorrectsCloudExternalIDConflicts(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Media{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	path := "cloud://openlist/国产剧/折腰 (2025) {tmdb-296753}/Season 1/折腰.S01E01.mkv"
+	if err := repos.DB.Create(&model.Media{
+		LibraryID:    "cloud-tv",
+		Title:        "折腰",
+		Path:         path,
+		SeasonNum:    1,
+		EpisodeNum:   1,
+		TMDbID:       220269,
+		ScrapeStatus: "matched",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Media.Upsert(t.Context(), &model.Media{
+		LibraryID:    "cloud-tv",
+		Title:        "折腰",
+		Path:         path,
+		SeasonNum:    1,
+		EpisodeNum:   1,
+		TMDbID:       296753,
+		Year:         2025,
+		ScrapeStatus: "pending",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var got model.Media
+	if err := repos.DB.First(&got, "path = ?", path).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.TMDbID != 296753 || got.ScrapeStatus != "pending" {
+		t.Fatalf("cloud external id conflict was not corrected: tmdb=%d status=%q", got.TMDbID, got.ScrapeStatus)
 	}
 }
 
@@ -332,6 +417,44 @@ func TestRepairCloudPathMetadataBackfillsExistingPlaceholders(t *testing.T) {
 	}
 	if got.TMDbID != 1154478 || got.Year != 2024 || got.Title != "雄狮少年2" || got.ScrapeStatus != "pending" {
 		t.Fatalf("placeholder was not repaired: title=%q tmdb=%d year=%d status=%q", got.Title, got.TMDbID, got.Year, got.ScrapeStatus)
+	}
+}
+
+func TestRepairCloudPathMetadataCorrectsConflictingMatchedID(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Media{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	path := "cloud://openlist/国产剧/折腰 (2025) {tmdb-296753}/Season 1/折腰.S01E01.mkv"
+	if err := repos.DB.Create(&model.Media{
+		LibraryID:    "cloud-tv",
+		Title:        "折腰",
+		Path:         path,
+		SeasonNum:    1,
+		EpisodeNum:   1,
+		TMDbID:       220269,
+		ScrapeStatus: "matched",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	container := &Container{Repo: repos, Log: zap.NewNop()}
+	repaired, err := container.RepairCloudPathMetadata(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repaired != 1 {
+		t.Fatalf("repaired = %d, want 1", repaired)
+	}
+	var got model.Media
+	if err := repos.DB.First(&got, "path = ?", path).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.TMDbID != 296753 || got.ScrapeStatus != "pending" {
+		t.Fatalf("conflicting matched id was not repaired: tmdb=%d status=%q", got.TMDbID, got.ScrapeStatus)
 	}
 }
 

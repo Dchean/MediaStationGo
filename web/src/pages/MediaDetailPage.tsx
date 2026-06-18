@@ -1,7 +1,7 @@
 ﻿import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { FileText, Heart, Play, RefreshCw, Sparkles, Trash2, Calendar, Database, Search } from 'lucide-react'
+import { FileText, Heart, Play, RefreshCw, Sparkles, Trash2, Calendar, Database, Search, Pencil } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import { mediaAPI } from '../api/library'
@@ -14,6 +14,7 @@ import type { Media } from '../types'
 import { confirmAction } from '../components/ConfirmDialog'
 import { ExternalPlayerButton } from '../components/ExternalPlayerButton'
 import { ManualScrapeDialog } from '../components/ManualScrapeDialog'
+import { MetadataEditDialog } from '../components/MetadataEditDialog'
 
 function fmtDuration(sec: number): string {
   if (!sec || sec <= 0) return '—'
@@ -47,6 +48,7 @@ export function MediaDetailPage() {
   const [favourite, setFavourite] = useState(false)
   const [loading, setLoading] = useState(true)
   const [manualScrapeOpen, setManualScrapeOpen] = useState(false)
+  const [metadataEditOpen, setMetadataEditOpen] = useState(false)
 
   const refresh = async () => {
     if (!id) return
@@ -136,9 +138,9 @@ export function MediaDetailPage() {
     <div className="relative overflow-hidden rounded-3xl bg-white border border-gray-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.01),0_1px_2px_rgba(0,0,0,0.015)]">
       {/* ── Cinematic Blurred Backdrop Glow ── */}
       <div className="absolute inset-0 h-[480px] z-0 overflow-hidden">
-        {media.poster_url ? (
+        {(media.backdrop_url || media.poster_url) ? (
           <img
-            src={imageURL(media.poster_url)}
+            src={imageURL(media.backdrop_url || media.poster_url || '')}
             alt=""
             className="w-full h-full object-cover opacity-[0.04] scale-110 blur-2xl"
             referrerPolicy="no-referrer"
@@ -321,6 +323,10 @@ export function MediaDetailPage() {
                     <Search size={13} className="text-[#c9954a]" />
                     <span>手动匹配刮削</span>
                   </button>
+                  <button onClick={() => setMetadataEditOpen(true)} className="btn-outline py-2 px-3.5 text-xs gap-1.5 border-gray-200 hover:border-brand-500/50 hover:bg-brand-50">
+                    <Pencil size={13} className="text-gray-600" />
+                    <span>编辑元数据</span>
+                  </button>
                   <button onClick={reprobe} className="btn-outline py-2 px-3.5 text-xs gap-1.5 border-gray-200 hover:border-brand-500/50 hover:bg-brand-50">
                     <Database size={13} className="text-gray-600" />
                     <span>探测媒体轨 (ffprobe)</span>
@@ -350,6 +356,15 @@ export function MediaDetailPage() {
         scopeLabel={media.title}
         onClose={() => setManualScrapeOpen(false)}
         onApplied={refresh}
+      />
+      <MetadataEditDialog
+        open={metadataEditOpen}
+        media={media}
+        onClose={() => setMetadataEditOpen(false)}
+        onSaved={async (next) => {
+          setMedia(next)
+          await refresh()
+        }}
       />
     </div>
   )

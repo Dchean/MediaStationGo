@@ -255,6 +255,28 @@ func getMediaHandler(svc *service.Container) gin.HandlerFunc {
 	}
 }
 
+func updateMediaMetadataHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req service.MediaMetadataUpdate
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		m, err := svc.Media.UpdateMetadata(c.Request.Context(), c.Param("id"), req)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if strings.Contains(strings.ToLower(err.Error()), "not found") {
+				status = http.StatusNotFound
+			} else if strings.Contains(strings.ToLower(err.Error()), "required") {
+				status = http.StatusBadRequest
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, m)
+	}
+}
+
 func searchMediaHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		q := c.Query("q")

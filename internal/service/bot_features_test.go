@@ -1133,3 +1133,21 @@ func TestBotAdminUnbindInactiveAndInvalidBindings(t *testing.T) {
 		t.Fatal("invalid binding should be removed")
 	}
 }
+
+func TestTelegramMembershipChatIDsIncludesCommandChatID(t *testing.T) {
+	_, bot := newBotTestService(t)
+	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"command_chat_id":"-100123"}`}
+	got := bot.telegramMembershipChatIDs(channel)
+	if len(got) != 1 || got[0] != "-100123" {
+		t.Fatalf("telegramMembershipChatIDs() = %#v, want command_chat_id", got)
+	}
+}
+
+func TestTelegramMembershipChatIDsDedupesGroupChannelAndCommandIDs(t *testing.T) {
+	_, bot := newBotTestService(t)
+	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"group_chat_id":"-100123","channel_chat_id":"-100124","command_chat_id":"-100123"}`}
+	got := bot.telegramMembershipChatIDs(channel)
+	if len(got) != 2 || got[0] != "-100123" || got[1] != "-100124" {
+		t.Fatalf("telegramMembershipChatIDs() = %#v, want deduped ids", got)
+	}
+}

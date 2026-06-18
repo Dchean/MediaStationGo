@@ -57,8 +57,8 @@ type episodeNFO struct {
 	XMLName   xml.Name `xml:"episodedetails"`
 	Title     string   `xml:"title"`
 	ShowTitle string   `xml:"showtitle,omitempty"`
-	Season    int      `xml:"season,omitempty"`
-	Episode   int      `xml:"episode,omitempty"`
+	Season    int      `xml:"season"`
+	Episode   int      `xml:"episode"`
 	Year      int      `xml:"year,omitempty"`
 	Plot      string   `xml:"plot,omitempty"`
 	Rating    float32  `xml:"rating,omitempty"`

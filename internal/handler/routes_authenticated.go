@@ -41,6 +41,7 @@ func registerAuthenticatedRoutes(api *gin.RouterGroup, cfg *config.Config, svc *
 		// Media.
 		authed.GET("/media/:id", getMediaHandler(svc))
 		authed.GET("/media", searchMediaHandler(svc))
+		authed.PATCH("/media/:id/metadata", middleware.AdminRequired(), updateMediaMetadataHandler(svc))
 		authed.POST("/media/:id/scrape", middleware.AdminRequired(), scrapeOneHandler(svc))
 		authed.GET("/media/:id/scrape/search", middleware.AdminRequired(), manualScrapeSearchHandler(svc))
 		authed.POST("/media/:id/scrape/apply", middleware.AdminRequired(), manualScrapeApplyOneHandler(svc))

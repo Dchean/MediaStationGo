@@ -2,7 +2,16 @@ package service
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/glebarez/sqlite"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
+	"github.com/ShukeBta/MediaStationGo/internal/model"
+	"github.com/ShukeBta/MediaStationGo/internal/repository"
 )
 
 func TestNormalizeAdultCode(t *testing.T) {
@@ -56,6 +65,49 @@ func TestParseAdultDetailHTMLDerivesDMMPoster(t *testing.T) {
 	}
 	if got.PosterURL != "https://pics.dmm.co.jp/digital/video/h_237nacr00833/h_237nacr00833pl.jpg" {
 		t.Fatalf("PosterURL = %q", got.PosterURL)
+	}
+}
+
+func TestAdultProviderUsesConfiguredMultipleSources(t *testing.T) {
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "temporary failure", http.StatusInternalServerError)
+	}))
+	defer bad.Close()
+
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/search":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<a class="box" href="/v/ssis001"><strong>SSIS-001 多源入口</strong></a>`))
+		case "/v/ssis001":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<h2 class="title"><strong>SSIS-001 多源命中标题</strong></h2><img class="video-cover" src="/cover.jpg">`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer good.Close()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.APIConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	apiConfig := NewAPIConfigService(zap.NewNop(), repository.New(db), NewCryptoService("", zap.NewNop()))
+	baseURL := bad.URL + "\n" + good.URL
+	if _, err := apiConfig.Update(context.Background(), "adult", APIConfigPatch{BaseURL: &baseURL}); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := NewAdultProvider(zap.NewNop(), apiConfig)
+	match, err := provider.Search(context.Background(), "SSIS-001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if match == nil || match.Title != "多源命中标题" || match.OriginalName != "SSIS-001" || !match.NSFW {
+		t.Fatalf("multi-source adult match = %+v", match)
 	}
 }
 

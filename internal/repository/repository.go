@@ -377,28 +377,31 @@ func (r *MediaRepository) upsert(ctx context.Context, m *model.Media) error {
 			}
 		}
 	}
-	if existing.ScrapeStatus == "pending" || existing.ScrapeStatus == "" || existing.ScrapeStatus == "no_match" {
-		backfilledExternalID := false
-		if m.TMDbID > 0 && existing.TMDbID <= 0 {
+	status := strings.TrimSpace(existing.ScrapeStatus)
+	canRefreshExternalIDs := status == "pending" || status == "" || status == "no_match" ||
+		m.ScrapeStatus == "matched" || strings.HasPrefix(strings.ToLower(strings.TrimSpace(m.Path)), "cloud://")
+	if canRefreshExternalIDs {
+		changedExternalID := false
+		if m.TMDbID > 0 && existing.TMDbID != m.TMDbID {
 			updates["tm_db_id"] = m.TMDbID
-			backfilledExternalID = true
+			changedExternalID = true
 		}
-		if m.BangumiID > 0 && existing.BangumiID <= 0 {
+		if m.BangumiID > 0 && existing.BangumiID != m.BangumiID {
 			updates["bangumi_id"] = m.BangumiID
-			backfilledExternalID = true
+			changedExternalID = true
 		}
-		if m.DoubanID != "" && existing.DoubanID == "" {
+		if m.DoubanID != "" && strings.TrimSpace(existing.DoubanID) != strings.TrimSpace(m.DoubanID) {
 			updates["douban_id"] = m.DoubanID
-			backfilledExternalID = true
+			changedExternalID = true
 		}
-		if m.TheTVDBID != "" && existing.TheTVDBID == "" {
+		if m.TheTVDBID != "" && strings.TrimSpace(existing.TheTVDBID) != strings.TrimSpace(m.TheTVDBID) {
 			updates["thetvdb_id"] = m.TheTVDBID
-			backfilledExternalID = true
+			changedExternalID = true
 		}
 		if m.Year > 0 && existing.Year <= 0 {
 			updates["year"] = m.Year
 		}
-		if backfilledExternalID && existing.ScrapeStatus == "no_match" {
+		if changedExternalID && (status == "no_match" || status == "matched") && m.ScrapeStatus != "matched" {
 			updates["scrape_status"] = "pending"
 		}
 	}
@@ -456,7 +459,7 @@ func (r *MediaRepository) upsert(ctx context.Context, m *model.Media) error {
 	if lib := m.LibraryID; lib != "" && lib != existing.LibraryID {
 		updates["library_id"] = m.LibraryID
 	}
-	if m.SeasonNum > 0 && existing.SeasonNum != m.SeasonNum {
+	if (m.SeasonNum > 0 || m.EpisodeNum > 0) && existing.SeasonNum != m.SeasonNum {
 		updates["season_num"] = m.SeasonNum
 	}
 	if m.EpisodeNum > 0 && existing.EpisodeNum != m.EpisodeNum {

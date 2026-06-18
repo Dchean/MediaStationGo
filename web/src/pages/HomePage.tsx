@@ -220,7 +220,7 @@ export function HomePage() {
                 key={card.key}
                 media={card.rep}
                 count={card.count}
-                linkTo={card.count > 1 ? seriesCardLink(card) : undefined}
+                linkTo={seriesCardLink(card)}
               />
             ))}
           </div>
