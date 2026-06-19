@@ -489,14 +489,20 @@ func TestEnrichOneWritesTMDbEpisodeMetadata(t *testing.T) {
 	if err := repos.DB.First(&got, "id = ?", media.ID).Error; err != nil {
 		t.Fatal(err)
 	}
-	if got.OriginalName != "任务代号: 猫" || got.Overview != "单集剧情" {
-		t.Fatalf("episode metadata not saved: original=%q overview=%q", got.OriginalName, got.Overview)
+	// 单集专属信息(简介/剧照/评分/时长)应回填到该集行。
+	if got.Overview != "单集剧情" {
+		t.Fatalf("episode overview not saved: overview=%q", got.Overview)
 	}
 	if !strings.HasSuffix(got.BackdropURL, "/images/w500/still.jpg") || got.DurationSec != 24*60 {
 		t.Fatalf("episode still/runtime not saved: backdrop=%q duration=%d", got.BackdropURL, got.DurationSec)
 	}
 	if got.Rating < 9.09 || got.Rating > 9.11 {
 		t.Fatalf("episode rating = %v, want 9.1", got.Rating)
+	}
+	// original_name 必须保持「整剧原名」,绝不能被单集名(任务代号: 猫)覆盖,
+	// 否则同剧每集 original_name 不同会导致合集被拆成多集无法合并。
+	if got.OriginalName != "SPY×FAMILY" {
+		t.Fatalf("original_name should stay series-level, got %q (episode name must not overwrite it)", got.OriginalName)
 	}
 }
 
@@ -701,6 +707,7 @@ func newTestScraper(t *testing.T) (*ScraperService, *repository.Container, func(
 				"results": []map[string]any{{
 					"id":             12345,
 					"name":           "间谍过家家",
+					"original_name":  "SPY×FAMILY",
 					"overview":       "测试简介",
 					"poster_path":    "/poster.jpg",
 					"backdrop_path":  "/backdrop.jpg",

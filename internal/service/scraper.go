@@ -546,9 +546,12 @@ func (s *ScraperService) applyProviderMatch(ctx context.Context, m *model.Media,
 					zap.Error(err))
 			} else if episode != nil {
 				episodeUpdates := map[string]any{}
-				if strings.TrimSpace(episode.Name) != "" {
-					episodeUpdates["original_name"] = strings.TrimSpace(episode.Name)
-				}
+				// 注意: 不要把 episode.Name(单集名,如"觉醒"/"Pilot"/"第1集")写入
+				// original_name —— 该字段是「整剧原名」,是合集分组键的回退依据。
+				// 若每集都写成各自的单集名,同一部剧的各集 original_name 互不相同,
+				// 会被前端 getSeriesKey / 后端 mediaVersionGroupKey 拆成多个独立卡片,
+				// 导致同剧无法合并成合集。单集名属于单集信息,这里只回填不影响合集
+				// 分组的单集字段(简介/剧照/评分/时长)。
 				if strings.TrimSpace(episode.Overview) != "" {
 					episodeUpdates["overview"] = strings.TrimSpace(episode.Overview)
 				}

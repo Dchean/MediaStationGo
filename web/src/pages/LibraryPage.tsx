@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { ArrowLeft, Play, Film, Database, FileText, Search, Sparkles, Trash2, Pencil } from 'lucide-react'
 
 import { libraryAPI } from '../api/library'
+import { toolsAPI } from '../api/tools'
 import { storageAPI, type CloudScanStatus } from '../api/storage_config'
 import { api } from '../api/client'
 import { recycleAPI } from '../api/recycle'
@@ -32,6 +33,7 @@ export function LibraryPage() {
   const [scanning, setScanning] = useState(false)
   const [scanProgress, setScanProgress] = useState('')
   const [scraping, setScraping] = useState(false)
+  const [repairing, setRepairing] = useState(false)
   const [seriesToolBusy, setSeriesToolBusy] = useState('')
   const [manualSeriesScrapeOpen, setManualSeriesScrapeOpen] = useState(false)
   const [seriesMetadataEditOpen, setSeriesMetadataEditOpen] = useState(false)
@@ -279,6 +281,16 @@ export function LibraryPage() {
     finally { setScraping(false) }
   }
 
+  const handleRepairRescrape = async () => {
+    if (repairing) return
+    setRepairing(true)
+    try {
+      await toolsAPI.repairAndRescrapeLibrary(id)
+      toast.success('本库修复+重刮已加入后台队列，进度可在任务中查看')
+    } catch { toast.error('修复+重刮启动失败') }
+    finally { setRepairing(false) }
+  }
+
   const runSeriesTool = async (key: string, label: string, action: (media: Media) => Promise<unknown>) => {
     if (selectedSeriesEpisodes.length === 0) return
     setSeriesToolBusy(key)
@@ -427,6 +439,7 @@ export function LibraryPage() {
           <div className="flex flex-wrap gap-2">
             <button onClick={handleScan} disabled={scanning} className="btn-outline">{scanning ? '扫描中…' : '立即扫描'}</button>
             <button onClick={handleScrape} disabled={scraping} className="btn-outline">{scraping ? '刮削中…' : '刮削元数据'}</button>
+            <button onClick={handleRepairRescrape} disabled={repairing} className="btn-outline" title="回填本库占位符外部 ID 并重刮，修正空 ID / 拆集问题">{repairing ? '修复中…' : '修复+重刮本库'}</button>
           </div>
         )}
       </div>

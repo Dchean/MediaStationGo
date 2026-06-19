@@ -104,4 +104,11 @@ export const toolsAPI = {
     api
       .post<{ status: string }>('/admin/media/repair-rescrape', {})
       .then((r) => r.data),
+
+  // repairAndRescrapeLibrary 触发「单库修复+重刮」：只对指定媒体库回填占位符
+  // 外部 ID 并重刮，不影响其它库。后端异步执行，进度通过 WS "scrape" topic 推送。
+  repairAndRescrapeLibrary: (libraryID: string) =>
+    api
+      .post<{ status: string }>(`/admin/libraries/${libraryID}/repair-rescrape`, {})
+      .then((r) => r.data),
 }

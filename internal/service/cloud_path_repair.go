@@ -13,7 +13,9 @@ import (
 // RepairCloudPathMetadata backfills external IDs from media paths such as
 // "Movie (2025) {tmdb-123}" so existing placeholder rows can be scraped
 // without requiring another successful filesystem or cloud provider traversal.
-func (c *Container) RepairCloudPathMetadata(ctx context.Context) (int, error) {
+//
+// 传入 libraryID 时只修复该媒体库的行;为空则修复全库。
+func (c *Container) RepairCloudPathMetadata(ctx context.Context, libraryID ...string) (int, error) {
 	if c == nil || c.Repo == nil || c.Repo.DB == nil {
 		return 0, nil
 	}
@@ -33,6 +35,9 @@ func (c *Container) RepairCloudPathMetadata(ctx context.Context) (int, error) {
 			"LOWER(path) LIKE ?",
 		}, " OR ")+")",
 			"%tmdb%", "%tmdbid%", "%douban%", "%db%", "%bangumi%", "%bgm%", "%thetvdb%", "%tvdb%")
+	if len(libraryID) > 0 && strings.TrimSpace(libraryID[0]) != "" {
+		query = query.Where("library_id = ?", strings.TrimSpace(libraryID[0]))
+	}
 
 	err := query.FindInBatches(&rows, 500, func(_ *gorm.DB, _ int) error {
 		for _, row := range rows {
@@ -162,6 +167,40 @@ func (c *Container) RepairAndRescrapeAllLibraries(ctx context.Context) (RepairAn
 		c.Log.Info("repair and rescrape all libraries done",
 			zap.Int("repaired", result.Repaired),
 			zap.Int("libraries", result.Libraries),
+			zap.Int("matched", result.Matched))
+	}
+	return result, nil
+}
+
+// RepairAndRescrapeLibrary 修复并重刮单个媒体库:先从该库媒体路径中的占位符
+// 回填缺失/错误的外部 ID(重置相关行 scrape_status=pending),再对该库重刮
+// (含 no_match 重试)。用于「按媒体库」单独触发修复,不影响其它库。
+func (c *Container) RepairAndRescrapeLibrary(ctx context.Context, libraryID string) (RepairAndRescrapeResult, error) {
+	var result RepairAndRescrapeResult
+	libraryID = strings.TrimSpace(libraryID)
+	if c == nil || c.Repo == nil || c.Repo.DB == nil || libraryID == "" {
+		return result, nil
+	}
+	repaired, err := c.RepairCloudPathMetadata(ctx, libraryID)
+	if err != nil {
+		return result, err
+	}
+	result.Repaired = repaired
+
+	if c.Scraper == nil {
+		return result, nil
+	}
+	result.Libraries = 1
+	// retryNoMatch=true:连之前匹配失败的也再试一次,因为这次可能已回填到正确 ID。
+	matched, err := c.Scraper.EnrichLibrary(ctx, libraryID, true)
+	if err != nil {
+		return result, err
+	}
+	result.Matched = matched
+	if c.Log != nil {
+		c.Log.Info("repair and rescrape library done",
+			zap.String("library", libraryID),
+			zap.Int("repaired", result.Repaired),
 			zap.Int("matched", result.Matched))
 	}
 	return result, nil
