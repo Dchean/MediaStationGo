@@ -138,11 +138,14 @@ func TestListMediaGroupsMultipleVersionsByDefault(t *testing.T) {
 	if grouped.Total != 1 || len(grouped.Items) != 1 {
 		t.Fatalf("grouped response total=%d len=%d body=%#v", grouped.Total, len(grouped.Items), grouped)
 	}
-	if grouped.Items[0].ID != "movie-2160" {
-		t.Fatalf("primary id = %q, want highest quality version", grouped.Items[0].ID)
+	if grouped.Items[0].ID != "movie-1080" {
+		t.Fatalf("primary id = %q, want local version to remain primary", grouped.Items[0].ID)
 	}
 	if len(grouped.Items[0].Versions) != 2 {
 		t.Fatalf("versions = %#v, want both versions", grouped.Items[0].Versions)
+	}
+	if grouped.Items[0].Versions[0].ID != "movie-1080" || grouped.Items[0].Versions[1].ID != "movie-2160" {
+		t.Fatalf("versions should keep local before cloud: %#v", grouped.Items[0].Versions)
 	}
 
 	raw := requestMediaList(t, svc, "/api/libraries/"+lib.ID+"/media?group_versions=0", lib.ID)

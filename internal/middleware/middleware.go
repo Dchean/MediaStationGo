@@ -16,9 +16,11 @@ import (
 
 // Context keys for values produced by the auth middleware.
 const (
-	CtxUserID   = "ctx_user_id"
-	CtxUserRole = "ctx_user_role"
-	CtxUserTier = "ctx_user_tier"
+	CtxUserID       = "ctx_user_id"
+	CtxUserRole     = "ctx_user_role"
+	CtxUserTier     = "ctx_user_tier"
+	CtxTokenPurpose = "ctx_token_purpose"
+	CtxTokenMediaID = "ctx_token_media_id"
 )
 
 // RequestLogger logs one structured line per request.
@@ -165,9 +167,11 @@ func RateLimit(limiter *RateLimiter) gin.HandlerFunc {
 
 // Claims is the JWT payload we issue.
 type Claims struct {
-	UserID string `json:"uid"`
-	Role   string `json:"role"`
-	Tier   string `json:"tier,omitempty"`
+	UserID  string `json:"uid"`
+	Role    string `json:"role"`
+	Tier    string `json:"tier,omitempty"`
+	Purpose string `json:"purpose,omitempty"`
+	MediaID string `json:"media_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -191,11 +195,51 @@ func AuthRequired(secret string) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 40101, "message": "invalid token"})
 			return
 		}
+		if !scopedTokenAllowedForRequest(c, claims) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 40304, "message": "token scope denied"})
+			return
+		}
 		c.Set(CtxUserID, claims.UserID)
 		c.Set(CtxUserRole, claims.Role)
 		c.Set(CtxUserTier, claims.Tier)
+		c.Set(CtxTokenPurpose, claims.Purpose)
+		c.Set(CtxTokenMediaID, claims.MediaID)
 		c.Next()
 	}
+}
+
+func scopedTokenAllowedForRequest(c *gin.Context, claims *Claims) bool {
+	if claims == nil || strings.TrimSpace(claims.Purpose) == "" {
+		return true
+	}
+	switch strings.TrimSpace(claims.Purpose) {
+	case "external_play":
+		return externalPlaybackTokenAllowedPath(c, strings.TrimSpace(claims.MediaID))
+	default:
+		return false
+	}
+}
+
+func externalPlaybackTokenAllowedPath(c *gin.Context, mediaID string) bool {
+	if c == nil || c.Request == nil || strings.TrimSpace(mediaID) == "" {
+		return false
+	}
+	pathValue := strings.Trim(c.Request.URL.Path, "/")
+	segments := strings.Split(pathValue, "/")
+	for i := range segments {
+		segments[i] = strings.TrimSpace(segments[i])
+	}
+	if len(segments) >= 3 && strings.EqualFold(segments[0], "api") {
+		switch strings.ToLower(segments[1]) {
+		case "stream", "hls":
+			return segments[2] == mediaID
+		case "cloud":
+			return len(segments) >= 3 &&
+				strings.EqualFold(segments[2], "play") &&
+				strings.TrimSpace(c.Query("media_id")) == mediaID
+		}
+	}
+	return false
 }
 
 // AdminRequired must run AFTER AuthRequired; it enforces role == "admin".

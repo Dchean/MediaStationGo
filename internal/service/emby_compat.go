@@ -1031,10 +1031,12 @@ func (e *EmbyService) itemPayload(ctx context.Context, m *model.Media, fav bool,
 	}
 	imageTags := map[string]string{}
 	backdropTags := []string{}
-	if m.PosterURL != "" {
+	primaryArtwork := e.mediaPrimaryArtwork(ctx, m)
+	backdropArtwork := e.mediaBackdropArtwork(ctx, m)
+	if primaryArtwork != "" {
 		imageTags["Primary"] = m.ID
 	}
-	if m.BackdropURL != "" {
+	if backdropArtwork != "" {
 		backdropTags = append(backdropTags, m.ID+"-bd")
 	}
 
@@ -1624,7 +1626,13 @@ func (e *EmbyService) ImageURL(ctx context.Context, id, imageType string) (strin
 	}
 	m, err := e.repo.Media.FindByID(ctx, id)
 	if err == nil && m != nil {
-		return pick(m.PosterURL, m.BackdropURL), nil
+		if e.mediaShouldBeEpisode(ctx, m) {
+			switch strings.ToLower(imageType) {
+			case "backdrop", "art":
+				return "", nil
+			}
+		}
+		return pick(e.mediaPrimaryArtwork(ctx, m), e.mediaBackdropArtwork(ctx, m)), nil
 	}
 	if err != nil {
 		return "", err
@@ -1637,6 +1645,26 @@ func (e *EmbyService) ImageURL(ctx context.Context, id, imageType string) (strin
 	return "", nil
 }
 
+func (e *EmbyService) mediaPrimaryArtwork(ctx context.Context, m *model.Media) string {
+	if m == nil {
+		return ""
+	}
+	if e.mediaShouldBeEpisode(ctx, m) && strings.TrimSpace(m.BackdropURL) != "" {
+		return m.BackdropURL
+	}
+	return m.PosterURL
+}
+
+func (e *EmbyService) mediaBackdropArtwork(ctx context.Context, m *model.Media) string {
+	if m == nil {
+		return ""
+	}
+	if e.mediaShouldBeEpisode(ctx, m) {
+		return ""
+	}
+	return m.BackdropURL
+}
+
 func (e *EmbyService) seriesIDForMedia(m *model.Media) string {
 	if strings.TrimSpace(m.SeriesID) != "" {
 		return m.SeriesID
@@ -1645,7 +1673,7 @@ func (e *EmbyService) seriesIDForMedia(m *model.Media) string {
 }
 
 func (e *EmbyService) seasonIDForMedia(m *model.Media) string {
-	return seasonID(e.seriesIDForMedia(m), maxInt(m.SeasonNum, 1))
+	return seasonID(e.seriesIDForMedia(m), m.SeasonNum)
 }
 
 func (e *EmbyService) seriesNameForMedia(m *model.Media) string {

@@ -58,6 +58,18 @@ func TestWithAuthTokenPropagatesToSameOriginAbsoluteInternalURL(t *testing.T) {
 	}
 }
 
+func TestWithAuthTokenAddsMediaIDToCloudPlaybackRedirect(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://media.example/api/stream/media-1?token=jwt123", nil)
+	got := withAuthTokenForInternalRedirect("/api/cloud/play/openlist?ref=abc", req, "")
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if u.Query().Get("token") != "jwt123" || u.Query().Get("media_id") != "media-1" {
+		t.Fatalf("cloud redirect should carry token and media_id, got %q", got)
+	}
+}
+
 func TestServeFileRedirectsInternalSTRMAsAbsoluteURLWithToken(t *testing.T) {
 	repos := newStreamTestRepo(t)
 	if err := repos.DB.Create(&model.Media{

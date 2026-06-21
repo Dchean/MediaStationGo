@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Eye, KeyRound, Save, Trash2, X } from 'lucide-react'
+import { Eye, KeyRound, Pencil, Save, Trash2, X } from 'lucide-react'
 
 import { apiConfigsAPI, type APIConfig } from '../api/api_configs'
 import { confirmAction } from './ConfirmDialog'
@@ -100,7 +100,7 @@ export function APIConfigsPanel() {
                           className="rounded-lg p-1.5 text-ink-50 transition hover:bg-gray-50 hover:text-white"
                           title="编辑"
                         >
-                          <Save size={14} />
+                          <Pencil size={14} />
                         </button>
                         <button
                           onClick={() => {

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Play, Film, Database, FileText, Search, Sparkles, Trash2, Pencil } from 'lucide-react'
+import { ArrowLeft, Play, Film, Database, FileText, Search, Sparkles, Trash2, Pencil, FolderInput } from 'lucide-react'
 
 import { libraryAPI } from '../api/library'
 import { toolsAPI } from '../api/tools'
@@ -23,6 +23,7 @@ import { MetadataEditDialog } from '../components/MetadataEditDialog'
 export function LibraryPage() {
   const { id = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const role = useAuthStore((s) => s.user?.role)
 
   const [library, setLibrary] = useState<Library | null>(null)
@@ -320,6 +321,39 @@ export function LibraryPage() {
     runSeriesTool('nfo', '整剧 NFO 写出', (media) => recycleAPI.exportNFO(media.id))
   }
 
+  const handleSeriesOrganize = async () => {
+    if (!selectedSeries || selectedSeriesEpisodes.length === 0 || !library) return
+    const source = seriesSourceRoot(selectedSeriesEpisodes)
+    if (!source || source.toLowerCase().startsWith('cloud://')) {
+      toast.error('当前合集不是本地文件夹，无法使用本地整理入库')
+      return
+    }
+    if (!(await confirmAction({
+      title: '整理当前合集',
+      message: `来源：${source}\n目标：${library.path}\n将按当前媒体库类型整理整个文件夹。`,
+      confirmText: '开始整理',
+    }))) return
+    setSeriesToolBusy('organize')
+    try {
+      const result = await toolsAPI.organizeDirectory({
+        source_path: source,
+        dest_path: library.path,
+        media_type: library.type || 'auto',
+        library_id: library.id,
+        scan_after: true,
+        scrape_after: true,
+      })
+      const replaced = result.replaced ?? 0
+      toast.success(`合集整理完成：新增 ${result.organized ?? 0} · 替换 ${replaced} · 跳过 ${result.skipped ?? 0}`)
+      reloadCurrentLibrary()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || '合集整理失败'
+      toast.error(msg)
+    } finally {
+      setSeriesToolBusy('')
+    }
+  }
+
   const handleSeriesSoftDelete = async () => {
     if (!selectedSeries || selectedSeriesEpisodes.length === 0) return
     if (!(await confirmAction({
@@ -517,7 +551,7 @@ export function LibraryPage() {
                   const first = firstEps.length > 0 ? firstEps[0] : null
                   return first ? (
                     <div className="flex flex-wrap gap-2">
-                      <Link to={`/play/${first.id}`} className="btn-primary inline-flex">
+                      <Link to={`/play/${first.id}`} state={{ from: `${location.pathname}${location.search}` }} className="btn-primary inline-flex">
                         <Play size={16} fill="currentColor" />
                         从第一集开始播放
                       </Link>
@@ -549,6 +583,10 @@ export function LibraryPage() {
                       <button onClick={handleSeriesNFO} disabled={!!seriesToolBusy} className="btn-outline py-2 px-3.5 text-xs gap-1.5">
                         <FileText size={13} />
                         <span>{seriesToolBusy === 'nfo' ? '写出中…' : '写出本地 NFO'}</span>
+                      </button>
+                      <button onClick={handleSeriesOrganize} disabled={!!seriesToolBusy} className="btn-outline py-2 px-3.5 text-xs gap-1.5">
+                        <FolderInput size={13} />
+                        <span>{seriesToolBusy === 'organize' ? '整理中…' : '整理当前合集'}</span>
                       </button>
                       <button onClick={handleSeriesSoftDelete} disabled={!!seriesToolBusy} className="btn-outline py-2 px-3.5 text-xs gap-1.5 !border-red-100 !text-red-500 hover:!bg-red-50 hover:!border-red-200">
                         <Trash2 size={13} />
@@ -591,7 +629,7 @@ export function LibraryPage() {
                       key={ep.id}
                       className="group flex items-center gap-3 rounded-xl border border-sand-200 bg-white p-3 shadow-card transition-all hover:border-brand-300 hover:shadow-card-hover"
                     >
-                      <Link to={`/play/${ep.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                      <Link to={`/play/${ep.id}`} state={{ from: `${location.pathname}${location.search}` }} className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand-50 text-brand-600 font-semibold text-sm">
                           {ep.backdrop_url || ep.poster_url ? (
                             <img
@@ -688,6 +726,27 @@ function formatCloudScanStatus(status: CloudScanStatus): string {
     ? ` · ${speed.toFixed(speed >= 10 ? 0 : 1)} 个/秒`
     : ''
   return `${stage}：目录 ${status.dirs ?? 0} · 已发现 ${status.discovered ?? 0} · 已入库 ${status.visited ?? 0} · 新增 ${status.added ?? 0} · 更新 ${status.updated ?? 0}${speedText}`
+}
+
+function seriesSourceRoot(episodes: Media[]): string {
+  const firstPath = episodes.find((item) => item.path)?.path ?? ''
+  if (!firstPath) return ''
+  const dir = dirname(firstPath)
+  const base = basename(dir)
+  if (/^(?:s\d{1,2}|season[\s._-]*\d{1,2}|第\s*\d{1,2}\s*季|specials?|sp|ova|oad|特别篇|特別篇)$/i.test(base)) {
+    return dirname(dir)
+  }
+  return dir
+}
+
+function dirname(value: string): string {
+  const index = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'))
+  return index > 0 ? value.slice(0, index) : ''
+}
+
+function basename(value: string): string {
+  const index = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'))
+  return index >= 0 ? value.slice(index + 1) : value
 }
 
 function formatSize(bytes: number): string {

@@ -259,6 +259,53 @@ func (s *AuthService) IssueToken(u *model.User) (string, error) {
 	return t.SignedString([]byte(s.cfg.Secrets.JWTSecret))
 }
 
+const (
+	ExternalPlaybackTokenPurpose         = "external_play"
+	ExternalPlaybackTokenMinDuration     = 15 * time.Minute
+	ExternalPlaybackTokenGraceDuration   = 30 * time.Minute
+	ExternalPlaybackTokenUnknownDuration = 6 * time.Hour
+	ExternalPlaybackTokenMaxDuration     = 24 * time.Hour
+)
+
+func ExternalPlaybackTokenDurationForMedia(durationSec int) time.Duration {
+	if durationSec <= 0 {
+		return ExternalPlaybackTokenUnknownDuration
+	}
+	duration := time.Duration(durationSec)*time.Second + ExternalPlaybackTokenGraceDuration
+	if duration < ExternalPlaybackTokenMinDuration {
+		return ExternalPlaybackTokenMinDuration
+	}
+	if duration > ExternalPlaybackTokenMaxDuration {
+		return ExternalPlaybackTokenMaxDuration
+	}
+	return duration
+}
+
+// IssueExternalPlaybackToken signs a short-lived, media-scoped JWT for URLs
+// that are handed to third-party players. It must not be accepted as a
+// reusable account/session token for arbitrary media playback.
+func (s *AuthService) IssueExternalPlaybackToken(u *model.User, mediaID string, durationSec int) (string, error) {
+	mediaID = strings.TrimSpace(mediaID)
+	if mediaID == "" {
+		return "", errors.New("media id required")
+	}
+	claims := Claims{
+		UserID:  u.ID,
+		Role:    u.Role,
+		Tier:    u.Tier,
+		Purpose: ExternalPlaybackTokenPurpose,
+		MediaID: mediaID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ExternalPlaybackTokenDurationForMedia(durationSec))),
+			Issuer:    "mediastationgo",
+			Subject:   u.ID,
+		},
+	}
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return t.SignedString([]byte(s.cfg.Secrets.JWTSecret))
+}
+
 // EmbyTokenDuration 是第三方 Emby/Jellyfin 客户端访问令牌的有效期。
 // Emby 协议没有 refresh token 机制——客户端登录一次后把 AccessToken
 // 长期保存并反复使用，直到用户主动登出。若给它们签发 60 分钟的普通

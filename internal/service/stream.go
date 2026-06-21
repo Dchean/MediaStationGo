@@ -148,9 +148,39 @@ func withAuthTokenForInternalRedirect(target string, r *http.Request, publicBase
 	q := u.Query()
 	if q.Get("token") == "" {
 		q.Set("token", tok)
-		u.RawQuery = q.Encode()
 	}
+	if q.Get("media_id") == "" && strings.HasPrefix(strings.ToLower(u.Path), "/api/cloud/play/") {
+		if mediaID := playbackMediaIDFromRequestPath(r.URL.Path); mediaID != "" {
+			q.Set("media_id", mediaID)
+		}
+	}
+	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+func playbackMediaIDFromRequestPath(pathValue string) string {
+	pathValue = strings.TrimSpace(pathValue)
+	if pathValue == "" {
+		return ""
+	}
+	segments := strings.Split(strings.Trim(pathValue, "/"), "/")
+	lower := make([]string, len(segments))
+	for i, segment := range segments {
+		lower[i] = strings.ToLower(segment)
+	}
+	var mediaID string
+	switch {
+	case len(segments) >= 3 && lower[0] == "api" && lower[1] == "stream":
+		mediaID = segments[2]
+	case len(segments) >= 4 && lower[0] == "emby" && lower[1] == "api" && lower[2] == "stream":
+		mediaID = segments[3]
+	case len(segments) >= 3 && lower[0] == "videos":
+		mediaID = segments[1]
+	}
+	if decoded, err := url.PathUnescape(mediaID); err == nil {
+		mediaID = decoded
+	}
+	return strings.TrimSpace(mediaID)
 }
 
 func absoluteInternalRedirect(target string, r *http.Request) string {

@@ -7,6 +7,12 @@ import App from './App'
 import { GlobalEvents } from './components/GlobalEvents'
 import './index.css'
 
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/artwork-cache-sw.js').catch(() => undefined)
+  })
+}
+
 // Application root: BrowserRouter + global toast container.
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

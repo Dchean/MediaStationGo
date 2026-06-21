@@ -30,9 +30,11 @@ const loginRefreshTokenStoreTimeout = 750 * time.Millisecond
 
 // Claims 是 JWT 载荷（复制自 middleware 以避免循环导入）。
 type Claims struct {
-	UserID string `json:"uid"`
-	Role   string `json:"role"`
-	Tier   string `json:"tier,omitempty"`
+	UserID  string `json:"uid"`
+	Role    string `json:"role"`
+	Tier    string `json:"tier,omitempty"`
+	Purpose string `json:"purpose,omitempty"`
+	MediaID string `json:"media_id,omitempty"`
 	jwt.RegisteredClaims
 }
 

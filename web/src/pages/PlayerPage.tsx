@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type Hls from 'hls.js'
 import { ArrowLeft, RefreshCw, Sparkles } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -10,6 +10,7 @@ import { playbackAPI } from '../api/playback'
 import { subtitlesAPI, type SubtitleTrack } from '../api/subtitles'
 import { systemAPI } from '../api/system'
 import type { Media } from '../types'
+import { getSeriesKey, isEpisodeLike } from '../utils/groupSeries'
 
 type Mode = 'direct' | 'hls'
 
@@ -28,6 +29,7 @@ export function PlayerPage() {
   const { id = '' } = useParams()
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const ref = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -136,18 +138,6 @@ export function PlayerPage() {
     }
   }, [media])
 
-  // ESC = back.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        const target = media?.id || id
-        navigate(target ? `/media/${target}` : '/', { replace: true })
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [id, media?.id, navigate])
-
   const teardownHls = (mediaId?: string, stopServer = false) => {
     if (hlsRef.current) {
       hlsRef.current.destroy()
@@ -158,10 +148,28 @@ export function PlayerPage() {
     }
   }
 
-  const goBack = () => {
+  const backTarget = () => {
+    const state = location.state as { from?: string } | null
+    if (state?.from) return state.from
+    if (media && isEpisodeLike(media) && media.library_id) {
+      return `/library/${encodeURIComponent(media.display_library_id || media.library_id)}?series=${encodeURIComponent(getSeriesKey(media))}`
+    }
     const target = media?.id || id
-    navigate(target ? `/media/${target}` : '/', { replace: true })
+    return target ? `/media/${target}` : '/'
   }
+
+  const goBack = () => {
+    navigate(backTarget(), { replace: true })
+  }
+
+  // ESC = back.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') goBack()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [location.state, media, id])
 
   return (
     <div className="relative -m-6 flex min-h-screen flex-col overflow-hidden bg-black md:-m-8">

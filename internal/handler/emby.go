@@ -1086,7 +1086,7 @@ func embyAttachTokenToMediaSourcesMap(out map[string]any, token string) {
 
 func embyAttachTokenToMediaSources(sources []map[string]any, token string) {
 	for _, source := range sources {
-		for _, key := range []string{"DirectStreamUrl", "TranscodingUrl", "Path"} {
+		for _, key := range []string{"DirectStreamUrl", "TranscodingUrl"} {
 			raw, ok := source[key].(string)
 			if !ok {
 				continue

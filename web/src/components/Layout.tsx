@@ -3,9 +3,9 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { AnimatePresence, motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import {
-  Activity, Bell, Clock, CloudDownload, Compass,
+  Activity, Clock, CloudDownload, Compass,
   Cast, Globe, HardDrive, Heart, Home, Image, KeySquare,
-  ListMusic, LogOut, Rss, Search, Trash2,
+  ListMusic, LogOut, MessageSquareText, Rss, Search, Trash2,
   Settings, Sliders, Sparkles, UserCog,
   Library as LibraryIcon, User as UserIcon, ChevronDown, Menu, X
 } from 'lucide-react'
@@ -310,7 +310,7 @@ export function Layout() {
             >
               <SidebarLink to="/admin" icon={<Settings size={16} />} label="媒体与用户" child />
               <SidebarLink to="/sites" icon={<Globe size={16} />} label="站点管理" child />
-              <SidebarLink to="/notify-channels" icon={<Bell size={16} />} label="通知渠道" child />
+              <SidebarLink to="/notify-channels" icon={<MessageSquareText size={16} />} label="通知渠道" child />
               <SidebarLink to="/assistant" icon={<Sparkles size={16} />} label="AI 会话" child />
               <SidebarLink to="/license" icon={<KeySquare size={16} />} label="授权许可" child />
               <SidebarLink to="/settings" icon={<Sliders size={16} />} label="系统设置" child />
@@ -510,7 +510,7 @@ export function Layout() {
               </Link>
             )}
 
-            {/* Notification alert bubble */}
+            {/* Notification channel settings */}
             {isAdmin && (
               <Link
                 to="/notify-channels"
@@ -518,8 +518,7 @@ export function Layout() {
                 aria-label="打开通知配置"
                 className="relative rounded-xl border border-gray-200 p-2.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-all"
               >
-                <Bell size={18} />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-brand-500 ring-2 ring-white animate-pulse" />
+                <MessageSquareText size={18} />
               </Link>
             )}
 

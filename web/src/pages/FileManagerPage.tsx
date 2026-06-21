@@ -167,6 +167,7 @@ export function FileManagerPage() {
   const [loading, setLoading] = useState(true)
   const [recursive, setRecursive] = useState(false)
   const [selected, setSelected] = useState<FileEntry | null>(null)
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([])
   const [folderName, setFolderName] = useState('')
   const [renameTo, setRenameTo] = useState('')
   const [destPath, setDestPath] = useState('')
@@ -246,6 +247,7 @@ export function FileManagerPage() {
 
   useEffect(() => {
     setSelected(null)
+    setSelectedPaths([])
     setRenameTo('')
   }, [path])
 
@@ -307,6 +309,15 @@ export function FileManagerPage() {
     setSelected(e)
     setRenameTo(e.name)
     if (e.is_dir) setDestPath(e.path)
+  }
+
+  const toggleSelectedPath = (entry: FileEntry, checked: boolean) => {
+    setSelectedPaths((current) => {
+      if (checked) {
+        return current.includes(entry.path) ? current : [...current, entry.path]
+      }
+      return current.filter((item) => item !== entry.path)
+    })
   }
 
   const createFolder = async () => {
@@ -376,8 +387,9 @@ export function FileManagerPage() {
     }
   }
 
-  const organizeSource = selected?.path || currentDir
-  const organizeReady = Boolean(organizeSource && organizeDestPath.trim())
+  const organizeSources = selectedPaths.length > 0 ? selectedPaths : [selected?.path || currentDir].filter(Boolean)
+  const organizeSource = organizeSources.length === 1 ? organizeSources[0] : `${organizeSources.length} 个已选项目`
+  const organizeReady = organizeSources.length > 0 && Boolean(organizeDestPath.trim())
 
   const runManualOrganize = async (dryRun: boolean) => {
     if (!organizeReady) {
@@ -387,40 +399,50 @@ export function FileManagerPage() {
     if (!dryRun) {
       const ok = await confirmAction({
         title: '确认整理入库',
-        message: `来源：${organizeSource}\n目标：${organizeDestPath}\n方式：${organizeTransferMode}${scanAfter ? '\n整理完成后会扫描入库。' : ''}${scanAfter && scrapeAfter ? '\n扫描后会自动刮削。' : ''}`,
+        message: `来源：${organizeSources.join('\n')}\n目标：${organizeDestPath}\n方式：${organizeTransferMode}${scanAfter ? '\n整理完成后会扫描入库。' : ''}${scanAfter && scrapeAfter ? '\n扫描后会自动刮削。' : ''}`,
         confirmText: '开始整理',
       })
       if (!ok) return
     }
     setOrganizeBusy(dryRun ? 'preview' : 'run')
     try {
-      const result = await toolsAPI.organizeDirectory({
-        source_path: organizeSource,
-        dest_path: organizeDestPath.trim(),
-        transfer_mode: organizeTransferMode,
-        media_type: organizeMediaType === 'auto' ? undefined : organizeMediaType,
-        scan_after: !dryRun && scanAfter,
-        scrape_after: !dryRun && scanAfter && scrapeAfter,
-        library_id: !dryRun && scanAfter && organizeLibraryID ? organizeLibraryID : undefined,
-        dry_run: dryRun,
-      })
-      setPreviewItems(result.items ?? [])
-      const replaced = result.replaced ?? 0
-      const total = (result.organized ?? 0) + replaced + (result.skipped ?? 0) + (result.errors?.length ?? 0)
+      const results = []
+      for (const sourcePath of organizeSources) {
+        results.push(await toolsAPI.organizeDirectory({
+          source_path: sourcePath,
+          dest_path: organizeDestPath.trim(),
+          transfer_mode: organizeTransferMode,
+          media_type: organizeMediaType === 'auto' ? undefined : organizeMediaType,
+          scan_after: !dryRun && scanAfter,
+          scrape_after: !dryRun && scanAfter && scrapeAfter,
+          library_id: !dryRun && scanAfter && organizeLibraryID ? organizeLibraryID : undefined,
+          dry_run: dryRun,
+        }))
+      }
+      const preview = results.flatMap((result) => result.items ?? [])
+      setPreviewItems(preview)
+      const organized = results.reduce((sum, result) => sum + (result.organized ?? 0), 0)
+      const replaced = results.reduce((sum, result) => sum + (result.replaced ?? 0), 0)
+      const skipped = results.reduce((sum, result) => sum + (result.skipped ?? 0), 0)
+      const errors = results.flatMap((result) => result.errors ?? [])
+      const scans = results.flatMap((result) => result.scans ?? [])
+      const scrapes = results.flatMap((result) => result.scrapes ?? [])
+      const total = organized + replaced + skipped + errors.length
       if (total === 0) {
-        toast(`未发现可整理视频：${result.source_path || organizeSource}`, {
-          icon: '⚠️',
+        toast(`未发现可整理视频：${organizeSource}`, {
+          icon: '!',
           duration: 6000,
         })
         return
       }
       if (dryRun) {
-        toast.success(`预览完成：新增 ${result.organized} · 替换 ${replaced} · 跳过 ${result.skipped}`)
+        toast.success(`预览完成：新增 ${organized} · 替换 ${replaced} · 跳过 ${skipped}`)
         return
       }
-      const scanText = scanAfter ? formatScanSummary(result.scans ?? []) : ''
-      const scrapeText = scanAfter && scrapeAfter ? formatScrapeSummary(result.scrapes ?? []) : ''
-      toast.success(`整理完成：新增 ${result.organized} · 替换 ${replaced} · 跳过 ${result.skipped}${scanText}${scrapeText}`)
+      const scanText = scanAfter ? formatScanSummary(scans) : ''
+      const scrapeText = scanAfter && scrapeAfter ? formatScrapeSummary(scrapes) : ''
+      toast.success(`整理完成：新增 ${organized} · 替换 ${replaced} · 跳过 ${skipped}${scanText}${scrapeText}`)
+      setSelectedPaths([])
       refresh()
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '整理失败')
@@ -745,6 +767,14 @@ export function FileManagerPage() {
               来源：{organizeSource || '未选择'}
             </div>
           </div>
+          {selectedPaths.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary-400/20 bg-primary-400/5 px-3 py-2 text-xs text-ink-100">
+              <span>已选择 {selectedPaths.length} 个项目用于整理。</span>
+              <button type="button" className="font-semibold text-brand-500 hover:text-brand-700" onClick={() => setSelectedPaths([])}>
+                清空选择
+              </button>
+            </div>
+          )}
 
           <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr_150px_150px]">
             <label className="space-y-1">
@@ -940,6 +970,21 @@ export function FileManagerPage() {
           <table className="w-full text-left text-sm">
             <thead className="text-xs uppercase tracking-wider text-sand-500">
               <tr>
+                <th className="w-10 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label="选择当前目录全部项目"
+                    checked={data.entries.length > 0 && data.entries.every((entry) => selectedPaths.includes(entry.path))}
+                    onChange={(event) => {
+                      const entries = data.entries ?? []
+                      if (event.target.checked) {
+                        setSelectedPaths(entries.map((entry) => entry.path))
+                      } else {
+                        setSelectedPaths([])
+                      }
+                    }}
+                  />
+                </th>
                 <th className="py-2">名称</th>
                 <th>大小</th>
                 <th>修改时间</th>
@@ -948,7 +993,15 @@ export function FileManagerPage() {
             </thead>
             <tbody>
               {data.entries.map((entry) => (
-                <tr key={entry.path} className={'border-t border-gray-200 transition hover:bg-gray-50 ' + (selected?.path === entry.path ? 'bg-primary-400/5' : '')}>
+                <tr key={entry.path} className={'border-t border-gray-200 transition hover:bg-gray-50 ' + (selected?.path === entry.path || selectedPaths.includes(entry.path) ? 'bg-primary-400/5' : '')}>
+                  <td className="py-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`选择 ${entry.name}`}
+                      checked={selectedPaths.includes(entry.path)}
+                      onChange={(event) => toggleSelectedPath(entry, event.target.checked)}
+                    />
+                  </td>
                   <td className="py-2 text-ink-600">
                     <button className="flex max-w-xl items-center gap-2 text-left" onClick={() => (entry.is_dir ? enter(entry) : choose(entry))} title={entry.path}>
                       {entry.is_dir ? <Folder size={16} className="text-brand-500" /> : <FileVideo size={16} className="text-ink-50" />}

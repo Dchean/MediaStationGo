@@ -296,6 +296,9 @@ func cloudPlayHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "ref required"})
 			return
 		}
+		if !enforceScopedCloudPlaybackToken(c, svc, typ, ref) {
+			return
+		}
 		serveCloudResolvedLink(svc, c, typ, ref)
 	}
 }

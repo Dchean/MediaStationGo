@@ -257,6 +257,12 @@ func TestGroupMediaVersionsMergesEpisodeByExternalIDAcrossLibraries(t *testing.T
 	if len(grouped[0].Versions) != 2 {
 		t.Fatalf("versions len = %d, want 2: %#v", len(grouped[0].Versions), grouped[0].Versions)
 	}
+	if grouped[0].Media.Path != local.Path {
+		t.Fatalf("local version should remain primary, got %q want %q", grouped[0].Media.Path, local.Path)
+	}
+	if grouped[0].Versions[0].Path != local.Path || grouped[0].Versions[1].Path != cloud.Path {
+		t.Fatalf("versions should be ordered local before cloud, got %#v", grouped[0].Versions)
+	}
 }
 
 func TestUpdateMediaMetadataMarksManualMatch(t *testing.T) {

@@ -18,6 +18,9 @@ func hlsPlaylistHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
+		if !enforceScopedPlaybackToken(c, m.ID) {
+			return
+		}
 		err = svc.Stream.ServeHLSPlaylist(c.Writer, c.Request, c.Param("id"))
 		if errors.Is(err, service.ErrMediaNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
@@ -43,6 +46,9 @@ func hlsSegmentHandler(svc *service.Container) gin.HandlerFunc {
 		m, err := svc.Media.GetMedia(c.Request.Context(), c.Param("id"))
 		if err != nil || m == nil || !mediaVisibleForRequest(c, svc, m) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		if !enforceScopedPlaybackToken(c, m.ID) {
 			return
 		}
 		err = svc.Stream.ServeHLSSegment(c.Writer, c.Request, c.Param("id"), c.Param("seg"))

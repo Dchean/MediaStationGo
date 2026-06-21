@@ -74,5 +74,5 @@ export const playbackAPI = {
       .then((r) => r.data),
 
   externalURL: (mediaId: string) =>
-    api.get<{ url: string; token: string }>(`/playback/${mediaId}/external-url`).then((r) => r.data),
+    api.get<{ url: string }>(`/playback/${mediaId}/external-url`).then((r) => r.data),
 }

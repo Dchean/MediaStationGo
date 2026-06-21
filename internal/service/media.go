@@ -696,6 +696,11 @@ func normalizeMediaVersionText(value string) string {
 }
 
 func betterMediaVersion(candidate, current model.Media) bool {
+	candidateCloud := isCloudMediaVersion(candidate)
+	currentCloud := isCloudMediaVersion(current)
+	if candidateCloud != currentCloud {
+		return !candidateCloud
+	}
 	candidatePixels := candidate.Width * candidate.Height
 	currentPixels := current.Width * current.Height
 	if candidatePixels != currentPixels {
@@ -705,6 +710,11 @@ func betterMediaVersion(candidate, current model.Media) bool {
 		return candidate.SizeBytes > current.SizeBytes
 	}
 	return candidate.CreatedAt.After(current.CreatedAt)
+}
+
+func isCloudMediaVersion(media model.Media) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(media.Path)), "cloud://") ||
+		strings.Contains(strings.ToLower(strings.TrimSpace(media.STRMURL)), "/api/cloud/play/")
 }
 
 // SearchMedia performs a simple LIKE search across titles.
