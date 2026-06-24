@@ -113,6 +113,15 @@ function normalizeTitle(value?: string): string {
     .trim()
 }
 
+const SERIES_SPECIAL_SUFFIX_RE =
+  /(?:\s+(?:specials?|sp|ova|oad|extra|extras)|\s*(?:特别篇|特別篇|番外|特典|外传|外傳))$/i
+
+function normalizePathSeriesTitle(value?: string): string {
+  const title = normalizeTitle(value)
+  const stripped = title.replace(SERIES_SPECIAL_SUFFIX_RE, '').trim()
+  return stripped || title
+}
+
 export function seriesTitleFromPath(path?: string): string {
   if (!path) return ''
   const parts = path.split(/[\\/]+/).filter(Boolean)
@@ -122,7 +131,7 @@ export function seriesTitleFromPath(path?: string): string {
     dirIndex -= 1
   }
   if (dirIndex < 0) return ''
-  return normalizeTitle(parts[dirIndex])
+  return normalizePathSeriesTitle(parts[dirIndex])
 }
 
 export function groupSeries(items: Media[] = []): SeriesCard[] {

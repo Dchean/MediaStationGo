@@ -27,6 +27,8 @@ const providers = [
   { value: 'adult', label: 'Adult / 番号' },
 ]
 
+type ProviderMode = 'all' | 'single' | 'multi'
+
 export function ManualScrapeDialog({
   open,
   media,
@@ -39,6 +41,7 @@ export function ManualScrapeDialog({
   onApplied,
 }: ManualScrapeDialogProps) {
   const [query, setQuery] = useState('')
+  const [providerMode, setProviderMode] = useState<ProviderMode>('all')
   const [selectedProviders, setSelectedProviders] = useState<string[]>([])
   const [includeEpisodeArtwork, setIncludeEpisodeArtwork] = useState(false)
   const [searching, setSearching] = useState(false)
@@ -53,6 +56,7 @@ export function ManualScrapeDialog({
   useEffect(() => {
     if (!open) return
     setQuery(defaultQuery || media?.title || '')
+    setProviderMode('all')
     setSelectedProviders([])
     setIncludeEpisodeArtwork(episodeArtwork ?? false)
     setItems([])
@@ -68,14 +72,34 @@ export function ManualScrapeDialog({
       return
     }
     setSearching(true)
+    setItems([])
+    const providerValues = manualSearchProvidersForMode(providerMode, selectedProviders)
+    if (providerValues.length === 0) {
+      toast.error('至少选择一个刮削源')
+      setSearching(false)
+      return
+    }
     try {
-      const results = await mediaAPI.manualScrapeSearch(media.id, {
-        query: text,
-        provider: selectedProviders.length > 0 ? selectedProviders.join(',') : 'all',
-        media_type: mediaType,
-      })
-      setItems(results)
-      if (results.length === 0) toast.error('没有找到可用候选')
+      const settled = await Promise.allSettled(
+        providerValues.map(async (provider) => {
+          const results = await mediaAPI.manualScrapeSearch(media.id, {
+            query: text,
+            provider,
+            media_type: mediaType,
+          })
+          setItems((current) => mergeManualCandidates(current, results))
+          return { provider, results }
+        }),
+      )
+      const found = settled.reduce((sum, result) => (
+        result.status === 'fulfilled' ? sum + result.value.results.length : sum
+      ), 0)
+      const failed = settled.filter((result) => result.status === 'rejected').length
+      if (found === 0) {
+        toast.error(failed === providerValues.length ? '所有刮削源搜索失败' : '没有找到可用候选')
+      } else if (failed > 0) {
+        toast.error(`${failed} 个刮削源搜索失败，已显示其余结果`)
+      }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || '搜索失败'
       toast.error(msg)
@@ -121,30 +145,52 @@ export function ManualScrapeDialog({
           </button>
         </div>
 
-        <div className="flex flex-col gap-3 border-b border-sand-200 p-5 sm:flex-row">
-          <div className="flex min-w-0 flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setSelectedProviders([])}
-              className={providerButtonClass(selectedProviders.length === 0)}
-            >
-              {selectedProviders.length === 0 && <Check size={13} />}
-              全部源
-            </button>
-            {providers.map((item) => {
-              const active = selectedProviders.includes(item.value)
-              return (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => toggleProvider(item.value, setSelectedProviders)}
-                  className={providerButtonClass(active)}
-                >
-                  {active && <Check size={13} />}
-                  {item.label}
-                </button>
-              )
-            })}
+        <div className="flex flex-col gap-3 border-b border-sand-200 p-5 lg:flex-row">
+          <div className="flex min-w-0 flex-col gap-2 lg:max-w-sm">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => changeProviderMode('all', setProviderMode, setSelectedProviders)}
+                className={providerModeButtonClass(providerMode === 'all')}
+              >
+                {providerMode === 'all' && <Check size={13} />}
+                全部源
+              </button>
+              <button
+                type="button"
+                onClick={() => changeProviderMode('single', setProviderMode, setSelectedProviders)}
+                className={providerModeButtonClass(providerMode === 'single')}
+              >
+                {providerMode === 'single' && <Check size={13} />}
+                单源
+              </button>
+              <button
+                type="button"
+                onClick={() => changeProviderMode('multi', setProviderMode, setSelectedProviders)}
+                className={providerModeButtonClass(providerMode === 'multi')}
+              >
+                {providerMode === 'multi' && <Check size={13} />}
+                多源
+              </button>
+            </div>
+            {providerMode !== 'all' && (
+              <div className="flex flex-wrap gap-2">
+                {providers.map((item) => {
+                  const active = selectedProviders.includes(item.value)
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => chooseProvider(item.value, providerMode, setSelectedProviders)}
+                      className={providerButtonClass(active)}
+                    >
+                      {active && <Check size={13} />}
+                      {item.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sand-500" />
@@ -217,13 +263,55 @@ function candidateKey(item: ManualScrapeCandidate): string {
   return `${item.source}:${item.tmdb_id || item.bangumi_id || item.douban_id || item.thetvdb_id || item.title}:${item.media_type || ''}`
 }
 
-function toggleProvider(value: string, setSelectedProviders: Dispatch<SetStateAction<string[]>>) {
+function manualSearchProvidersForMode(mode: ProviderMode, selectedProviders: string[]): string[] {
+  if (mode === 'all') return providers.map((provider) => provider.value)
+  if (mode === 'single') return [selectedProviders[0] || providers[0].value]
+  return selectedProviders
+}
+
+function changeProviderMode(
+  mode: ProviderMode,
+  setProviderMode: Dispatch<SetStateAction<ProviderMode>>,
+  setSelectedProviders: Dispatch<SetStateAction<string[]>>,
+) {
+  setProviderMode(mode)
   setSelectedProviders((current) => {
+    if (mode === 'all') return []
+    if (mode === 'single') return [current[0] || providers[0].value]
+    return current.length > 0 ? current : providers.slice(0, 4).map((provider) => provider.value)
+  })
+}
+
+function chooseProvider(
+  value: string,
+  mode: ProviderMode,
+  setSelectedProviders: Dispatch<SetStateAction<string[]>>,
+) {
+  setSelectedProviders((current) => {
+    if (mode === 'single') return [value]
     if (current.includes(value)) {
       return current.filter((item) => item !== value)
     }
     return [...current, value]
   })
+}
+
+function mergeManualCandidates(current: ManualScrapeCandidate[], incoming: ManualScrapeCandidate[]): ManualScrapeCandidate[] {
+  if (incoming.length === 0) return current
+  const byKey = new Map(current.map((item) => [candidateKey(item), item]))
+  for (const item of incoming) {
+    byKey.set(candidateKey(item), item)
+  }
+  return Array.from(byKey.values())
+}
+
+function providerModeButtonClass(active: boolean): string {
+  return (
+    'inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition ' +
+    (active
+      ? 'border-brand-300 bg-brand-50 text-brand-700'
+      : 'border-sand-200 bg-white text-sand-600 hover:border-brand-200 hover:text-brand-600')
+  )
 }
 
 function providerButtonClass(active: boolean): string {

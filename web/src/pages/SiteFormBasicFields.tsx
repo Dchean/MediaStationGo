@@ -117,24 +117,5 @@ function SiteTypeGuide({ type }: { type: string }) {
     );
   }
 
-  if (type === "yemapt") {
-    return (
-      <div className="p-3 rounded-xl border border-cyan-500/30 bg-cyan-500/5">
-        <div className="text-sm font-medium text-cyan-400 mb-1">
-          YemaPT 配置指南
-        </div>
-        <div className="text-xs text-ink-50 space-y-1">
-          <div>
-            <b>认证方式：</b>使用个人详情页创建的第三方对接专用 auth
-          </div>
-          <div className="pl-3 text-sand-500">
-            填入下方 API Key；后端会按 Wiki 要求通过 Authorization
-            请求头原样发送。
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return null;
 }

@@ -13,40 +13,52 @@ import {
 
 export function DiscoverPage() {
   const [sections, setSections] = useState<DiscoverSection[]>([])
-  const [selected, setSelected] = useState<string[]>(defaultSections)
+  const [selected, setSelected] = useState<string[]>([])
   const [rows, setRows] = useState<Record<string, DiscoverItem[]>>({})
+  const [rowLoading, setRowLoading] = useState<Record<string, boolean>>({})
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [sectionsReady, setSectionsReady] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [activeItem, setActiveItem] = useState<DiscoverItem | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    setSectionsReady(false)
     discoverAPI
       .sections()
       .then((items) => {
+        if (cancelled) return
         setSections(items)
         const saved = readSavedSections(items)
         const available = new Set(items.map((item) => item.key))
         const fallback = defaultSections.filter((key) => available.has(key))
         setSelected(saved.length > 0 ? saved : fallback)
+        setSectionsReady(true)
       })
       .catch(() => {
+        if (cancelled) return
         setSections(defaultSectionDefs)
         setSelected(defaultSections)
+        setSectionsReady(true)
       })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
+    if (!sectionsReady) return
     if (selected.length === 0) {
       setRows({})
+      setRowLoading({})
       setRowErrors({})
       setLoading(false)
       return
     }
     let cancelled = false
     setLoading(true)
-    setError('')
     setRowErrors({})
+    setRowLoading(Object.fromEntries(selected.map((key) => [key, true])))
     setRows((current) => {
       const next: Record<string, DiscoverItem[]> = {}
       for (const key of selected) {
@@ -74,12 +86,17 @@ export function DiscoverPage() {
           setRows((current) => ({ ...current, [key]: [] }))
           setRowErrors((current) => ({ ...current, [key]: message }))
         })
-        .finally(markDone)
+        .finally(() => {
+          if (!cancelled) {
+            setRowLoading((current) => ({ ...current, [key]: false }))
+          }
+          markDone()
+        })
     }
     return () => {
       cancelled = true
     }
-  }, [selected])
+  }, [sectionsReady, selected])
 
   const sectionMap = useMemo(
     () => new Map(sections.map((section) => [section.key, section])),
@@ -136,26 +153,24 @@ export function DiscoverPage() {
         </div>
       </header>
 
-      {loading && !hasContent && <DiscoverSkeleton />}
+      {!sectionsReady && <DiscoverSkeleton />}
 
-      {!loading && error && (
-        <div className="flex items-center gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
-          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-red-400" />
-          <p className="text-red-300">{error}</p>
-        </div>
-      )}
-
-      {!loading && selected.length === 0 && (
+      {sectionsReady && !loading && selected.length === 0 && (
         <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sand-500">
           至少选择一个推荐源，小宇宙才会开始转动。
         </div>
       )}
 
-      {!error && selected.length > 0 && (hasContent || !loading) && (
+      {sectionsReady && selected.length > 0 && (
         <div className="space-y-10">
           {selected.map((key) => {
             const items = rows[key] ?? []
-            if (items.length === 0) return null
+            if (items.length === 0) {
+              if (rowLoading[key]) {
+                return <DiscoverRowSkeleton key={key} title={sectionMap.get(key)?.label ?? key} />
+              }
+              return null
+            }
             return (
               <ContentRow
                 key={key}
@@ -177,7 +192,7 @@ export function DiscoverPage() {
             </div>
           )}
 
-          {!loading && !hasContent && (
+          {!loading && !hasContent && !hasRowErrors && (
             <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
               <p className="text-sand-500">
                 当前选择的推荐源暂未返回内容，可切换豆瓣 / Bangumi 或检查网络代理。
@@ -194,5 +209,18 @@ export function DiscoverPage() {
         />
       )}
     </div>
+  )
+}
+
+function DiscoverRowSkeleton({ title }: { title: string }) {
+  return (
+    <section className="space-y-4">
+      <h2 className="pl-1 font-display text-2xl font-semibold text-ink-600">{title}</h2>
+      <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((item) => (
+          <div key={item} className="aspect-[2/3] animate-pulse rounded-xl bg-gray-100" />
+        ))}
+      </div>
+    </section>
   )
 }

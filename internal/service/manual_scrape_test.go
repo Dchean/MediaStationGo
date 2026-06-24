@@ -32,6 +32,24 @@ func TestManualRequestMatchFallsBackToCandidatePayload(t *testing.T) {
 	}
 }
 
+func TestParsePositiveIDStringAcceptsProviderPrefixes(t *testing.T) {
+	cases := map[string]string{
+		"12345":         "12345",
+		"tmdb:12345":    "12345",
+		"douban:67890":  "67890",
+		"thetvdb:24680": "24680",
+	}
+	for input, want := range cases {
+		got, ok := parsePositiveIDString(input)
+		if !ok || got != want {
+			t.Fatalf("parsePositiveIDString(%q) = %q,%v; want %q,true", input, got, ok, want)
+		}
+	}
+	if got, ok := parsePositiveIDString("tmdb:not-a-number"); ok || got != "" {
+		t.Fatalf("parsePositiveIDString invalid = %q,%v; want empty,false", got, ok)
+	}
+}
+
 func TestManualSearchReturnsTMDbCandidatePage(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

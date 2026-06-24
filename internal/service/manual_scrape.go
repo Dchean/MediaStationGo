@@ -399,8 +399,8 @@ func (s *ScraperService) manualDoubanMatch(ctx context.Context, query string) *M
 	if s.douban == nil || !s.douban.Enabled() {
 		return nil
 	}
-	if _, ok := parsePositiveInt(query); ok {
-		if match, err := s.douban.GetMatchByID(ctx, query); err == nil && match != nil {
+	if id, ok := parsePositiveIDString(query); ok {
+		if match, err := s.douban.GetMatchByID(ctx, id); err == nil && match != nil {
 			return match
 		}
 	}
@@ -431,8 +431,8 @@ func (s *ScraperService) manualTheTVDBMatch(ctx context.Context, query string) *
 	if s.thetvdb == nil || !s.thetvdb.Enabled() {
 		return nil
 	}
-	if _, ok := parsePositiveInt(normalizeTheTVDBSeriesID(query)); ok {
-		if match, err := s.thetvdb.GetSeriesMatchByID(ctx, query); err == nil && match != nil {
+	if id, ok := parsePositiveIDString(normalizeTheTVDBSeriesID(query)); ok {
+		if match, err := s.thetvdb.GetSeriesMatchByID(ctx, id); err == nil && match != nil {
 			return match
 		}
 	}
@@ -506,6 +506,14 @@ func parsePositiveInt(value string) (int, bool) {
 	}
 	id, err := strconv.Atoi(strings.TrimSpace(value))
 	return id, err == nil && id > 0
+}
+
+func parsePositiveIDString(value string) (string, bool) {
+	id, ok := parsePositiveInt(value)
+	if !ok {
+		return "", false
+	}
+	return strconv.Itoa(id), true
 }
 
 func manualScrapeBatchName(ids []string) string {

@@ -169,10 +169,11 @@ func compactSeriesKey(raw string) string {
 }
 
 var (
-	seriesYearRE   = regexp.MustCompile(`\s*\((?:19|20)\d{2}\)\s*`)
-	seriesIDRE     = regexp.MustCompile(`(?i)\s*\[(?:tmdb|tmdbid)[=-]\d+\]\s*`)
-	seriesBraceRE  = regexp.MustCompile(`(?i)\s*\{(?:tmdb|tmdbid|douban|bangumi|bgm|thetvdb|tvdb)[\s:=#-]*[a-z0-9_-]+\}\s*`)
-	seriesSpacerRE = regexp.MustCompile(`[\s._-]+`)
+	seriesYearRE          = regexp.MustCompile(`\s*\((?:19|20)\d{2}\)\s*`)
+	seriesIDRE            = regexp.MustCompile(`(?i)\s*\[(?:tmdb|tmdbid)[=-]\d+\]\s*`)
+	seriesBraceRE         = regexp.MustCompile(`(?i)\s*\{(?:tmdb|tmdbid|douban|bangumi|bgm|thetvdb|tvdb)[\s:=#-]*[a-z0-9_-]+\}\s*`)
+	seriesSpacerRE        = regexp.MustCompile(`[\s._-]+`)
+	seriesSpecialSuffixRE = regexp.MustCompile(`(?i)(?:\s+(?:specials?|sp|ova|oad|extra|extras)|\s*(?:特别篇|特別篇|番外|特典|外传|外傳))$`)
 )
 
 func normalizeSeriesTitle(value string) string {
@@ -182,6 +183,15 @@ func normalizeSeriesTitle(value string) string {
 	value = seriesBraceRE.ReplaceAllString(value, " ")
 	value = seriesSpacerRE.ReplaceAllString(value, " ")
 	return strings.TrimSpace(value)
+}
+
+func normalizeSeriesPathTitle(value string) string {
+	title := normalizeSeriesTitle(value)
+	stripped := strings.TrimSpace(seriesSpecialSuffixRE.ReplaceAllString(title, ""))
+	if stripped != "" {
+		return stripped
+	}
+	return title
 }
 
 func seriesTitleFromMediaPath(path string) string {
@@ -199,7 +209,7 @@ func seriesTitleFromMediaPath(path string) string {
 	if dirIndex < 0 {
 		return ""
 	}
-	return normalizeSeriesTitle(parts[dirIndex])
+	return normalizeSeriesPathTitle(parts[dirIndex])
 }
 
 func seriesDisplayTitle(media model.Media) string {
