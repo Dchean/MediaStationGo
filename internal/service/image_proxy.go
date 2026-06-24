@@ -43,7 +43,7 @@ type ImageProxy struct {
 
 const (
 	imageBrowserCacheControl     = "public, max-age=2592000, immutable"
-	imagePlaceholderCacheControl = "public, max-age=3600"
+	imagePlaceholderCacheControl = "no-store"
 	imageNegativeCacheTTL        = 6 * time.Hour
 )
 

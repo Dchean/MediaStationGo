@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"github.com/ShukeBta/MediaStationGo/internal/service"
 	"github.com/ShukeBta/MediaStationGo/internal/service/cloud"
 )
+
+var handlerTestJPEG = []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0xff, 0xd9}
 
 func TestCloudMountLibraryNameDefaultsToDirectoryBaseName(t *testing.T) {
 	tests := []struct {
@@ -96,7 +99,7 @@ func TestCloudArtworkProxyServesCachedImageWithoutCloudResolve(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
-		_, _ = w.Write([]byte("cached-cloud-poster"))
+		_, _ = w.Write(handlerTestJPEG)
 	}))
 	defer upstream.Close()
 
@@ -116,7 +119,7 @@ func TestCloudArtworkProxyServesCachedImageWithoutCloudResolve(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s, want 200", w.Code, w.Body.String())
 	}
-	if got := w.Body.String(); got != "cached-cloud-poster" {
+	if got := w.Body.Bytes(); !bytes.Equal(got, handlerTestJPEG) {
 		t.Fatalf("body = %q, want cached poster", got)
 	}
 	if got := w.Header().Get("Cache-Control"); !strings.Contains(got, "max-age=2592000") {
@@ -128,7 +131,7 @@ func TestCloudArtworkProxyAcceptsCachedTBNImage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
-		_, _ = w.Write([]byte("cached-tbn-poster"))
+		_, _ = w.Write(handlerTestJPEG)
 	}))
 	defer upstream.Close()
 
@@ -148,7 +151,7 @@ func TestCloudArtworkProxyAcceptsCachedTBNImage(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s, want 200", w.Code, w.Body.String())
 	}
-	if got := w.Body.String(); got != "cached-tbn-poster" {
+	if got := w.Body.Bytes(); !bytes.Equal(got, handlerTestJPEG) {
 		t.Fatalf("body = %q, want cached tbn poster", got)
 	}
 }

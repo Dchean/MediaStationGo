@@ -23,8 +23,12 @@ func (p *ImageProxy) CloudImageCached(stableKey string) bool {
 		return false
 	}
 	_, cachePath, failPath := p.cloudImageCachePaths(stableKey)
-	if stat, err := os.Stat(cachePath); err == nil && stat.Size() > 0 {
-		return true
+	if data, err := os.ReadFile(cachePath); err == nil {
+		if _, ok := validImageContentType(data); ok {
+			return true
+		}
+		_ = os.Remove(cachePath)
+		_ = os.Remove(failPath)
 	}
 	return freshNegativeImageCache(failPath)
 }
@@ -37,6 +41,7 @@ func (p *ImageProxy) ServeCloudCached(w http.ResponseWriter, r *http.Request, st
 		return false
 	}
 	key, cachePath, failPath := p.cloudImageCachePaths(stableKey)
+	p.removeUnusableImageCache(cachePath, failPath)
 	if serveCachedImageFile(w, r, key, cachePath) {
 		return true
 	}
@@ -59,6 +64,7 @@ func (p *ImageProxy) ServeCloudResolved(ctx context.Context, w http.ResponseWrit
 		stableKey = link.URL
 	}
 	key, cachePath, failPath := p.cloudImageCachePaths(stableKey)
+	p.removeUnusableImageCache(cachePath, failPath)
 	if serveCachedImageFile(w, r, key, cachePath) {
 		return nil
 	}
@@ -135,10 +141,11 @@ func (p *ImageProxy) fetchAndCacheCloudImage(ctx context.Context, stableKey stri
 		p.markImageFetchFailed(failPath)
 		return nil, "", errors.New("cloud image body is empty")
 	}
-	p.writeImageCache(cachePath, failPath, "img-cloud-*.tmp", data)
-	ctype := resp.Header.Get("Content-Type")
-	if ctype == "" {
-		ctype = detectContentType(data)
+	ctype, ok := validImageContentType(data)
+	if !ok {
+		p.markImageFetchFailed(failPath)
+		return nil, "", errors.New("cloud image returned non-image content")
 	}
+	p.writeImageCache(cachePath, failPath, "img-cloud-*.tmp", data)
 	return data, ctype, nil
 }

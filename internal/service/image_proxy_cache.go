@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -32,6 +33,23 @@ func detectContentType(data []byte) string {
 		return http.DetectContentType(data[:512])
 	}
 	return http.DetectContentType(data)
+}
+
+func isImageContentType(ctype string) bool {
+	ctype = strings.ToLower(strings.TrimSpace(strings.Split(ctype, ";")[0]))
+	return strings.HasPrefix(ctype, "image/")
+}
+
+func validImageContentType(data []byte) (string, bool) {
+	detected := detectContentType(data)
+	if isImageContentType(detected) && !isTransparentPlaceholderData(data) {
+		return detected, true
+	}
+	return "", false
+}
+
+func isTransparentPlaceholderData(data []byte) bool {
+	return bytes.Equal(data, transparent1x1PNG)
 }
 
 // servePlaceholder writes a 1x1 transparent PNG to w. Used as a fallback
@@ -93,7 +111,11 @@ func serveImageFile(w http.ResponseWriter, r *http.Request, key, path, cacheCont
 	var sample [512]byte
 	n, _ := file.Read(sample[:])
 	_, _ = file.Seek(0, io.SeekStart)
-	w.Header().Set("Content-Type", detectContentType(sample[:n]))
+	ctype := detectContentType(sample[:n])
+	if !isImageContentType(ctype) {
+		return false
+	}
+	w.Header().Set("Content-Type", ctype)
 	w.Header().Set("Cache-Control", cacheControl)
 	w.Header().Set("ETag", imageFileETag(key, stat))
 	http.ServeContent(w, r, key, stat.ModTime(), file)

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -111,7 +112,7 @@ func TestScanCloudLibraryReadsMovieDirectoryNFOAndCleanTitleArtwork(t *testing.T
 				_, _ = w.Write([]byte(`<movie><title>Action Movie</title><year>2025</year><uniqueid type="tmdb">1197306</uniqueid></movie>`))
 			case "/dav/Movies/Action Movie (2025) {tmdb-1197306}/action movie (2025)-poster.jpg":
 				w.Header().Set("Content-Type", "image/jpeg")
-				_, _ = w.Write([]byte("clean-title-poster"))
+				_, _ = w.Write(testJPEG)
 			default:
 				t.Fatalf("unexpected get path %s", r.URL.Path)
 			}
@@ -164,8 +165,8 @@ func TestScanCloudLibraryReadsMovieDirectoryNFOAndCleanTitleArtwork(t *testing.T
 	if !imageProxy.ServeCloudCached(rec, httptest.NewRequest(http.MethodGet, media.PosterURL, nil), "openlist:/Movies/Action Movie (2025) {tmdb-1197306}/action movie (2025)-poster.jpg") {
 		t.Fatal("clean-title cloud poster should be cached locally during scan")
 	}
-	if got := rec.Body.String(); got != "clean-title-poster" {
-		t.Fatalf("cached poster body = %q", got)
+	if got := rec.Body.Bytes(); !bytes.Equal(got, testJPEG) {
+		t.Fatalf("cached poster body = %x", got)
 	}
 }
 
@@ -201,10 +202,10 @@ func TestScanCloudLibraryReadsRemoteJSONMetadataAndArtwork(t *testing.T) {
 				_, _ = w.Write([]byte(`{"title":"JSON Sidecar Movie","year":2026,"tmdb_id":12345,"overview":"metadata from cloud json","poster":"poster.jpg","backdrop":"backdrop.jpg","genres":["Action","Drama"]}`))
 			case "/dav/Movies/Sidecar Movie (2026) {tmdb-12345}/poster.jpg":
 				w.Header().Set("Content-Type", "image/jpeg")
-				_, _ = w.Write([]byte("json-poster"))
+				_, _ = w.Write(testJPEG)
 			case "/dav/Movies/Sidecar Movie (2026) {tmdb-12345}/backdrop.jpg":
 				w.Header().Set("Content-Type", "image/jpeg")
-				_, _ = w.Write([]byte("json-backdrop"))
+				_, _ = w.Write(testJPEG)
 			default:
 				t.Fatalf("unexpected get path %s", r.URL.Path)
 			}
@@ -257,8 +258,8 @@ func TestScanCloudLibraryReadsRemoteJSONMetadataAndArtwork(t *testing.T) {
 	if !imageProxy.ServeCloudCached(rec, httptest.NewRequest(http.MethodGet, media.PosterURL, nil), "openlist:/Movies/Sidecar Movie (2026) {tmdb-12345}/poster.jpg") {
 		t.Fatal("JSON cloud poster should be cached locally during scan")
 	}
-	if got := rec.Body.String(); got != "json-poster" {
-		t.Fatalf("cached poster body = %q", got)
+	if got := rec.Body.Bytes(); !bytes.Equal(got, testJPEG) {
+		t.Fatalf("cached poster body = %x", got)
 	}
 }
 
@@ -398,7 +399,7 @@ func TestScanCloudLibraryKeepsCloudArtworkWhenEnrichingPathHint(t *testing.T) {
 				t.Fatalf("unexpected get path %s", r.URL.Path)
 			}
 			w.Header().Set("Content-Type", "image/jpeg")
-			_, _ = w.Write([]byte("local-cloud-poster"))
+			_, _ = w.Write(testJPEG)
 		default:
 			t.Fatalf("unexpected method %s", r.Method)
 		}
@@ -453,7 +454,7 @@ func TestScanCloudLibraryKeepsCloudArtworkWhenEnrichingPathHint(t *testing.T) {
 	if !imageProxy.ServeCloudCached(rec, httptest.NewRequest(http.MethodGet, media.PosterURL, nil), "openlist:/Movies/速度与激情11 (2028) {tmdb-755679}/poster.jpg") {
 		t.Fatal("local cloud poster should be cached during enriched scan")
 	}
-	if got := rec.Body.String(); got != "local-cloud-poster" {
-		t.Fatalf("cached poster body = %q", got)
+	if got := rec.Body.Bytes(); !bytes.Equal(got, testJPEG) {
+		t.Fatalf("cached poster body = %x", got)
 	}
 }

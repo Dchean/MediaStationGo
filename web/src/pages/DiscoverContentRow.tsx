@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ImageOff, Info } from 'lucide-react'
+import { Info } from 'lucide-react'
 
 import type { DiscoverItem } from '../api/discover'
 import { imageURL } from '../api/client'
@@ -9,11 +9,13 @@ export function ContentRow({
   title,
   items,
   imageVersion,
+  refreshImageVersion,
   onSelect,
 }: {
   title: string
   items: DiscoverItem[]
   imageVersion?: string
+  refreshImageVersion?: string
   onSelect: (item: DiscoverItem) => void
 }) {
   return (
@@ -21,7 +23,13 @@ export function ContentRow({
       <h2 className="pl-1 font-display text-2xl font-semibold text-ink-600">{title}</h2>
       <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-8">
         {items.map((item, index) => (
-          <DiscoverCard key={discoverKey(item, index)} item={item} imageVersion={imageVersion} onSelect={onSelect} />
+          <DiscoverCard
+            key={discoverKey(item, index)}
+            item={item}
+            imageVersion={imageVersion}
+            refreshImageVersion={refreshImageVersion}
+            onSelect={onSelect}
+          />
         ))}
       </div>
     </section>
@@ -48,24 +56,47 @@ export function DiscoverSkeleton() {
 function DiscoverCard({
   item,
   imageVersion,
+  refreshImageVersion,
   onSelect,
 }: {
   item: DiscoverItem
   imageVersion?: string
+  refreshImageVersion?: string
   onSelect: (item: DiscoverItem) => void
 }) {
   const source = discoverItemSource(item)
-  const [posterFailed, setPosterFailed] = useState(false)
+  const [posterRetry, setPosterRetry] = useState(0)
+  const [posterUnavailable, setPosterUnavailable] = useState(false)
+  const posterVersion = [imageVersion, posterRetry > 0 ? `r${posterRetry}` : ''].filter(Boolean).join('-')
+  const shouldRefreshCache = Boolean(
+    (imageVersion && refreshImageVersion === imageVersion) || posterRetry > 0,
+  )
   const posterSrc = useMemo(
-    () => imageURL(item.poster_url, imageVersion, true),
-    [imageVersion, item.poster_url],
+    () =>
+      imageURL(item.poster_url, posterVersion, {
+        refreshCache: shouldRefreshCache,
+        retryFailed: true,
+      }),
+    [item.poster_url, posterVersion, shouldRefreshCache],
   )
 
   useEffect(() => {
-    setPosterFailed(false)
-  }, [posterSrc])
+    setPosterRetry(0)
+    setPosterUnavailable(false)
+  }, [item.poster_url])
 
-  const showFallback = !posterSrc || posterFailed
+  useEffect(() => {
+    if (!posterUnavailable || posterRetry >= 3) return
+    const timer = window.setTimeout(() => {
+      setPosterRetry((current) => current + 1)
+      setPosterUnavailable(false)
+    }, 1200 * (posterRetry + 1))
+    return () => window.clearTimeout(timer)
+  }, [posterRetry, posterUnavailable])
+
+  const markPosterUnavailable = () => setPosterUnavailable(true)
+
+  if (!posterSrc || posterUnavailable) return null
 
   return (
     <button
@@ -80,23 +111,15 @@ function DiscoverCard({
             alt={item.title}
             loading="lazy"
             referrerPolicy="no-referrer"
-            onError={() => setPosterFailed(true)}
+            onError={markPosterUnavailable}
             onLoad={(event) => {
               const img = event.currentTarget
-              setPosterFailed(img.naturalWidth <= 1 && img.naturalHeight <= 1)
+              if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
+                markPosterUnavailable()
+              }
             }}
-            className={
-              'h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 ' +
-              (posterFailed ? 'opacity-0' : 'opacity-100')
-            }
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
-        )}
-        {showFallback && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gray-100 px-3 text-center text-gray-500">
-            <ImageOff size={22} className="text-gray-400" />
-            <span className="line-clamp-2 text-xs font-medium text-gray-600">{item.title}</span>
-            <span className="text-[10px] text-gray-400">{posterSrc ? '海报待刷新' : '无海报'}</span>
-          </div>
         )}
         <div className="absolute left-1.5 top-1.5 rounded-xl border border-white/20 bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white backdrop-blur-sm">
           {source}

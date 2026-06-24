@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -34,7 +35,7 @@ func TestScanCloudLibraryCachesFileLevelRemoteArtwork(t *testing.T) {
 				_, _ = w.Write([]byte(`<movie><title>Sidecar Movie</title><year>2026</year></movie>`))
 			case "/dav/Movies/Movie.jpg":
 				w.Header().Set("Content-Type", "image/jpeg")
-				_, _ = w.Write([]byte("file-level-poster"))
+				_, _ = w.Write(testJPEG)
 			default:
 				t.Fatalf("unexpected get path %s", r.URL.Path)
 			}
@@ -86,8 +87,8 @@ func TestScanCloudLibraryCachesFileLevelRemoteArtwork(t *testing.T) {
 	if !imageProxy.ServeCloudCached(rec, httptest.NewRequest(http.MethodGet, media.PosterURL, nil), "openlist:/Movies/Movie.jpg") {
 		t.Fatal("file-level cloud poster should be cached locally during scan before media is exposed")
 	}
-	if got := rec.Body.String(); got != "file-level-poster" {
-		t.Fatalf("cached poster body = %q", got)
+	if got := rec.Body.Bytes(); !bytes.Equal(got, testJPEG) {
+		t.Fatalf("cached poster body = %x", got)
 	}
 }
 
@@ -114,10 +115,10 @@ func TestScanCloudLibraryUsesArtworkReferencedByRemoteNFO(t *testing.T) {
 				_, _ = w.Write([]byte(`<movie><title>NFO Custom Artwork</title><thumb aspect="poster">Artwork.Custom.tbn</thumb><fanart><thumb>Scene.Still.png?version=1</thumb></fanart></movie>`))
 			case "/dav/Movies/Artwork.Custom.tbn":
 				w.Header().Set("Content-Type", "image/jpeg")
-				_, _ = w.Write([]byte("custom-poster"))
+				_, _ = w.Write(testJPEG)
 			case "/dav/Movies/Scene.Still.png":
-				w.Header().Set("Content-Type", "image/png")
-				_, _ = w.Write([]byte("custom-backdrop"))
+				w.Header().Set("Content-Type", "image/jpeg")
+				_, _ = w.Write(testJPEG)
 			default:
 				t.Fatalf("unexpected get path %s", r.URL.Path)
 			}
@@ -172,8 +173,8 @@ func TestScanCloudLibraryUsesArtworkReferencedByRemoteNFO(t *testing.T) {
 	if !imageProxy.ServeCloudCached(rec, httptest.NewRequest(http.MethodGet, media.PosterURL, nil), "openlist:/Movies/Artwork.Custom.tbn") {
 		t.Fatal("NFO-referenced cloud poster should be cached locally during scan")
 	}
-	if got := rec.Body.String(); got != "custom-poster" {
-		t.Fatalf("cached poster body = %q", got)
+	if got := rec.Body.Bytes(); !bytes.Equal(got, testJPEG) {
+		t.Fatalf("cached poster body = %x", got)
 	}
 }
 
@@ -210,7 +211,7 @@ func TestScanCloudLibraryReadsRemoteNFOAndArtwork(t *testing.T) {
 				_, _ = w.Write([]byte(`<episodedetails><showtitle>剑来</showtitle><title>第一集</title><season>1</season><episode>1</episode></episodedetails>`))
 			case "/dav/Anime/JianLai/poster.jpg":
 				w.Header().Set("Content-Type", "image/jpeg")
-				_, _ = w.Write([]byte("cloud-poster-bytes"))
+				_, _ = w.Write(testJPEG)
 			default:
 				t.Fatalf("unexpected get path %s", r.URL.Path)
 			}
@@ -267,8 +268,8 @@ func TestScanCloudLibraryReadsRemoteNFOAndArtwork(t *testing.T) {
 	if !imageProxy.ServeCloudCached(rec, httptest.NewRequest(http.MethodGet, media.PosterURL, nil), "openlist:/Anime/JianLai/poster.jpg") {
 		t.Fatal("cloud poster should be cached locally during scan before media is exposed")
 	}
-	if got := rec.Body.String(); got != "cloud-poster-bytes" {
-		t.Fatalf("cached poster body = %q", got)
+	if got := rec.Body.Bytes(); !bytes.Equal(got, testJPEG) {
+		t.Fatalf("cached poster body = %x", got)
 	}
 	if media.ScrapeStatus != "matched" {
 		t.Fatalf("scrape status = %q", media.ScrapeStatus)
@@ -308,7 +309,7 @@ func TestScanCloudLibraryRefreshesExistingRemoteNFOAndArtwork(t *testing.T) {
 				_, _ = w.Write([]byte(`<episodedetails><showtitle>剑来</showtitle><title>第一集</title><season>1</season><episode>1</episode></episodedetails>`))
 			case "/dav/Anime/JianLai/poster.jpg":
 				w.Header().Set("Content-Type", "image/jpeg")
-				_, _ = w.Write([]byte("cloud-poster-bytes"))
+				_, _ = w.Write(testJPEG)
 			default:
 				t.Fatalf("unexpected get path %s", r.URL.Path)
 			}
@@ -379,7 +380,7 @@ func TestScanCloudLibraryRefreshesExistingRemoteNFOAndArtwork(t *testing.T) {
 	if !imageProxy.ServeCloudCached(rec, httptest.NewRequest(http.MethodGet, media.PosterURL, nil), "openlist:/Anime/JianLai/poster.jpg") {
 		t.Fatal("refreshed cloud poster should be cached locally during scan")
 	}
-	if got := rec.Body.String(); got != "cloud-poster-bytes" {
-		t.Fatalf("cached poster body = %q", got)
+	if got := rec.Body.Bytes(); !bytes.Equal(got, testJPEG) {
+		t.Fatalf("cached poster body = %x", got)
 	}
 }

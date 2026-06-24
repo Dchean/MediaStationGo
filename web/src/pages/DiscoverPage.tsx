@@ -21,6 +21,7 @@ export function DiscoverPage() {
   const [activeItem, setActiveItem] = useState<DiscoverItem | null>(null)
   const [reloadSeq, setReloadSeq] = useState(0)
   const [imageVersion, setImageVersion] = useState(() => String(Date.now()))
+  const [refreshImageVersion, setRefreshImageVersion] = useState<string>()
 
   useEffect(() => {
     let cancelled = false
@@ -122,7 +123,9 @@ export function DiscoverPage() {
   }
 
   const refreshDiscover = () => {
-    setImageVersion(String(Date.now()))
+    const nextImageVersion = String(Date.now())
+    setImageVersion(nextImageVersion)
+    setRefreshImageVersion(nextImageVersion)
     setReloadSeq((current) => current + 1)
   }
 
@@ -200,6 +203,7 @@ export function DiscoverPage() {
                 title={sectionMap.get(key)?.label ?? key}
                 items={items}
                 imageVersion={imageVersion}
+                refreshImageVersion={refreshImageVersion}
                 onSelect={setActiveItem}
               />
             )

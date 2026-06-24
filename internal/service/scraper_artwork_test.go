@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net/http"
@@ -150,12 +151,11 @@ func TestApplyProviderMatchReplacesArtworkAndRemovesOldCache(t *testing.T) {
 
 	images := NewImageProxy(&config.Config{Cache: config.CacheConfig{CacheDir: filepath.Join(t.TempDir(), "cache")}}, zap.NewNop())
 	images.client = &http.Client{Transport: imageRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := "image:" + req.URL.Path
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Status:     "200 OK",
 			Header:     http.Header{"Content-Type": []string{"image/jpeg"}},
-			Body:       io.NopCloser(strings.NewReader(body)),
+			Body:       io.NopCloser(bytes.NewReader(testJPEG)),
 			Request:    req,
 		}, nil
 	})}

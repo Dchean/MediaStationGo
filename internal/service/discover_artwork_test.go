@@ -1,11 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -41,7 +41,7 @@ func TestDiscoverWarmExternalArtworkPrefetchesAndCaches(t *testing.T) {
 			StatusCode: http.StatusOK,
 			Status:     "200 OK",
 			Header:     http.Header{"Content-Type": []string{"image/jpeg"}},
-			Body:       io.NopCloser(strings.NewReader("image:" + req.URL.Path)),
+			Body:       io.NopCloser(bytes.NewReader(testJPEG)),
 			Request:    req,
 		}, nil
 	})}

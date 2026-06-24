@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -95,7 +96,7 @@ func TestEmbyItemImageServesCachedCloudArtworkWithoutResolve(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
-		_, _ = w.Write([]byte("emby-cached-cloud-poster"))
+		_, _ = w.Write(handlerTestJPEG)
 	}))
 	defer upstream.Close()
 
@@ -137,7 +138,7 @@ func TestEmbyItemImageServesCachedCloudArtworkWithoutResolve(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d body=%s", w.Code, w.Body.String())
 	}
-	if got := w.Body.String(); got != "emby-cached-cloud-poster" {
+	if got := w.Body.Bytes(); !bytes.Equal(got, handlerTestJPEG) {
 		t.Fatalf("body = %q, want cached cloud poster", got)
 	}
 	if location := w.Header().Get("Location"); location != "" {

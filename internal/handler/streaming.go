@@ -70,7 +70,9 @@ func stopTranscodeHandler(svc *service.Container) gin.HandlerFunc {
 func imageProxyHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := c.Query("url")
-		if c.Query("retry") != "" || c.Query("refresh") != "" {
+		if c.Query("refresh") != "" {
+			_ = svc.ImageProxy.RemoveFailed(raw)
+		} else if c.Query("retry") != "" {
 			_ = svc.ImageProxy.RemoveFailed(raw)
 		}
 		// Serve handles upstream errors internally by returning a 1×1 PNG
