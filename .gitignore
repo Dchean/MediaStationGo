@@ -72,3 +72,4 @@ media/
 # 本地开发运行产物
 .dev-cache/
 .dev-data/
+tools/
