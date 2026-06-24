@@ -7,8 +7,8 @@
 //	movie.mkv    -> movie.nfo            (<movie>...</movie>)
 //	tvshow/      -> tvshow.nfo           (<tvshow>...</tvshow>)  [future]
 //
-// Today only the per-movie writer is implemented; the per-show / per-episode
-// writers are stubbed with TODO markers.
+// Movie and episode sidecars are generated today; a library-level tvshow.nfo
+// exporter can be added later when the UI exposes a series-level export action.
 package service
 
 import (
