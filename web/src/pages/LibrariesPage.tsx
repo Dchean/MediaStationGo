@@ -6,9 +6,8 @@ import {
   LibrariesContent,
   LibrariesEmptyState,
   LibrariesHeader,
-  latestLibraryCards,
-  type LibraryPreview,
 } from './LibrariesPageSections'
+import { latestLibraryCards, type LibraryPreview } from './librariesPageModel'
 
 export function LibrariesPage() {
   const [previews, setPreviews] = useState<LibraryPreview[]>([])

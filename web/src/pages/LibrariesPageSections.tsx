@@ -6,15 +6,8 @@ import { ArrowRight, Film, FolderOpen, Library as LibraryIcon, Music, PlayCircle
 import { imageURL } from '../api/client'
 import { EpisodeArtworkToggle } from '../components/EpisodeArtworkToggle'
 import { MediaCard } from '../components/MediaCard'
-import type { Library, Media } from '../types'
-import { artworkScore, groupSeries, seriesCardLink, type SeriesCard } from '../utils/groupSeries'
-
-export type LibraryPreview = {
-  library: Library
-  items: Media[]
-  total: number
-  cards: SeriesCard[]
-}
+import { artworkScore, seriesCardLink, type SeriesCard } from '../utils/groupSeries'
+import { mediaTime, type LibraryPreview } from './librariesPageModel'
 
 const TYPE_ICONS: Record<string, ReactNode> = {
   movie: <Film size={18} />,
@@ -222,12 +215,6 @@ function LibraryShelf({ preview }: { preview: LibraryPreview }) {
   )
 }
 
-export function latestLibraryCards(items: Media[]): SeriesCard[] {
-  return groupSeries(items)
-    .sort((a, b) => mediaTime(b.rep) - mediaTime(a.rep) || artworkScore(b.rep) - artworkScore(a.rep))
-    .slice(0, 10)
-}
-
 function libraryArtworkItems(cards: SeriesCard[]): Array<{ src: string; version?: string }> {
   return [...cards]
     .sort((a, b) => artworkScore(b.rep) - artworkScore(a.rep) || mediaTime(b.rep) - mediaTime(a.rep))
@@ -237,8 +224,4 @@ function libraryArtworkItems(cards: SeriesCard[]): Array<{ src: string; version?
     }))
     .filter((item) => Boolean(item.src))
     .slice(0, 4)
-}
-
-function mediaTime(media: Media): number {
-  return Date.parse(media.updated_at || media.created_at || '') || 0
 }

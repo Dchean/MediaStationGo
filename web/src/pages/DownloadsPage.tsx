@@ -7,7 +7,8 @@ import { downloadsAPI } from '../api/downloads'
 import { useAuthStore } from '../stores/auth'
 import { confirmAction } from '../components/confirmAction'
 import type { DownloadTask, QBitTorrent } from '../types'
-import { DownloadTaskCard, toLiveCard, toTaskCard } from './DownloadTaskCard'
+import { DownloadTaskCard } from './DownloadTaskCard'
+import { toLiveCard, toTaskCard } from './downloadTaskCardModel'
 
 export function DownloadsPage() {
   const role = useAuthStore((s) => s.user?.role)
