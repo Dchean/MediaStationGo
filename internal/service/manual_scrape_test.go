@@ -237,7 +237,7 @@ func TestManualSearchReturnsMovieFallbackForTVTypedTMDbSearch(t *testing.T) {
 	}
 }
 
-func TestManualSearchTMDbNumericIDTriesMovieAndTVNamespaces(t *testing.T) {
+func TestManualSearchAllProvidersTMDbNumericIDTriesMovieAndTVNamespaces(t *testing.T) {
 	var paths []string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
@@ -284,7 +284,7 @@ func TestManualSearchTMDbNumericIDTriesMovieAndTVNamespaces(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := scraper.ManualSearch(t.Context(), &media, "12345", "tmdb", "movie")
+	results, err := scraper.ManualSearch(t.Context(), &media, "12345", "all", "movie")
 	if err != nil {
 		t.Fatal(err)
 	}

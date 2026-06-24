@@ -107,7 +107,7 @@ func groupMediaSeriesCards(items []model.Media) []SeriesCard {
 	return cards
 }
 
-var episodicPathRE = regexp.MustCompile(`(?i)[\\/](?:电视剧|剧集|国产剧|欧美剧|日韩剧|日剧|韩剧|综艺|纪录片|动漫|番剧|国漫|日番|儿童|tv|series|shows?|season[\s._-]*\d|s\d{1,2}(?:[\s._-]|[\\/])|specials?|sp|ova|oad|extra|extras|特别篇|特別篇|番外|特典)[\\/]`)
+var episodicPathRE = regexp.MustCompile(`(?i)[\\/](?:电视剧|剧集|国产剧|欧美剧|日韩剧|日剧|韩剧|综艺|纪录片|动漫|番剧|国漫|日番|儿童|tv|series|shows?|season[\s._-]*\d|s\d{1,2}(?:[\s._-]|[\\/])|special[\s._-]*episodes?|specials?|sp|ovas?|oads?|extras?|bonus(?:es)?|omake|特别篇|特別篇|番外篇?|特典|外传|外傳|总集篇|總集篇)[\\/]`)
 
 func mediaSeriesKey(media model.Media) string {
 	return compactSeriesKey(mediaSeriesRawKey(media))
@@ -173,7 +173,7 @@ var (
 	seriesIDRE            = regexp.MustCompile(`(?i)\s*\[(?:tmdb|tmdbid)[=-]\d+\]\s*`)
 	seriesBraceRE         = regexp.MustCompile(`(?i)\s*\{(?:tmdb|tmdbid|douban|bangumi|bgm|thetvdb|tvdb)[\s:=#-]*[a-z0-9_-]+\}\s*`)
 	seriesSpacerRE        = regexp.MustCompile(`[\s._-]+`)
-	seriesSpecialSuffixRE = regexp.MustCompile(`(?i)(?:\s+(?:specials?|sp|ova|oad|extra|extras)|\s*(?:特别篇|特別篇|番外|特典|外传|外傳))$`)
+	seriesSpecialSuffixRE = regexp.MustCompile(`(?i)(?:\s+(?:s0+|season 0+|special episodes?|specials?|sp|ovas?|oads?|extras?|bonus(?:es)?|omake)|\s*(?:特别篇|特別篇|番外篇?|特典|外传|外傳|总集篇|總集篇))$`)
 )
 
 func normalizeSeriesTitle(value string) string {

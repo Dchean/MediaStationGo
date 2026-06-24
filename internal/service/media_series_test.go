@@ -61,3 +61,41 @@ func TestMediaSeriesKeyCollapsesSpecialTitleSuffix(t *testing.T) {
 		t.Fatalf("chinese special key=%q, want main key=%q", got, want)
 	}
 }
+
+func TestMediaSeriesKeyCollapsesSeasonZeroAndSpecialAliases(t *testing.T) {
+	main := model.Media{
+		LibraryID:  "lib-anime",
+		Path:       `cloud://openlist/动漫/日番/宝可梦 (1997) {tmdb-60572}/Season 1/宝可梦.S01E01.mkv`,
+		SeasonNum:  1,
+		EpisodeNum: 1,
+	}
+	seasonZero := model.Media{
+		LibraryID:  "lib-anime",
+		Path:       `cloud://openlist/动漫/日番/宝可梦 (1997) {tmdb-60572}/Season 0/宝可梦.S00E34.mkv`,
+		SeasonNum:  0,
+		EpisodeNum: 34,
+	}
+	specialEpisode := model.Media{
+		LibraryID:  "lib-anime",
+		Path:       `cloud://openlist/动漫/日番/宝可梦 Special Episode/宝可梦.SP01.mkv`,
+		SeasonNum:  0,
+		EpisodeNum: 1,
+	}
+	extraEpisode := model.Media{
+		LibraryID:  "lib-anime",
+		Path:       `cloud://openlist/动漫/日番/宝可梦 番外篇/宝可梦.SP02.mkv`,
+		SeasonNum:  0,
+		EpisodeNum: 2,
+	}
+
+	want := mediaSeriesKey(main)
+	for name, item := range map[string]model.Media{
+		"season zero":     seasonZero,
+		"special episode": specialEpisode,
+		"番外篇":             extraEpisode,
+	} {
+		if got := mediaSeriesKey(item); got != want {
+			t.Fatalf("%s key=%q, want main key=%q", name, got, want)
+		}
+	}
+}

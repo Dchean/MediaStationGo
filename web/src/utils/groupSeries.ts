@@ -78,10 +78,10 @@ export function isEpisodeLike(media: Media): boolean {
 // 剧集类目录名(电视剧/动漫及其二级分类)。媒体路径落在这些目录下时, 即便
 // 季集号未识别出来, 也应按剧集对待, 跳转到 /library 分类视图而非 /media 单页。
 const EPISODIC_PATH_RE =
-  /[\\/](?:电视剧|剧集|国产剧|欧美剧|日韩剧|日剧|韩剧|综艺|纪录片|动漫|番剧|国漫|日番|儿童|tv|series|shows?|season[\s._-]*\d|s\d{1,2}(?:[\s._-]|[\\/])|specials?|sp|ova|oad|extra|extras|特别篇|特別篇|番外|特典)[\\/]/i
+  /[\\/](?:电视剧|剧集|国产剧|欧美剧|日韩剧|日剧|韩剧|综艺|纪录片|动漫|番剧|国漫|日番|儿童|tv|series|shows?|season[\s._-]*\d|s\d{1,2}(?:[\s._-]|[\\/])|special[\s._-]*episodes?|specials?|sp|ovas?|oads?|extras?|bonus(?:es)?|omake|特别篇|特別篇|番外篇?|特典|外传|外傳|总集篇|總集篇)[\\/]/i
 
 const SEASON_FOLDER_RE =
-  /^(?:s\d{1,2}|season[\s._-]*\d{1,2}|第\s*\d{1,2}\s*季|specials?|sp|ova|oad|extra|extras|特别篇|特別篇|番外|特典)$/i
+  /^(?:s\d{1,2}|season[\s._-]*\d{1,2}|第\s*[0-9一二三四五六七八九十百零两]+\s*季|special[\s._-]*episodes?|specials?|sp|ovas?|oads?|extras?|bonus(?:es)?|omake|特别篇|特別篇|番外篇?|特典|外传|外傳|总集篇|總集篇)$/i
 
 function pathLooksEpisodic(media: Media): boolean {
   const path = (media.path || media.display_library_path || media.library_path || '')
@@ -114,7 +114,7 @@ function normalizeTitle(value?: string): string {
 }
 
 const SERIES_SPECIAL_SUFFIX_RE =
-  /(?:\s+(?:specials?|sp|ova|oad|extra|extras)|\s*(?:特别篇|特別篇|番外|特典|外传|外傳))$/i
+  /(?:\s+(?:s0+|season 0+|special episodes?|specials?|sp|ovas?|oads?|extras?|bonus(?:es)?|omake)|\s*(?:特别篇|特別篇|番外篇?|特典|外传|外傳|总集篇|總集篇))$/i
 
 function normalizePathSeriesTitle(value?: string): string {
   const title = normalizeTitle(value)

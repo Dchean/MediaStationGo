@@ -30,7 +30,7 @@ var (
 	patSeasonFolder  = regexp.MustCompile(`(?i)(?:^|[^a-z])(?:s|season)\.?\s*(\d{1,2})(?:[^0-9]|$)|第\s*([0-9一二三四五六七八九十百零两]+)\s*季`)
 	patSeasonOnly    = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:s|season)\.?\s*\d{1,2}(?:[\s._-]|$)`)
 	patBareEpisode   = regexp.MustCompile(`^(?:第\s*)?0?(\d{1,3})(?:\s*(?:v\d+)?)?$`)
-	patSpecialSeason = regexp.MustCompile(`(?i)^(?:s0+|season[\s._-]*0+|specials?|sp|ova|oad|extra|extras|番外|特别篇|特別篇|特典)$`)
+	patSpecialSeason = regexp.MustCompile(`(?i)^(?:s0+|season[\s._-]*0+|special[\s._-]*episodes?|specials?|sp|ovas?|oads?|extras?|bonus(?:es)?|omake|番外篇?|特别篇|特別篇|特典|外传|外傳|总集篇|總集篇)$`)
 	// patCNSeason 匹配中文季/部标记，支持阿拉伯数字与中文数字（如「第二季」「第2部」）。
 	patCNSeason = regexp.MustCompile(`第\s*[0-9一二三四五六七八九十百零两]+\s*[季部]`)
 )

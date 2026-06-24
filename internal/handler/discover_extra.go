@@ -40,10 +40,7 @@ var discoverSectionCatalog = []discoverSectionDef{
 func discoverSectionsHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sections := make([]gin.H, 0, len(discoverSectionCatalog))
-		for _, section := range discoverSectionCatalog {
-			if !discoverProviderEnabled(c.Request.Context(), svc, section.Provider) {
-				continue
-			}
+		for _, section := range enabledDiscoverSections(c.Request.Context(), svc) {
 			sections = append(sections, gin.H{"key": section.Key, "label": section.Label, "provider": section.Provider})
 		}
 		c.JSON(http.StatusOK, gin.H{"sections": sections})
@@ -56,11 +53,18 @@ func discoverSectionsHandler(svc *service.Container) gin.HandlerFunc {
 // the page.
 func discoverFeedHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		keys := strings.Split(c.DefaultQuery("sections", "tmdb_trending_day,tmdb_popular_movie,douban_hot_movie,bangumi_calendar"), ",")
+		rawSections := c.Query("sections")
+		if strings.TrimSpace(rawSections) == "" {
+			rawSections = strings.Join(defaultDiscoverSectionKeys(c.Request.Context(), svc), ",")
+		}
+		keys := strings.Split(rawSections, ",")
 		out := gin.H{}
 		artworkItems := []service.ExternalMediaResult{}
 		for _, raw := range keys {
 			k := strings.TrimSpace(raw)
+			if k == "" {
+				continue
+			}
 			if provider := discoverSectionProvider(k); provider != "" && !discoverProviderEnabled(c.Request.Context(), svc, provider) {
 				out[k] = []service.ExternalMediaResult{}
 				continue
@@ -76,6 +80,41 @@ func discoverFeedHandler(svc *service.Container) gin.HandlerFunc {
 		svc.Discover.WarmExternalArtwork(artworkItems)
 		c.JSON(http.StatusOK, out)
 	}
+}
+
+func enabledDiscoverSections(ctx context.Context, svc *service.Container) []discoverSectionDef {
+	sections := make([]discoverSectionDef, 0, len(discoverSectionCatalog))
+	for _, section := range discoverSectionCatalog {
+		if !discoverProviderEnabled(ctx, svc, section.Provider) {
+			continue
+		}
+		sections = append(sections, section)
+	}
+	return sections
+}
+
+func defaultDiscoverSectionKeys(ctx context.Context, svc *service.Container) []string {
+	preferred := []string{"tmdb_trending_day", "douban_hot_movie", "douban_hot_tv", "bangumi_calendar"}
+	enabled := map[string]struct{}{}
+	for _, section := range enabledDiscoverSections(ctx, svc) {
+		enabled[section.Key] = struct{}{}
+	}
+	out := make([]string, 0, len(preferred))
+	for _, key := range preferred {
+		if _, ok := enabled[key]; ok {
+			out = append(out, key)
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	for _, section := range enabledDiscoverSections(ctx, svc) {
+		out = append(out, section.Key)
+		if len(out) >= 4 {
+			break
+		}
+	}
+	return out
 }
 
 func discoverSectionProvider(key string) string {
