@@ -263,6 +263,32 @@ func TestScanCloudLibraryReadsRemoteJSONMetadataAndArtwork(t *testing.T) {
 	}
 }
 
+func TestCloudEpisodeJSONDoesNotPolluteSeriesIdentity(t *testing.T) {
+	local, _ := metadataFromCloudJSON([]byte(`{
+		"title": "九龙拉棺",
+		"episode": 1,
+		"tmdb_id": 4375419,
+		"original_title": "Burial",
+		"overview": "本集简介",
+		"poster": "episode-poster.jpg",
+		"genres": ["动画"]
+	}`))
+	if local == nil {
+		t.Fatal("episode json metadata was not parsed")
+	}
+	dst := &LocalMetadata{Title: "遮天", Year: 2023, SeasonNum: 1}
+	got := mergeCloudEpisodeMetadata(dst, local)
+	if got.Title != "遮天" || got.OriginalName != "" || got.TMDbID != 0 {
+		t.Fatalf("episode json polluted series identity: %+v", got)
+	}
+	if got.EpisodeTitle != "九龙拉棺" || got.Overview != "本集简介" || got.SeasonNum != 1 || got.EpisodeNum != 1 {
+		t.Fatalf("episode json fields not preserved: %+v", got)
+	}
+	if got.Genres != "动画" {
+		t.Fatalf("episode json taxonomy should fill empty series taxonomy, got %q", got.Genres)
+	}
+}
+
 func TestScanCloudLibraryEnrichesPathHintTMDbArtwork(t *testing.T) {
 	tmdb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/movie/755679" {

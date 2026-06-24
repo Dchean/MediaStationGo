@@ -430,7 +430,7 @@ func mergeEpisodeMetadata(dst, episode *LocalMetadata, doc *nfoDocument) {
 	}
 
 	// 单集级展示字段: 每个媒体行本就对应一集,这些可安全按集回填。
-	if episode.Year > 0 {
+	if dst.Year == 0 && episode.Year > 0 {
 		dst.Year = episode.Year
 	}
 	if episode.Overview != "" {
@@ -446,7 +446,7 @@ func mergeEpisodeMetadata(dst, episode *LocalMetadata, doc *nfoDocument) {
 		dst.BackdropURL = episode.BackdropURL
 	}
 	// 整剧外部 id: 单集 NFO 的 id 都是单集级,绝不写入整剧字段(见上方说明)。
-	if episode.SeasonNum > 0 || episode.EpisodeNum > 0 {
+	if episode.SeasonNum > 0 {
 		dst.SeasonNum = episode.SeasonNum
 	}
 	if episode.EpisodeNum > 0 {

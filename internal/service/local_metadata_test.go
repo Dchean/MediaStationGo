@@ -112,6 +112,18 @@ func TestReadLocalEpisodeMetadataWithoutShowTitleDoesNotUseEpisodeTitleAsSeries(
 	}
 }
 
+func TestMergeEpisodeMetadataKeepsExistingSeasonWhenEpisodeNFOOmitsIt(t *testing.T) {
+	dst := &LocalMetadata{Title: "哈哈哈哈哈", SeasonNum: 6}
+	episodeDoc := &nfoDocument{Title: "第 11 集", Episode: 11}
+	episode := metadataFromDoc(episodeDoc, "", true)
+
+	mergeEpisodeMetadata(dst, episode, episodeDoc)
+
+	if dst.SeasonNum != 6 || dst.EpisodeNum != 11 {
+		t.Fatalf("episode NFO without season should keep parsed season, got %+v", dst)
+	}
+}
+
 func TestReadLocalEpisodeMetadataIgnoresNoneNumericFields(t *testing.T) {
 	root := t.TempDir()
 	showDir := filepath.Join(root, "链锯人 总集篇 (2025)")
