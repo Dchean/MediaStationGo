@@ -70,6 +70,7 @@ type SessionTrackerService struct {
 
 	mu       sync.RWMutex
 	sessions map[string]RealtimeSession
+	activity map[string]time.Time
 	now      func() time.Time
 }
 
@@ -77,6 +78,7 @@ func NewSessionTrackerService(log *zap.Logger) *SessionTrackerService {
 	return &SessionTrackerService{
 		log:      log,
 		sessions: make(map[string]RealtimeSession),
+		activity: make(map[string]time.Time),
 		now:      time.Now,
 	}
 }
@@ -130,6 +132,10 @@ func (s *SessionTrackerService) Logout(ctx context.Context, userID, deviceID, re
 	remoteEndPoint = strings.TrimSpace(remoteEndPoint)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.activity == nil {
+		s.activity = make(map[string]time.Time)
+	}
+	s.activity[userID] = s.now()
 	for key, sess := range s.sessions {
 		if sess.UserID != userID {
 			continue
@@ -208,6 +214,17 @@ func (s *SessionTrackerService) activityByUser(ctx context.Context) map[string]u
 	sessions := s.List(ctx)
 	now := s.now()
 	out := make(map[string]userRealtimeActivity)
+	for userID, lastActivity := range s.userActivitySnapshot() {
+		if strings.TrimSpace(userID) == "" {
+			continue
+		}
+		a := out[userID]
+		if a.LastActivityAt == nil || lastActivity.After(*a.LastActivityAt) {
+			t := lastActivity
+			a.LastActivityAt = &t
+		}
+		out[userID] = a
+	}
 	seenDevices := make(map[string]map[string]struct{})
 	for _, sess := range sessions {
 		if strings.TrimSpace(sess.UserID) == "" {
@@ -231,6 +248,16 @@ func (s *SessionTrackerService) activityByUser(ctx context.Context) map[string]u
 	return out
 }
 
+func (s *SessionTrackerService) userActivitySnapshot() map[string]time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]time.Time, len(s.activity))
+	for userID, lastActivity := range s.activity {
+		out[userID] = lastActivity
+	}
+	return out
+}
+
 func (s *SessionTrackerService) upsert(ctx context.Context, in realtimeSessionInput) {
 	userID := strings.TrimSpace(in.UserID)
 	if userID == "" {
@@ -248,6 +275,10 @@ func (s *SessionTrackerService) upsert(ctx context.Context, in realtimeSessionIn
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruneLocked(now)
+	if s.activity == nil {
+		s.activity = make(map[string]time.Time)
+	}
+	s.activity[userID] = now
 	existing, existed := s.sessions[key]
 	if strings.TrimSpace(in.UserName) == "" {
 		in.UserName = existing.UserName
@@ -313,6 +344,11 @@ func (s *SessionTrackerService) pruneLocked(now time.Time) {
 	for key, sess := range s.sessions {
 		if sess.LastActivityAt.Before(expiresBefore) {
 			delete(s.sessions, key)
+		}
+	}
+	for userID, lastActivity := range s.activity {
+		if lastActivity.Before(expiresBefore) {
+			delete(s.activity, userID)
 		}
 	}
 }

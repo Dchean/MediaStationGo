@@ -119,6 +119,7 @@ func (s *TelegramBotService) cmdUnbindInactive(ctx context.Context, args []strin
 		return telegramCommandReply{Text: "读取用户失败：" + err.Error()}
 	}
 	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	recentWindow := time.Duration(days) * 24 * time.Hour
 	var userIDs []string
 	var done []string
 	for _, user := range users {
@@ -130,6 +131,9 @@ func (s *TelegramBotService) cmdUnbindInactive(ctx context.Context, args []strin
 			lastActive = *user.LastLoginAt
 		}
 		if lastActive.IsZero() || lastActive.After(cutoff) {
+			continue
+		}
+		if s.device != nil && s.device.UserRecentlyActive(ctx, user.ID, recentWindow) {
 			continue
 		}
 		var count int64

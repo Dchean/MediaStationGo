@@ -16,7 +16,7 @@ func registerEmbyRoutes(r *gin.Engine, jwtSecret string, svc *service.Container)
 		grp.Use(embyNoStoreHeaders())
 
 		registerEmbyRootRoutes(grp, prefix, svc)
-		registerEmbyPublicRoutes(grp, svc)
+		registerEmbyPublicRoutes(grp, jwtSecret, svc)
 		registerEmbyPublicImageRoutes(grp, svc)
 
 		// 鉴权后端点
@@ -46,10 +46,10 @@ func registerEmbyRootRoutes(grp *gin.RouterGroup, prefix string, svc *service.Co
 	grp.HEAD("/", embyRootHandler(svc))
 }
 
-func registerEmbyPublicRoutes(grp *gin.RouterGroup, svc *service.Container) {
+func registerEmbyPublicRoutes(grp *gin.RouterGroup, jwtSecret string, svc *service.Container) {
 	registerEmbyPublicSystemRoutes(grp, svc)
-	registerEmbyPublicSessionRoutes(grp, svc)
-	registerEmbyPublicClientRoutes(grp, svc)
+	registerEmbyPublicSessionRoutes(grp, jwtSecret, svc)
+	registerEmbyPublicClientRoutes(grp, jwtSecret, svc)
 }
 
 func registerEmbyPublicSystemRoutes(grp *gin.RouterGroup, svc *service.Container) {
@@ -68,11 +68,13 @@ func registerEmbyPublicSystemRoutes(grp *gin.RouterGroup, svc *service.Container
 	}
 }
 
-func registerEmbyPublicSessionRoutes(grp *gin.RouterGroup, svc *service.Container) {
-	registerEmbyPostRoutes(grp, svc, []string{
+func registerEmbyPublicSessionRoutes(grp *gin.RouterGroup, jwtSecret string, svc *service.Container) {
+	for _, path := range []string{
 		"/Sessions/Capabilities", "/Sessions/Capabilities/Full",
 		"/sessions/capabilities", "/sessions/capabilities/full",
-	}, embyNoContentHandler)
+	} {
+		grp.POST(path, embySessionCapabilitiesHandler(svc, jwtSecret))
+	}
 
 	// 30/min per IP: many Emby clients sit behind a single NAT/reverse-proxy
 	// IP, so a low limit would throttle legitimate logins into 429s.
@@ -84,17 +86,19 @@ func registerEmbyPublicSessionRoutes(grp *gin.RouterGroup, svc *service.Containe
 	registerEmbyGetRoutes(grp, svc, []string{"/Users/Public", "/users/public"}, embyPublicUsersHandler)
 }
 
-func registerEmbyPublicClientRoutes(grp *gin.RouterGroup, svc *service.Container) {
+func registerEmbyPublicClientRoutes(grp *gin.RouterGroup, jwtSecret string, svc *service.Container) {
 	registerEmbyGetRoutes(grp, svc, []string{"/Branding/Configuration", "/branding/configuration"}, embyBrandingConfigHandler)
 	registerEmbyGetHeadRoutes(grp, svc, []string{"/Branding/Css", "/branding/css"}, embyBrandingCSSHandler)
 	registerEmbyGetRoutes(grp, svc, []string{"/Localization/Options", "/localization/options"}, embyLocalizationOptionsHandler)
 	registerEmbyGetRoutes(grp, svc, []string{"/Localization/Cultures", "/Localization/cultures", "/localization/cultures"}, embyLocalizationCulturesHandler)
 	registerEmbyGetHeadRoutes(grp, svc, []string{"/CustomCssJS/Scripts", "/customcssjs/scripts"}, embyCustomCSSJSScriptsHandler)
 	for _, path := range []string{"/embywebsocket", "/EmbyWebSocket"} {
-		grp.GET(path, embyWebSocketHandler(svc))
+		grp.GET(path, embyWebSocketHandler(svc, jwtSecret))
 		grp.HEAD(path, embyNoContentHandler(svc))
 	}
-	registerEmbyPostRoutes(grp, svc, []string{"/Sessions/Logout", "/sessions/logout"}, embySessionLogoutHandler)
+	for _, path := range []string{"/Sessions/Logout", "/sessions/logout"} {
+		grp.POST(path, embySessionLogoutHandler(svc, jwtSecret))
+	}
 	grp.GET("/DisplayPreferences/:id", embyDisplayPreferencesHandler(svc))
 	grp.POST("/DisplayPreferences/:id", embySaveDisplayPreferencesHandler(svc))
 	grp.GET("/displaypreferences/:id", embyDisplayPreferencesHandler(svc))

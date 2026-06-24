@@ -228,6 +228,188 @@ func TestEmbyAuthenticatedRequestRefreshesRealtimeUserActivity(t *testing.T) {
 	}
 }
 
+func TestEmbySessionCapabilitiesRefreshesRealtimeActivity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	repos := repository.New(db)
+	if err := repos.User.Create(t.Context(), &model.User{
+		Base:         model.Base{ID: "user-1"},
+		Username:     "viewer",
+		PasswordHash: "x",
+		Role:         "admin",
+		Tier:         "plus",
+		IsActive:     true,
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	const secret = "test-secret"
+	tracker := service.NewSessionTrackerService(zap.NewNop())
+	router := gin.New()
+	registerEmbyRoutes(router, secret, &service.Container{
+		Repo:     repos,
+		Sessions: tracker,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/emby/Sessions/Capabilities/Full?deviceId=phone-1&device=iPhone&client=Infuse", strings.NewReader(`{}`))
+	req.Header.Set("X-Emby-Token", signedTestToken(t, secret))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("capabilities status: %d body=%s", w.Code, w.Body.String())
+	}
+	sessions := tracker.List(t.Context())
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %#v, want one heartbeat session", sessions)
+	}
+	if sessions[0].DeviceID != "phone-1" || sessions[0].DeviceName != "iPhone" || sessions[0].Client != "Infuse" || sessions[0].UserName != "viewer" {
+		t.Fatalf("capabilities did not refresh client session: %#v", sessions[0])
+	}
+}
+
+func TestEmbySessionCapabilitiesIgnoresScopedPlaybackToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	repos := repository.New(db)
+	if err := repos.User.Create(t.Context(), &model.User{
+		Base:         model.Base{ID: "user-1"},
+		Username:     "viewer",
+		PasswordHash: "x",
+		Role:         "admin",
+		Tier:         "plus",
+		IsActive:     true,
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	const secret = "test-secret"
+	tracker := service.NewSessionTrackerService(zap.NewNop())
+	router := gin.New()
+	registerEmbyRoutes(router, secret, &service.Container{
+		Repo:     repos,
+		Sessions: tracker,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/emby/Sessions/Capabilities/Full?deviceId=phone-1&device=iPhone&client=Infuse", strings.NewReader(`{}`))
+	req.Header.Set("X-Emby-Token", signedTestTokenWithPurpose(t, secret, service.ExternalPlaybackTokenPurpose))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("capabilities status: %d body=%s", w.Code, w.Body.String())
+	}
+	if sessions := tracker.List(t.Context()); len(sessions) != 0 {
+		t.Fatalf("scoped external playback token must not create realtime session: %#v", sessions)
+	}
+}
+
+func TestEmbyLogoutRemovesRealtimeSessionFromPublicRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	repos := repository.New(db)
+	if err := repos.User.Create(t.Context(), &model.User{
+		Base:         model.Base{ID: "user-1"},
+		Username:     "viewer",
+		PasswordHash: "x",
+		Role:         "admin",
+		Tier:         "plus",
+		IsActive:     true,
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	const secret = "test-secret"
+	tracker := service.NewSessionTrackerService(zap.NewNop())
+	tracker.RecordActivity(t.Context(), "user-1", "viewer", "phone-1", "iPhone", "Infuse", "192.0.2.10")
+	tracker.RecordActivity(t.Context(), "user-1", "viewer", "tv-1", "Apple TV", "Yamby", "192.0.2.11")
+	router := gin.New()
+	registerEmbyRoutes(router, secret, &service.Container{
+		Repo:     repos,
+		Sessions: tracker,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/emby/Sessions/Logout", nil)
+	req.Header.Set("X-MediaBrowser-Authorization", `MediaBrowser Client="Infuse", Device="iPhone", DeviceId="phone-1", Token="`+signedTestToken(t, secret)+`"`)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("logout status: %d body=%s", w.Code, w.Body.String())
+	}
+	sessions := tracker.List(t.Context())
+	if len(sessions) != 1 {
+		t.Fatalf("sessions after logout = %#v, want only the other device", sessions)
+	}
+	if sessions[0].DeviceID != "tv-1" {
+		t.Fatalf("remaining session = %#v, want tv-1", sessions[0])
+	}
+}
+
+func TestEmbyLogoutIgnoresScopedPlaybackToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	repos := repository.New(db)
+	if err := repos.User.Create(t.Context(), &model.User{
+		Base:         model.Base{ID: "user-1"},
+		Username:     "viewer",
+		PasswordHash: "x",
+		Role:         "admin",
+		Tier:         "plus",
+		IsActive:     true,
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	const secret = "test-secret"
+	tracker := service.NewSessionTrackerService(zap.NewNop())
+	tracker.RecordActivity(t.Context(), "user-1", "viewer", "phone-1", "iPhone", "Infuse", "192.0.2.10")
+	router := gin.New()
+	registerEmbyRoutes(router, secret, &service.Container{
+		Repo:     repos,
+		Sessions: tracker,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/emby/Sessions/Logout", nil)
+	req.Header.Set("X-MediaBrowser-Authorization", `MediaBrowser Client="Infuse", Device="iPhone", DeviceId="phone-1", Token="`+signedTestTokenWithPurpose(t, secret, service.ExternalPlaybackTokenPurpose)+`"`)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("logout status: %d body=%s", w.Code, w.Body.String())
+	}
+	sessions := tracker.List(t.Context())
+	if len(sessions) != 1 || sessions[0].DeviceID != "phone-1" {
+		t.Fatalf("scoped external playback token must not logout realtime session: %#v", sessions)
+	}
+}
+
 func TestEmbyUppercaseSessionCapabilitiesRouteNoContent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

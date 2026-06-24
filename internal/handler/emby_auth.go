@@ -52,18 +52,21 @@ func embyAuthRequiredWithSessionFallback(secret string) gin.HandlerFunc {
 
 func embyRealtimeSessionActivity(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if svc != nil && svc.Sessions != nil {
-			if uid := embyUserID(c); uid != "" {
-				clientInfo := embyClientInfoFromRequest(c)
-				svc.Sessions.RecordActivity(c.Request.Context(), uid, embyContextUserName(c),
-					clientInfo.DeviceID,
-					clientInfo.DeviceName,
-					clientInfo.Client,
-					c.ClientIP())
-			}
-		}
+		recordEmbySessionActivity(c, svc, embyUserID(c), embyContextUserName(c))
 		c.Next()
 	}
+}
+
+func recordEmbySessionActivity(c *gin.Context, svc *service.Container, userID, userName string) {
+	if c == nil || svc == nil || svc.Sessions == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	clientInfo := embyClientInfoFromRequest(c)
+	svc.Sessions.RecordActivity(c.Request.Context(), userID, userName,
+		clientInfo.DeviceID,
+		clientInfo.DeviceName,
+		clientInfo.Client,
+		c.ClientIP())
 }
 
 func embyContextUserName(c *gin.Context) string {
@@ -167,15 +170,25 @@ func embyClientInfoFromRequest(c *gin.Context) embyClientInfo {
 	info := embyClientInfo{
 		DeviceID: firstNonEmptyHeaderString(
 			firstHeaderValue(c, "X-Emby-Device-Id", "X-Emby-DeviceId", "X-MediaBrowser-Device-Id", "X-MediaBrowser-DeviceId"),
+			c.Query("DeviceId"),
+			c.Query("DeviceID"),
+			c.Query("deviceId"),
+			c.Query("deviceID"),
 			auth["DeviceId"],
 			auth["DeviceID"],
 		),
 		DeviceName: firstNonEmptyHeaderString(
 			firstHeaderValue(c, "X-Emby-Device-Name", "X-Emby-DeviceName", "X-MediaBrowser-Device-Name", "X-MediaBrowser-DeviceName"),
+			c.Query("Device"),
+			c.Query("DeviceName"),
+			c.Query("device"),
+			c.Query("deviceName"),
 			auth["Device"],
 		),
 		Client: firstNonEmptyHeaderString(
 			firstHeaderValue(c, "X-Emby-Client", "X-MediaBrowser-Client"),
+			c.Query("Client"),
+			c.Query("client"),
 			auth["Client"],
 		),
 	}

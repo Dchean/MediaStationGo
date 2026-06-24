@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 )
 
@@ -61,8 +63,9 @@ func TestBotAdminUnbindInactiveAndInvalidBindings(t *testing.T) {
 	recentTime := time.Now().Add(-2 * 24 * time.Hour)
 	admin := &model.User{Username: "root", PasswordHash: "x", Role: "admin", IsActive: true, LastLoginAt: &oldTime}
 	oldUser := &model.User{Username: "old", PasswordHash: "x", Role: "user", IsActive: true, LastLoginAt: &oldTime}
+	realtimeUser := &model.User{Username: "realtime", PasswordHash: "x", Role: "user", IsActive: true, LastLoginAt: &oldTime}
 	recentUser := &model.User{Username: "recent", PasswordHash: "x", Role: "user", IsActive: true, LastLoginAt: &recentTime}
-	for _, user := range []*model.User{admin, oldUser, recentUser} {
+	for _, user := range []*model.User{admin, oldUser, realtimeUser, recentUser} {
 		if err := repos.User.Create(ctx, user); err != nil {
 			t.Fatal(err)
 		}
@@ -71,6 +74,7 @@ func TestBotAdminUnbindInactiveAndInvalidBindings(t *testing.T) {
 		{TelegramUserID: 9501, TelegramName: "@root", ChatID: 9501, UserID: admin.ID},
 		{TelegramUserID: 9502, TelegramName: "@old", ChatID: 9502, UserID: oldUser.ID},
 		{TelegramUserID: 9503, TelegramName: "@recent", ChatID: 9503, UserID: recentUser.ID},
+		{TelegramUserID: 9505, TelegramName: "@realtime", ChatID: 9505, UserID: realtimeUser.ID},
 		{TelegramUserID: 9504, TelegramName: "@ghost", ChatID: 9504, UserID: "missing-user"},
 	} {
 		row := binding
@@ -80,6 +84,11 @@ func TestBotAdminUnbindInactiveAndInvalidBindings(t *testing.T) {
 	}
 	channel := &model.NotifyChannel{Name: "Telegram", Type: "telegram", Enabled: true, Config: `{"admin_user_ids":"9501"}`}
 	msg := &TelegramMessage{From: TelegramUser{ID: 9501, Username: "root"}, Chat: TelegramChat{ID: 9501, Type: "private"}}
+	tracker := NewSessionTrackerService(zap.NewNop())
+	tracker.RecordActivity(ctx, realtimeUser.ID, realtimeUser.Username, "phone-1", "iPhone", "Infuse", "192.0.2.10")
+	device := NewDeviceService(zap.NewNop(), repos)
+	device.SetSessionTracker(tracker)
+	bot.SetDeviceService(device)
 
 	reply, err := bot.executeCommand(ctx, channel, msg, "/unbind_inactive 30")
 	if err != nil {
@@ -96,6 +105,9 @@ func TestBotAdminUnbindInactiveAndInvalidBindings(t *testing.T) {
 	}
 	if binding := bot.telegramBinding(ctx, 9503); binding == nil {
 		t.Fatal("recent user binding should remain")
+	}
+	if binding := bot.telegramBinding(ctx, 9505); binding == nil {
+		t.Fatal("realtime active user binding should remain")
 	}
 
 	reply, err = bot.executeCommand(ctx, channel, msg, "/unbind_duplicates")

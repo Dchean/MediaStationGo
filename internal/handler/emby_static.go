@@ -16,8 +16,9 @@ func embyNoContentHandler(_ *service.Container) gin.HandlerFunc {
 	}
 }
 
-func embyWebSocketHandler(_ *service.Container) gin.HandlerFunc {
+func embyWebSocketHandler(svc *service.Container, jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		recordEmbyPublicSessionActivity(c, svc, jwtSecret)
 		if !websocket.IsWebSocketUpgrade(c.Request) {
 			c.Status(http.StatusNoContent)
 			return
@@ -45,6 +46,7 @@ func embyWebSocketHandler(_ *service.Container) gin.HandlerFunc {
 			case <-done:
 				return
 			case <-ticker.C:
+				recordEmbyPublicSessionActivity(c, svc, jwtSecret)
 				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 					return

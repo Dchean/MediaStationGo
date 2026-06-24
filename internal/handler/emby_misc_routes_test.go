@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	"github.com/ShukeBta/MediaStationGo/internal/model"
@@ -177,5 +178,56 @@ func TestEmbyWebSocketRouteUpgradesForOfficialClients(t *testing.T) {
 	defer conn.Close()
 	if resp == nil || resp.StatusCode != http.StatusSwitchingProtocols {
 		t.Fatalf("expected websocket upgrade, got resp=%#v", resp)
+	}
+}
+
+func TestEmbyWebSocketRefreshesRealtimeActivity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	repos := repository.New(db)
+	if err := repos.User.Create(t.Context(), &model.User{
+		Base:         model.Base{ID: "user-1"},
+		Username:     "viewer",
+		PasswordHash: "x",
+		Role:         "admin",
+		Tier:         "plus",
+		IsActive:     true,
+	}); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	const secret = "test-secret"
+	tracker := service.NewSessionTrackerService(zap.NewNop())
+	router := gin.New()
+	registerEmbyRoutes(router, secret, &service.Container{
+		Repo:     repos,
+		Sessions: tracker,
+	})
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/embywebsocket?deviceId=device-1&device=Windows&client=Emby"
+	header := http.Header{"X-Emby-Token": []string{signedTestToken(t, secret)}}
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, header)
+	if err != nil {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		t.Fatalf("websocket dial failed status=%d err=%v", status, err)
+	}
+	defer conn.Close()
+
+	sessions := tracker.List(t.Context())
+	if len(sessions) != 1 {
+		t.Fatalf("sessions = %#v, want websocket heartbeat session", sessions)
+	}
+	if sessions[0].DeviceID != "device-1" || sessions[0].DeviceName != "Windows" || sessions[0].Client != "Emby" {
+		t.Fatalf("websocket did not refresh client session: %#v", sessions[0])
 	}
 }

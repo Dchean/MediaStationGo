@@ -43,6 +43,7 @@ func (s *TelegramBotService) cmdMgoUserInfo(ctx context.Context, args []string) 
 	if user == nil {
 		return telegramCommandReply{Text: "未找到用户。"}
 	}
+	s.applyRealtimeUserActivity(ctx, user)
 	devices, _ := s.listUserDevices(ctx, user.ID)
 	var historyCount int64
 	_ = s.repo.DB.WithContext(ctx).Model(&model.PlaybackHistory{}).Where("user_id = ?", user.ID).Count(&historyCount).Error
@@ -58,6 +59,15 @@ func (s *TelegramBotService) cmdMgoUserInfo(ctx context.Context, args []string) 
 		"<b>用户信息</b>\n\n用户名：<b>%s</b>\n角色：<b>%s</b>\n状态：<b>%s</b>\n到期：<b>%s</b>\nTelegram：<b>%s</b>\n设备：<b>%d</b>\n播放记录：<b>%d</b>\n最后登录：<b>%s</b>",
 		user.Username, user.Role, activeLabel(user), formatExpiry(user.ExpiredAt), tg, len(devices), historyCount, formatOptionalTime(user.LastLoginAt),
 	)}
+}
+
+func (s *TelegramBotService) applyRealtimeUserActivity(ctx context.Context, user *model.User) {
+	if s == nil || user == nil || s.device == nil || s.device.sessions == nil {
+		return
+	}
+	users := []model.User{*user}
+	s.device.sessions.ApplyToUsers(ctx, users)
+	*user = users[0]
 }
 
 func (s *TelegramBotService) cmdMgoDeleteUser(ctx context.Context, args []string) telegramCommandReply {

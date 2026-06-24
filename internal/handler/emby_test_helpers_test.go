@@ -11,10 +11,16 @@ import (
 
 func signedTestToken(t *testing.T, secret string) string {
 	t.Helper()
+	return signedTestTokenWithPurpose(t, secret, "")
+}
+
+func signedTestTokenWithPurpose(t *testing.T, secret, purpose string) string {
+	t.Helper()
 	claims := middleware.Claims{
-		UserID: "user-1",
-		Role:   "admin",
-		Tier:   "plus",
+		UserID:  "user-1",
+		Role:    "admin",
+		Tier:    "plus",
+		Purpose: purpose,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 			Issuer:    "mediastationgo-test",
