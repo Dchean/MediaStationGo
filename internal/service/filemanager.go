@@ -335,6 +335,19 @@ func (s *FileManagerService) allowedRoots() (map[string]string, error) {
 		libs, err := s.repo.Library.List(context.Background())
 		if err == nil {
 			for _, l := range libs {
+				if len(l.Roots) > 0 {
+					for i, root := range l.Roots {
+						if !root.Enabled {
+							continue
+						}
+						label := strings.TrimSpace(root.Name)
+						if label == "" {
+							label = fmt.Sprintf("路径%d", i+1)
+						}
+						add("library:"+l.Name+":"+label, root.Path)
+					}
+					continue
+				}
 				add("library:"+l.Name, l.Path)
 			}
 		}

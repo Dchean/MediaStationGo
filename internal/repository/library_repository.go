@@ -31,8 +31,15 @@ func (r *LibraryRepository) CreateWithRoots(ctx context.Context, l *model.Librar
 			if roots[i].SortOrder == 0 {
 				roots[i].SortOrder = i
 			}
+			enabled := roots[i].Enabled
 			if err := tx.Create(&roots[i]).Error; err != nil {
 				return err
+			}
+			if !enabled {
+				if err := tx.Model(&model.LibraryRoot{}).Where("id = ?", roots[i].ID).Update("enabled", false).Error; err != nil {
+					return err
+				}
+				roots[i].Enabled = false
 			}
 		}
 		l.Roots = roots
@@ -113,7 +120,19 @@ func (r *LibraryRepository) CreateRoot(ctx context.Context, root *model.LibraryR
 	if !r.hasLibraryRootsTable() {
 		return nil
 	}
-	return r.db.WithContext(ctx).Create(root).Error
+	enabled := root.Enabled
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(root).Error; err != nil {
+			return err
+		}
+		if !enabled {
+			if err := tx.Model(&model.LibraryRoot{}).Where("id = ?", root.ID).Update("enabled", false).Error; err != nil {
+				return err
+			}
+			root.Enabled = false
+		}
+		return nil
+	})
 }
 
 func (r *LibraryRepository) UpdateRoot(ctx context.Context, root *model.LibraryRoot, updates map[string]any) error {

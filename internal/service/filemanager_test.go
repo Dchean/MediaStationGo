@@ -140,3 +140,43 @@ func TestFileManagerIncludesConfiguredOrganizeRoots(t *testing.T) {
 		}
 	}
 }
+
+func TestFileManagerIncludesAllLibraryRoots(t *testing.T) {
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	nestedB := filepath.Join(rootB, "second-root")
+	if err := os.MkdirAll(nestedB, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db := newServiceTestDB(t, &model.Library{}, &model.LibraryRoot{}, &model.Media{}, &model.Setting{})
+	repos := repository.New(db)
+	lib := &model.Library{Name: "电影", Path: rootA, Type: "movie", Enabled: true}
+	if err := repos.Library.CreateWithRoots(t.Context(), lib, []model.LibraryRoot{
+		{Name: "硬盘1", Path: rootA, Enabled: true},
+		{Name: "硬盘2", Path: rootB, Enabled: true, SortOrder: 1},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{}
+	cfg.App.DataDir = t.TempDir()
+	cfg.Cache.CacheDir = t.TempDir()
+	svc := NewFileManagerService(cfg, zap.NewNop(), repos)
+
+	listing, err := svc.List("", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, root := range listing.Roots {
+		got[root.Label] = root.Path
+	}
+	if got["library:电影:硬盘1"] != filepath.Clean(rootA) {
+		t.Fatalf("root A missing from listing: %#v", listing.Roots)
+	}
+	if got["library:电影:硬盘2"] != filepath.Clean(rootB) {
+		t.Fatalf("root B missing from listing: %#v", listing.Roots)
+	}
+	if _, err := svc.List(nestedB, 100); err != nil {
+		t.Fatalf("list second library root: %v", err)
+	}
+}

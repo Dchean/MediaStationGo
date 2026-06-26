@@ -180,6 +180,15 @@ func (b *serviceContainerBuilder) libraryRoots() []string {
 	}
 	roots := make([]string, 0, len(libs))
 	for _, l := range libs {
+		if len(l.Roots) > 0 {
+			for _, root := range l.Roots {
+				if !root.Enabled || strings.TrimSpace(root.Path) == "" {
+					continue
+				}
+				roots = append(roots, root.Path)
+			}
+			continue
+		}
 		if strings.TrimSpace(l.Path) != "" {
 			roots = append(roots, l.Path)
 		}
