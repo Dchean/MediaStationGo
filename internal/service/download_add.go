@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 )
@@ -246,6 +247,9 @@ func (d *DownloadService) findExistingDownloadTask(ctx context.Context, req down
 			if !downloadTaskInSubscriptionScope(rows[i], req) {
 				continue
 			}
+			if !d.subscriptionDownloadTaskStillLive(ctx, rows[i]) {
+				continue
+			}
 		} else if !downloadTaskBlocksDuplicate(rows[i].Status) {
 			continue
 		}
@@ -255,6 +259,55 @@ func (d *DownloadService) findExistingDownloadTask(ctx context.Context, req down
 		}
 	}
 	return nil, false
+}
+
+func (d *DownloadService) subscriptionDownloadTaskStillLive(ctx context.Context, row model.DownloadTask) bool {
+	live, ok := d.liveTorrentSnapshot(30 * time.Second)
+	if !ok && d != nil && d.qb != nil && d.qb.IsConfigured() {
+		var err error
+		live, err = d.qb.List(ctx, "")
+		if err != nil {
+			return true
+		}
+		ok = true
+	}
+	if !ok {
+		return true
+	}
+	for _, torrent := range live {
+		if downloadTaskMatchesLiveTorrent(row, torrent) {
+			return true
+		}
+	}
+	return false
+}
+
+func downloadTaskMatchesLiveTorrent(row model.DownloadTask, torrent QBitTorrent) bool {
+	torrentName := strings.TrimSpace(torrent.Name)
+	if torrentName == "" {
+		return false
+	}
+	req := downloadAddRequest{
+		title:    row.Title,
+		savePath: row.SavePath,
+		meta: DownloadTaskMeta{
+			SubscriptionID: row.SubscriptionID,
+		},
+	}
+	if downloadTaskCoversAddRequest(torrentName, req) {
+		return true
+	}
+	rowKey := downloadTaskIdentityKey(row.Title)
+	torrentKey := downloadTaskIdentityKey(torrentName)
+	if rowKey != "" && torrentKey != "" {
+		return rowKey == torrentKey
+	}
+	if len(episodeRefsFromTitle(row.Title)) > 0 || len(episodeRefsFromTitle(torrentName)) > 0 {
+		return false
+	}
+	rowTorrentKey := normalizeTorrentName(row.Title)
+	liveTorrentKey := normalizeTorrentName(torrentName)
+	return rowTorrentKey != "" && rowTorrentKey == liveTorrentKey
 }
 
 func downloadTaskCoversAddRequest(existing string, req downloadAddRequest) bool {

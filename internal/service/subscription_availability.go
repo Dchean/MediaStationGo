@@ -71,6 +71,9 @@ func (s *SubscriptionService) addDownloadTaskAvailability(ctx context.Context, s
 		if !downloadTaskBlocksReadd(row.Status) {
 			continue
 		}
+		if !s.downloadTaskCountsAsPending(ctx, row) {
+			continue
+		}
 		linkedToSubscription := sub != nil && strings.TrimSpace(row.SubscriptionID) != "" && row.SubscriptionID == sub.ID
 		if !linkedToSubscription && baseSavePath != "" && row.SavePath != "" && !sameOrChildPath(row.SavePath, baseSavePath) && !sameOrChildPath(baseSavePath, row.SavePath) {
 			continue
@@ -81,6 +84,13 @@ func (s *SubscriptionService) addDownloadTaskAvailability(ctx context.Context, s
 		}
 		addAvailabilityTitle(row.Title, query, out)
 	}
+}
+
+func (s *SubscriptionService) downloadTaskCountsAsPending(ctx context.Context, row model.DownloadTask) bool {
+	if s == nil || s.downloads == nil {
+		return true
+	}
+	return s.downloads.subscriptionDownloadTaskStillLive(ctx, row)
 }
 
 func (s *SubscriptionService) addLiveTorrentAvailability(ctx context.Context, query string, out *LocalAvailability) {

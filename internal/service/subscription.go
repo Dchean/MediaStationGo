@@ -315,7 +315,6 @@ func (s *SubscriptionService) enqueueRSSSubscriptionCandidate(ctx context.Contex
 		AllowExistingLibrary: sub.WashEnabled,
 	}); err != nil {
 		if IsDownloadDedupError(err) {
-			state.markTitleAvailable(item.Title)
 			state.markSeen(candidate.GUID)
 			return false
 		}

@@ -21,19 +21,27 @@ func (d *DownloadService) recordLiveTorrentSnapshot(live []QBitTorrent) {
 }
 
 func (d *DownloadService) LiveTorrentSnapshot(maxAge time.Duration) []QBitTorrent {
-	if d == nil {
+	snapshot, ok := d.liveTorrentSnapshot(maxAge)
+	if !ok {
 		return nil
+	}
+	return snapshot
+}
+
+func (d *DownloadService) liveTorrentSnapshot(maxAge time.Duration) ([]QBitTorrent, bool) {
+	if d == nil {
+		return nil, false
 	}
 	now := d.currentTime()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.liveTorrentsAt.IsZero() {
-		return nil
+		return nil, false
 	}
 	if maxAge > 0 && now.Sub(d.liveTorrentsAt) > maxAge {
-		return nil
+		return nil, false
 	}
-	return cloneQBitTorrentSlice(d.liveTorrents)
+	return cloneQBitTorrentSlice(d.liveTorrents), true
 }
 
 func cloneQBitTorrentSlice(in []QBitTorrent) []QBitTorrent {

@@ -228,3 +228,57 @@ func TestAddDownloadWithMetaScopesSubscriptionDedupBySubscriptionOrSavePath(t *t
 		t.Fatalf("qb add calls = %d, want 1", got)
 	}
 }
+
+func TestAddDownloadWithMetaRequeuesStaleSubscriptionTaskMissingFromQB(t *testing.T) {
+	var addCalls int32
+	qb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			_, _ = w.Write([]byte("Ok."))
+		case "/api/v2/torrents/info":
+			if atomic.LoadInt32(&addCalls) > 0 {
+				_, _ = w.Write([]byte(`[{"hash":"newhash","name":"Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL","state":"downloading","progress":0.1}]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[]`))
+		case "/api/v2/torrents/add":
+			atomic.AddInt32(&addCalls, 1)
+			_, _ = w.Write([]byte("Ok."))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer qb.Close()
+
+	db := newServiceTestDB(t, &model.DownloadTask{}, &model.DownloadClient{}, &model.Setting{})
+	repos := repository.New(db)
+	configureTestDefaultQB(t, repos, qb.URL)
+	if err := repos.Download.Create(t.Context(), &model.DownloadTask{
+		UserID:         "u1",
+		SubscriptionID: "sub-nanyang",
+		Source:         "qbittorrent",
+		URL:            "https://pt.example/download?id=stale",
+		Title:          "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+		SavePath:       "/downloads/tv",
+		Status:         "queued",
+		Progress:       0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	svc.qb.Configure(QBitConfig{BaseURL: qb.URL, Username: "admin", Password: "admin"})
+	task, err := svc.AddDownloadWithMeta(t.Context(), "u1", "magnet:?xt=urn:btih:bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc&dn=Archives+The+Nanyang+Mystery+2026+S01E07-S01E08", "/downloads/tv", DownloadTaskMeta{
+		SubscriptionID: "sub-nanyang",
+		Title:          "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+	})
+	if err != nil {
+		t.Fatalf("AddDownloadWithMeta returned %v, want stale task ignored and candidate queued", err)
+	}
+	if task == nil {
+		t.Fatal("task = nil, want requeued task")
+	}
+	if got := atomic.LoadInt32(&addCalls); got != 1 {
+		t.Fatalf("qb add calls = %d, want 1", got)
+	}
+}

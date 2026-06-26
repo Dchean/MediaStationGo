@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"go.uber.org/zap"
+
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 	"github.com/ShukeBta/MediaStationGo/internal/repository"
 )
@@ -135,5 +137,46 @@ func TestSubscriptionPendingDownloadAvailabilityIncludesLinkedAliasTask(t *testi
 	}, sub, map[string]struct{}{}, availability)
 	if len(got) != 0 {
 		t.Fatalf("selected %#v, want linked alias task to satisfy E21", got)
+	}
+}
+
+func TestSubscriptionPendingDownloadAvailabilitySkipsStaleTaskMissingFromQB(t *testing.T) {
+	db := newServiceTestDB(t, &model.DownloadTask{})
+	repos := repository.New(db)
+	sub := &model.Subscription{
+		Base:          model.Base{ID: "sub-nanyang"},
+		Name:          "南部档案 自动订阅",
+		Filter:        "南部档案",
+		MediaType:     "tv",
+		SavePath:      "/downloads/tv",
+		TotalEpisodes: 33,
+	}
+	if err := repos.Download.Create(t.Context(), &model.DownloadTask{
+		SubscriptionID: sub.ID,
+		Source:         "qbittorrent",
+		URL:            "https://pt/download/stale",
+		Title:          "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+		SavePath:       "/downloads/tv",
+		Status:         "queued",
+		Progress:       0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	downloads := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	downloads.recordLiveTorrentSnapshot(nil)
+	svc := NewSubscriptionService(nil, nil, repos, downloads, nil, nil)
+
+	availability := svc.pendingDownloadAvailability(t.Context(), sub)
+	if availability.DownloadedEpisodes != 0 {
+		t.Fatalf("downloaded episodes = %d, want stale task not counted", availability.DownloadedEpisodes)
+	}
+	if _, ok := availability.ExistingEpisodeKeys[episodeKey(1, 7)]; ok {
+		t.Fatalf("stale E07 task should not count as available: %#v", availability.ExistingEpisodeKeys)
+	}
+	got := selectSiteSearchCandidates([]SearchResult{
+		{Title: "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL", SearchKeyword: "南部档案 2026", DownloadURL: "https://pt/download/7-8", Seeders: 80},
+	}, sub, map[string]struct{}{}, availability)
+	if len(got) != 1 || got[0].Episode != 7 {
+		t.Fatalf("selected %#v, want stale missing range to be eligible", got)
 	}
 }

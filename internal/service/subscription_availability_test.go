@@ -225,3 +225,66 @@ func TestSubscriptionPendingDownloadAvailabilityIncludesLiveQBTorrents(t *testin
 		t.Fatalf("missing live qB E01 key: %#v", availability.ExistingEpisodeKeys)
 	}
 }
+
+func TestSiteSearchDownloadDedupDoesNotMarkCandidateAvailable(t *testing.T) {
+	db := newServiceTestDB(t, &model.DownloadTask{}, &model.Setting{})
+	repos := repository.New(db)
+	sub := &model.Subscription{
+		Base:          model.Base{ID: "sub-nanyang"},
+		UserID:        "u1",
+		Name:          "南部档案 自动订阅",
+		Filter:        "南部档案",
+		MediaType:     "tv",
+		SavePath:      "/downloads/tv",
+		TotalEpisodes: 33,
+	}
+	if err := repos.Download.Create(t.Context(), &model.DownloadTask{
+		SubscriptionID: sub.ID,
+		Source:         "qbittorrent",
+		URL:            "https://pt/download/existing",
+		Title:          "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+		SavePath:       "/downloads/tv",
+		Status:         "queued",
+		Progress:       0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	downloads := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	siteSvc := NewSiteService(zap.NewNop(), repos, "")
+	svc := NewSubscriptionService(nil, zap.NewNop(), repos, downloads, siteSvc, NewHub(zap.NewNop()))
+	state := &siteSearchRunState{
+		Keyword: "南部档案",
+		SeenSet: map[string]struct{}{},
+		Availability: LocalAvailability{
+			TotalEpisodes:       33,
+			ExistingEpisodeKeys: map[string]struct{}{},
+			MissingEpisodeKeys:  map[string]struct{}{},
+		},
+	}
+
+	title, err := svc.enqueueSiteSearchCandidate(t.Context(), sub, siteSearchCandidate{
+		Item: SearchResult{
+			Title:       "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+			DownloadURL: "https://pt/download/existing",
+		},
+		Download: "https://pt/download/existing",
+		GUID:     "site|mteam|nanyang-7-8",
+		Season:   1,
+		Episode:  7,
+		Episodes: []int{7, 8},
+		Pack:     true,
+		Score:    80,
+	}, state)
+	if err != nil {
+		t.Fatalf("enqueueSiteSearchCandidate returned %v, want dedup skipped without error", err)
+	}
+	if title != "" {
+		t.Fatalf("queued title = %q, want empty on dedup", title)
+	}
+	if _, ok := state.Availability.ExistingEpisodeKeys[episodeKey(1, 7)]; ok {
+		t.Fatalf("deduped candidate should not mark E07 available: %#v", state.Availability.ExistingEpisodeKeys)
+	}
+	if len(state.Seen) != 0 {
+		t.Fatalf("deduped candidate should not be marked seen: %#v", state.Seen)
+	}
+}
