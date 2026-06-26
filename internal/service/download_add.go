@@ -207,7 +207,7 @@ func localMediaRowsMatchDownloadTitle(title string, rows []model.Media) bool {
 		}
 	}
 	if hasSeriesPack {
-		return true
+		return len(wanted) == 0
 	}
 	for _, ref := range wanted {
 		if _, ok := existing[episodeKey(ref.Season, ref.Episode)]; !ok {
