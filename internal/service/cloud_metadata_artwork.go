@@ -24,6 +24,45 @@ func applyCloudNFOArtwork(typ string, sidecars cloudSidecarSet, meta *LocalMetad
 	return meta
 }
 
+func applyCloudDirectoryArtwork(typ, displayDir string, sidecars cloudSidecarSet, meta *LocalMetadata) *LocalMetadata {
+	if meta == nil {
+		meta = &LocalMetadata{}
+	}
+	if meta.PosterURL == "" {
+		if ref := firstCloudImageRef(sidecars, cloudPosterNameCandidates(cloudDirectoryArtworkBases(displayDir), "poster", "folder", "cover", "show", "tvshow")...); ref != "" {
+			meta.PosterURL = cloudPlaybackURL(typ, ref)
+			meta.HasArtwork = true
+		}
+	}
+	if meta.BackdropURL == "" {
+		if ref := firstCloudImageRef(sidecars, cloudBackdropNameCandidates(cloudDirectoryArtworkBases(displayDir), "fanart", "backdrop", "background", "landscape")...); ref != "" {
+			meta.BackdropURL = cloudPlaybackURL(typ, ref)
+			meta.HasArtwork = true
+		}
+	}
+	return meta
+}
+
+func applyCloudFileArtwork(typ string, sidecars cloudSidecarSet, displayPath, fileName, base string, meta *LocalMetadata) *LocalMetadata {
+	if meta == nil {
+		meta = &LocalMetadata{}
+	}
+	bases := cloudFileArtworkBases(displayPath, fileName, base)
+	if meta.PosterURL == "" {
+		if ref := firstCloudImageRef(sidecars, cloudPosterNameCandidates(bases, "poster", "folder", "cover", "movie", "show", "thumb")...); ref != "" {
+			meta.PosterURL = cloudPlaybackURL(typ, ref)
+			meta.HasArtwork = true
+		}
+	}
+	if meta.BackdropURL == "" {
+		if ref := firstCloudImageRef(sidecars, cloudBackdropNameCandidates(bases, "fanart", "backdrop", "background", "landscape")...); ref != "" {
+			meta.BackdropURL = cloudPlaybackURL(typ, ref)
+			meta.HasArtwork = true
+		}
+	}
+	return meta
+}
+
 func firstCloudImageRef(sidecars cloudSidecarSet, names ...string) string {
 	for _, name := range names {
 		if ref := cloudImageRefByName(sidecars, name); ref != "" {
