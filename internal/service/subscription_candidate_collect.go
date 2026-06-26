@@ -38,6 +38,7 @@ func collectSiteSearchCandidates(results []SearchResult, sub *model.Subscription
 			continue
 		}
 		season, episode := ParseEpisode(matchText)
+		episodes := episodeNumbersFromRefs(episodeRefsFromTitle(matchText), season)
 		score := subscriptionCandidateScore(sub, item)
 		stats.Prepared++
 		candidates = append(candidates, siteSearchCandidate{
@@ -46,7 +47,8 @@ func collectSiteSearchCandidates(results []SearchResult, sub *model.Subscription
 			GUID:     guid,
 			Season:   season,
 			Episode:  episode,
-			Pack:     isSeriesPackTitle(item.Title),
+			Episodes: episodes,
+			Pack:     isSeriesPackTitle(item.Title) || len(episodes) > 1,
 			Score:    score,
 		})
 	}
@@ -108,15 +110,46 @@ func selectRSSSubscriptionCandidates(items []rssItem, sub *model.Subscription, f
 		}
 		searchItem := SearchResult{Title: title, DownloadURL: download}
 		season, episode := ParseEpisode(title)
+		episodes := episodeNumbersFromRefs(episodeRefsFromTitle(title), season)
 		candidates = append(candidates, siteSearchCandidate{
 			Item:     searchItem,
 			Download: download,
 			GUID:     guid,
 			Season:   season,
 			Episode:  episode,
-			Pack:     isSeriesPackTitle(title),
+			Episodes: episodes,
+			Pack:     isSeriesPackTitle(title) || len(episodes) > 1,
 			Score:    subscriptionCandidateScore(sub, searchItem),
 		})
 	}
 	return selectPreparedSubscriptionCandidates(candidates, sub, local)
+}
+
+func episodeNumbersFromRefs(refs []episodeRef, fallbackSeason int) []int {
+	if len(refs) == 0 {
+		return nil
+	}
+	if fallbackSeason <= 0 {
+		fallbackSeason = refs[0].Season
+	}
+	out := make([]int, 0, len(refs))
+	seen := map[int]struct{}{}
+	for _, ref := range refs {
+		season := ref.Season
+		if season <= 0 {
+			season = 1
+		}
+		if fallbackSeason > 0 && season != fallbackSeason {
+			continue
+		}
+		if ref.Episode <= 0 {
+			continue
+		}
+		if _, ok := seen[ref.Episode]; ok {
+			continue
+		}
+		seen[ref.Episode] = struct{}{}
+		out = append(out, ref.Episode)
+	}
+	return out
 }

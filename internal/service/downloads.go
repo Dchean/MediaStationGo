@@ -206,11 +206,14 @@ func (d *DownloadService) TorrentExistsByName(ctx context.Context, name string) 
 		return false
 	}
 	for _, torrent := range live {
+		if downloadTitleCoversRequest(torrent.Name, name) {
+			return true
+		}
 		current := normalizeTorrentName(torrent.Name)
 		if current == "" {
 			continue
 		}
-		if strings.Contains(current, query) || strings.Contains(query, current) {
+		if current == query {
 			return true
 		}
 	}

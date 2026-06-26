@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -308,6 +309,123 @@ func TestAddDownloadWithMetaSkipsExistingLocalEpisodeBeforeQBAdd(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Fatalf("download rows = %d, want 0", len(rows))
+	}
+}
+
+func TestAddDownloadWithMetaQueuesEpisodeRangeWhenOnlyPartlyInLibrary(t *testing.T) {
+	var addCalls int32
+	qb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			_, _ = w.Write([]byte("Ok."))
+		case "/api/v2/torrents/info":
+			http.Error(w, "temporary list unavailable", http.StatusInternalServerError)
+		case "/api/v2/torrents/add":
+			atomic.AddInt32(&addCalls, 1)
+			_, _ = w.Write([]byte("Ok."))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer qb.Close()
+
+	db := newServiceTestDB(t, &model.Media{}, &model.DownloadTask{}, &model.DownloadClient{}, &model.Setting{})
+	repos := repository.New(db)
+	configureTestDefaultQB(t, repos, qb.URL)
+	if err := db.Create(&model.Media{
+		Title:      "Archives The Nanyang Mystery",
+		Path:       "/media/tv/Archives The Nanyang Mystery/Season 01/Archives The Nanyang Mystery - S01E07.mkv",
+		SeasonNum:  1,
+		EpisodeNum: 7,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	task, err := svc.AddDownloadWithMeta(t.Context(), "u1", "magnet:?xt=urn:btih:abababababababababababababababababababab&dn=Archives+The+Nanyang+Mystery+2026+S01E07-S01E08", "/downloads", DownloadTaskMeta{
+		Title: "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+	})
+	if err != nil {
+		t.Fatalf("AddDownloadWithMeta returned %v, want queued because E08 is missing", err)
+	}
+	if task == nil {
+		t.Fatal("task = nil, want queued task")
+	}
+	if got := atomic.LoadInt32(&addCalls); got != 1 {
+		t.Fatalf("qb add calls = %d, want 1", got)
+	}
+}
+
+func TestAddDownloadWithMetaSkipsEpisodeRangeWhenFullyInLibrary(t *testing.T) {
+	db := newServiceTestDB(t, &model.Media{}, &model.DownloadTask{}, &model.Setting{})
+	repos := repository.New(db)
+	for _, episode := range []int{7, 8} {
+		if err := db.Create(&model.Media{
+			Title:      "Archives The Nanyang Mystery",
+			Path:       filepath.Join("/media/tv/Archives The Nanyang Mystery/Season 01", fmt.Sprintf("Archives The Nanyang Mystery - S01E%02d.mkv", episode)),
+			SeasonNum:  1,
+			EpisodeNum: episode,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	svc := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	task, err := svc.AddDownloadWithMeta(t.Context(), "u1", "magnet:?xt=urn:btih:babababababababababababababababababababa&dn=Archives+The+Nanyang+Mystery+2026+S01E07-S01E08", "/downloads", DownloadTaskMeta{
+		Title: "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+	})
+	if !errors.Is(err, ErrMediaAlreadyInLibrary) {
+		t.Fatalf("err = %v, want ErrMediaAlreadyInLibrary", err)
+	}
+	if task != nil {
+		t.Fatalf("task = %#v, want nil", task)
+	}
+}
+
+func TestAddDownloadWithMetaDoesNotDedupRangeAgainstSingleEpisodeTask(t *testing.T) {
+	var addCalls int32
+	qb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			_, _ = w.Write([]byte("Ok."))
+		case "/api/v2/torrents/info":
+			http.Error(w, "temporary list unavailable", http.StatusInternalServerError)
+		case "/api/v2/torrents/add":
+			atomic.AddInt32(&addCalls, 1)
+			_, _ = w.Write([]byte("Ok."))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer qb.Close()
+
+	db := newServiceTestDB(t, &model.DownloadTask{}, &model.DownloadClient{}, &model.Setting{})
+	repos := repository.New(db)
+	configureTestDefaultQB(t, repos, qb.URL)
+	if err := repos.Download.Create(t.Context(), &model.DownloadTask{
+		UserID:   "u1",
+		Source:   "qbittorrent",
+		URL:      "https://pt.example/download?id=old",
+		Title:    "Archives The Nanyang Mystery 2026 S01E07 2160p WEB-DL",
+		SavePath: "/downloads/tv",
+		Status:   "completed",
+		Progress: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	task, err := svc.AddDownloadWithMeta(t.Context(), "u1", "magnet:?xt=urn:btih:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd&dn=Archives+The+Nanyang+Mystery+2026+S01E07-S01E08", "/downloads", DownloadTaskMeta{
+		Title: "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+	})
+	if err != nil {
+		t.Fatalf("AddDownloadWithMeta returned %v, want queued because existing task covers only E07", err)
+	}
+	if task == nil {
+		t.Fatal("task = nil, want queued task")
+	}
+	if got := atomic.LoadInt32(&addCalls); got != 1 {
+		t.Fatalf("qb add calls = %d, want 1", got)
 	}
 }
 

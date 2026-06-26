@@ -137,6 +137,28 @@ func TestSelectSiteSearchCandidatesIgnoresUnderestimatedLocalTotal(t *testing.T)
 	}
 }
 
+func TestSelectSiteSearchCandidatesRangeCanCoverMissingEpisodesAfterExistingStart(t *testing.T) {
+	sub := &model.Subscription{Name: "南部档案 自动订阅", Filter: "南部档案", MediaType: "tv", TotalEpisodes: 33}
+	results := []SearchResult{
+		{Title: "Archives The Nanyang Mystery 2026 S01E29-E33 2160p WEB-DL", SearchKeyword: "南部档案 2026", DownloadURL: "https://pt/download/29-33", Seeders: 100},
+	}
+	existing := map[string]struct{}{episodeKey(1, 29): {}}
+	availability := LocalAvailability{
+		TotalEpisodes:       33,
+		LocalMediaCount:     1,
+		MissingEpisodes:     []int{30, 31, 32, 33},
+		ExistingEpisodeKeys: existing,
+	}
+
+	got, stats := selectSiteSearchCandidatesWithStats(results, sub, map[string]struct{}{}, availability)
+	if len(got) != 1 || got[0].Download != "https://pt/download/29-33" {
+		t.Fatalf("selected %#v, want range candidate because it covers E30-E33", got)
+	}
+	if stats.ExistingEpisodeSkipped != 0 || stats.NotMissingEpisodeSkipped != 0 {
+		t.Fatalf("stats = %#v, range covering missing episodes must not be skipped", stats)
+	}
+}
+
 func TestSelectSiteSearchCandidatesMissingEpisodeCanMatchSubtitleAlias(t *testing.T) {
 	sub := &model.Subscription{Name: "躲在超市后门抽烟的两人 自动订阅", Filter: "躲在超市后门抽烟的两人", MediaType: "tv", TotalEpisodes: 12}
 	results := []SearchResult{
@@ -212,6 +234,33 @@ func TestAddSiteSearchCandidateAvailabilityTracksRelaxedAliasCandidate(t *testin
 	got := selectSiteSearchCandidates([]SearchResult{candidate.Item}, sub, map[string]struct{}{}, availability)
 	if len(got) != 0 {
 		t.Fatalf("selected %#v, want relaxed alias candidate skipped after dedup availability update", got)
+	}
+}
+
+func TestAddSiteSearchCandidateAvailabilityTracksEpisodeRange(t *testing.T) {
+	availability := LocalAvailability{
+		TotalEpisodes:       33,
+		ExistingEpisodeKeys: map[string]struct{}{},
+		MissingEpisodeKeys:  map[string]struct{}{},
+	}
+	candidate := siteSearchCandidate{
+		Item: SearchResult{
+			Title:       "Archives The Nanyang Mystery 2026 S01E29-E33 2160p WEB-DL",
+			DownloadURL: "https://pt/download/29-33",
+		},
+		Download: "https://pt/download/29-33",
+		GUID:     "site|m-team|nanyang-29-33",
+		Season:   1,
+		Episode:  29,
+		Episodes: []int{29, 30, 31, 32, 33},
+		Pack:     true,
+	}
+
+	addSiteSearchCandidateAvailability(candidate, &availability)
+	for episode := 29; episode <= 33; episode++ {
+		if _, ok := availability.ExistingEpisodeKeys[episodeKey(1, episode)]; !ok {
+			t.Fatalf("availability missing E%d after range mark: %#v", episode, availability.ExistingEpisodeKeys)
+		}
 	}
 }
 

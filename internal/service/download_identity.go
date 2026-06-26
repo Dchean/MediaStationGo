@@ -66,29 +66,80 @@ func downloadTaskIdentityKey(name string) string {
 	return normalizedDownloadTitleKey(name)
 }
 
-func downloadMediaIdentityKey(name string) string {
-	name = strings.ToLower(strings.TrimSpace(name))
-	if name == "" {
-		return ""
-	}
+type downloadMediaIdentity struct {
+	TitleKey string
+	Year     int
+	Episodes []episodeRef
+	Pack     bool
+}
+
+func parseDownloadMediaIdentity(name string) downloadMediaIdentity {
 	title, year := CleanQuery(name)
 	titleKey := normalizeAvailabilityComparable(title)
 	if titleKey == "" {
 		titleKey = normalizeAvailabilityComparable(availabilityQuery(name, ""))
 	}
+	return downloadMediaIdentity{
+		TitleKey: titleKey,
+		Year:     year,
+		Episodes: episodeRefsFromTitle(name),
+		Pack:     isSeriesPackTitle(name),
+	}
+}
+
+func downloadTitleCoversRequest(existing, requested string) bool {
+	current := parseDownloadMediaIdentity(existing)
+	want := parseDownloadMediaIdentity(requested)
+	if current.TitleKey == "" || want.TitleKey == "" {
+		currentKey := normalizedDownloadTitleKey(existing)
+		wantKey := normalizedDownloadTitleKey(requested)
+		return currentKey != "" && wantKey != "" && (currentKey == wantKey || strings.Contains(currentKey, wantKey) || strings.Contains(wantKey, currentKey))
+	}
+	if current.TitleKey != want.TitleKey {
+		return false
+	}
+	if current.Year > 0 && want.Year > 0 && current.Year != want.Year {
+		return false
+	}
+	if current.Pack && len(current.Episodes) == 0 {
+		return true
+	}
+	if len(current.Episodes) == 0 || len(want.Episodes) == 0 {
+		return len(current.Episodes) == len(want.Episodes)
+	}
+	currentEpisodes := map[string]struct{}{}
+	for _, ref := range current.Episodes {
+		currentEpisodes[episodeKey(ref.Season, ref.Episode)] = struct{}{}
+	}
+	for _, ref := range want.Episodes {
+		if _, ok := currentEpisodes[episodeKey(ref.Season, ref.Episode)]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func downloadMediaIdentityKey(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return ""
+	}
+	identity := parseDownloadMediaIdentity(name)
+	titleKey := identity.TitleKey
 	if titleKey == "" {
 		return ""
 	}
-	season, episode := ParseEpisode(name)
 	parts := []string{titleKey}
-	if year > 0 {
-		parts = append(parts, fmt.Sprintf("y%d", year))
+	if identity.Year > 0 {
+		parts = append(parts, fmt.Sprintf("y%d", identity.Year))
 	}
-	if episode > 0 {
-		if season <= 0 {
-			season = 1
+	if len(identity.Episodes) > 0 {
+		first := identity.Episodes[0]
+		last := identity.Episodes[len(identity.Episodes)-1]
+		parts = append(parts, fmt.Sprintf("s%02de%03d", first.Season, first.Episode))
+		if len(identity.Episodes) > 1 {
+			parts = append(parts, fmt.Sprintf("to%03d", last.Episode))
 		}
-		parts = append(parts, fmt.Sprintf("s%02de%03d", season, episode))
 	}
 	return strings.Join(parts, "|")
 }

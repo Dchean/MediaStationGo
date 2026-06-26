@@ -76,19 +76,17 @@ func selectPreparedSubscriptionCandidatesWithStats(candidates []siteSearchCandid
 			if season <= 0 {
 				season = 1
 			}
-			if _, exists := local.ExistingEpisodeKeys[episodeKey(season, candidate.Episode)]; exists {
+			if candidateEpisodesAllExist(local.ExistingEpisodeKeys, season, candidate) {
 				if stats != nil {
 					stats.ExistingEpisodeSkipped++
 				}
 				continue
 			}
-			if trustedTotal > 0 {
-				if _, missing := missingSet[candidate.Episode]; !missing {
-					if stats != nil {
-						stats.NotMissingEpisodeSkipped++
-					}
-					continue
+			if trustedTotal > 0 && !candidateCoversMissingEpisode(candidate, missingSet) {
+				if stats != nil {
+					stats.NotMissingEpisodeSkipped++
 				}
+				continue
 			}
 			onlyMissing = append(onlyMissing, candidate)
 		}
@@ -115,6 +113,42 @@ func selectPreparedSubscriptionCandidatesWithStats(candidates []siteSearchCandid
 		return recordPreparedSelection(candidates[:1], stats)
 	}
 	return recordPreparedSelection(selected, stats)
+}
+
+func candidateEpisodesAllExist(existing map[string]struct{}, season int, candidate siteSearchCandidate) bool {
+	episodes := candidateEpisodeNumbers(candidate)
+	if len(episodes) == 0 {
+		return false
+	}
+	for _, episode := range episodes {
+		if _, exists := existing[episodeKey(season, episode)]; !exists {
+			return false
+		}
+	}
+	return true
+}
+
+func candidateCoversMissingEpisode(candidate siteSearchCandidate, missingSet map[int]struct{}) bool {
+	episodes := candidateEpisodeNumbers(candidate)
+	if len(episodes) == 0 {
+		return false
+	}
+	for _, episode := range episodes {
+		if _, missing := missingSet[episode]; missing {
+			return true
+		}
+	}
+	return false
+}
+
+func candidateEpisodeNumbers(candidate siteSearchCandidate) []int {
+	if len(candidate.Episodes) > 0 {
+		return candidate.Episodes
+	}
+	if candidate.Episode > 0 {
+		return []int{candidate.Episode}
+	}
+	return nil
 }
 
 func recordPreparedSelection(candidates []siteSearchCandidate, stats *siteSearchSelectionStats) []siteSearchCandidate {

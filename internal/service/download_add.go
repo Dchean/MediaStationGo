@@ -183,23 +183,31 @@ func (d *DownloadService) localMediaAvailabilityRows(ctx context.Context, title 
 }
 
 func localMediaRowsMatchDownloadTitle(title string, rows []model.Media) bool {
-	wantSeason, wantEpisode := ParseEpisode(title)
-	if wantSeason <= 0 {
-		wantSeason = 1
-	}
-	if wantEpisode <= 0 {
+	wanted := episodeRefsFromTitle(title)
+	if len(wanted) == 0 {
 		return true
 	}
+	existing := map[string]struct{}{}
+	hasSeriesPack := false
 	for _, row := range rows {
 		rowSeason, rowEpisode := localMediaRowSeasonEpisode(row)
-		if rowEpisode == wantEpisode && rowSeason == wantSeason {
-			return true
+		if rowEpisode > 0 {
+			existing[episodeKey(rowSeason, rowEpisode)] = struct{}{}
+			continue
 		}
 		if rowEpisode <= 0 && isSeriesPackTitle(row.Title+" "+row.OriginalName+" "+row.Path) {
-			return true
+			hasSeriesPack = true
 		}
 	}
-	return false
+	if hasSeriesPack {
+		return true
+	}
+	for _, ref := range wanted {
+		if _, ok := existing[episodeKey(ref.Season, ref.Episode)]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func localMediaRowSeasonEpisode(row model.Media) (int, int) {
@@ -238,7 +246,7 @@ func (d *DownloadService) findExistingDownloadTask(ctx context.Context, title st
 			continue
 		}
 		current := downloadTaskIdentityKey(rows[i].Title)
-		if current == key || strings.Contains(current, key) || strings.Contains(key, current) {
+		if downloadTitleCoversRequest(rows[i].Title, title) || current == key {
 			return &rows[i], true
 		}
 	}
@@ -255,11 +263,14 @@ func (d *DownloadService) torrentExistsByIdentity(ctx context.Context, title str
 		return false
 	}
 	for _, torrent := range live {
+		if downloadTitleCoversRequest(torrent.Name, title) {
+			return true
+		}
 		current := downloadTaskIdentityKey(torrent.Name)
 		if current == "" {
 			continue
 		}
-		if current == query || strings.Contains(current, query) || strings.Contains(query, current) {
+		if current == query {
 			return true
 		}
 	}

@@ -9,6 +9,7 @@ type siteSearchCandidate struct {
 	GUID     string
 	Season   int
 	Episode  int
+	Episodes []int
 	Pack     bool
 	Score    int
 }

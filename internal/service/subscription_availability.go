@@ -25,9 +25,13 @@ func (s *SubscriptionService) pendingDownloadAvailability(ctx context.Context, s
 	}
 	root := s.subscriptionBaseSavePath(ctx, sub)
 	if root != "" {
-		_ = scanDownloadPath(ctx, root, query, func(_ string, season, episode int) bool {
+		_ = scanDownloadPath(ctx, root, query, func(path string, season, episode int) bool {
 			out.LocalMediaCount++
-			if episode > 0 {
+			if refs := episodeRefsFromTitle(path); len(refs) > 0 {
+				for _, ref := range refs {
+					out.ExistingEpisodeKeys[episodeKey(ref.Season, ref.Episode)] = struct{}{}
+				}
+			} else if episode > 0 {
 				out.ExistingEpisodeKeys[episodeKey(season, episode)] = struct{}{}
 			}
 			return true
@@ -100,9 +104,13 @@ func addAvailabilityTitle(title, query string, out *LocalAvailability) {
 		return
 	}
 	out.LocalMediaCount++
-	season, episode := ParseEpisode(title)
-	if episode > 0 {
-		out.ExistingEpisodeKeys[episodeKey(season, episode)] = struct{}{}
+	if refs := episodeRefsFromTitle(title); len(refs) > 0 {
+		if out.ExistingEpisodeKeys == nil {
+			out.ExistingEpisodeKeys = map[string]struct{}{}
+		}
+		for _, ref := range refs {
+			out.ExistingEpisodeKeys[episodeKey(ref.Season, ref.Episode)] = struct{}{}
+		}
 		return
 	}
 	if isSeriesPackTitle(title) {
@@ -122,6 +130,22 @@ func addTrustedAvailabilityTitle(title string, season, episode int, pack bool, o
 		return
 	}
 	out.LocalMediaCount++
+	refs := episodeRefsFromTitle(title)
+	if len(refs) == 0 && episode > 0 {
+		if season <= 0 {
+			season = 1
+		}
+		refs = []episodeRef{{Season: season, Episode: episode}}
+	}
+	if len(refs) > 0 {
+		if out.ExistingEpisodeKeys == nil {
+			out.ExistingEpisodeKeys = map[string]struct{}{}
+		}
+		for _, ref := range refs {
+			out.ExistingEpisodeKeys[episodeKey(ref.Season, ref.Episode)] = struct{}{}
+		}
+		return
+	}
 	if episode <= 0 {
 		season, episode = ParseEpisode(title)
 	}
@@ -270,13 +294,17 @@ func (s *SubscriptionService) downloadPathHasCandidate(ctx context.Context, sub 
 	if savePath == "" || query == "" {
 		return false
 	}
-	wantSeason, wantEpisode := ParseEpisode(title)
-	if wantSeason <= 0 {
-		wantSeason = 1
+	wanted := episodeRefsFromTitle(title)
+	if len(wanted) == 0 {
+		wantSeason, wantEpisode := ParseEpisode(title)
+		if wantEpisode > 0 {
+			wanted = []episodeRef{{Season: wantSeason, Episode: wantEpisode}}
+		}
 	}
 	found := false
+	foundEpisodes := map[string]struct{}{}
 	_ = scanDownloadPath(ctx, savePath, query, func(path string, season, episode int) bool {
-		if wantEpisode <= 0 {
+		if len(wanted) == 0 {
 			found = true
 			return false
 		}
@@ -286,11 +314,20 @@ func (s *SubscriptionService) downloadPathHasCandidate(ctx context.Context, sub 
 		if season <= 0 {
 			season = 1
 		}
-		if episodeKey(season, episode) == episodeKey(wantSeason, wantEpisode) {
-			found = true
-			return false
+		if refs := episodeRefsFromTitle(path); len(refs) > 0 {
+			for _, ref := range refs {
+				foundEpisodes[episodeKey(ref.Season, ref.Episode)] = struct{}{}
+			}
+		} else {
+			foundEpisodes[episodeKey(season, episode)] = struct{}{}
 		}
-		return true
+		for _, ref := range wanted {
+			if _, ok := foundEpisodes[episodeKey(ref.Season, ref.Episode)]; !ok {
+				return true
+			}
+		}
+		found = true
+		return false
 	})
 	return found
 }
