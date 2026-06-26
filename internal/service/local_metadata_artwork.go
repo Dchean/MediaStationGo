@@ -11,6 +11,48 @@ import (
 	"strings"
 )
 
+func metadataFromArtwork(mediaPath, showBaseDir string) *LocalMetadata {
+	meta := &LocalMetadata{}
+	mergeArtworkMetadata(meta, mediaPath, showBaseDir)
+	if meta.PosterURL == "" && meta.BackdropURL == "" {
+		return nil
+	}
+	return meta
+}
+
+func mergeArtworkMetadata(meta *LocalMetadata, mediaPath, showBaseDir string) {
+	if meta == nil {
+		return
+	}
+	mediaDir := filepath.Dir(mediaPath)
+	if localPoster := firstLocalPoster(mediaPath, showBaseDir); localPoster != "" {
+		meta.PosterURL = localPoster
+	} else if meta.PosterURL == "" {
+		meta.PosterURL = firstAdultLooseImage(mediaDir, "poster")
+	}
+	dirs := []string{mediaDir, showBaseDir}
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		if img := firstExistingImage(dir, localBackdropCandidates(mediaPath)...); img != "" {
+			meta.BackdropURL = img
+			break
+		}
+		if meta.BackdropURL == "" {
+			meta.BackdropURL = firstAdultLooseImage(dir, "backdrop")
+		}
+	}
+	if !isLocalPath(meta.PosterURL) {
+		if dmmPoster := adultDMMPosterFromSampleURL(meta.BackdropURL); dmmPoster != "" {
+			meta.PosterURL = dmmPoster
+		}
+	}
+	if meta.PosterURL != "" || meta.BackdropURL != "" {
+		meta.HasArtwork = true
+	}
+}
+
 func localPosterCandidates(mediaPath string) []string {
 	base := strings.TrimSuffix(filepath.Base(mediaPath), filepath.Ext(mediaPath))
 	names := []string{
