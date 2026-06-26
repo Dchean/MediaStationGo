@@ -10,6 +10,7 @@ import (
 )
 
 var torrentEpisodeToken = regexp.MustCompile(`(?i)e\d{1,3}`)
+var downloadPackTitleToken = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:complete|batch|pack|合集|全集|整季|全季)(?:[\s._-]|$)`)
 
 func localAvailabilityTitleCandidates(title string) []string {
 	seen := map[string]struct{}{}
@@ -75,6 +76,9 @@ type downloadMediaIdentity struct {
 
 func parseDownloadMediaIdentity(name string) downloadMediaIdentity {
 	title, year := CleanQuery(name)
+	if isSeriesPackTitle(name) {
+		title = downloadPackTitleToken.ReplaceAllString(title, " ")
+	}
 	titleKey := normalizeAvailabilityComparable(title)
 	if titleKey == "" {
 		titleKey = normalizeAvailabilityComparable(availabilityQuery(name, ""))
@@ -101,7 +105,7 @@ func downloadTitleCoversRequest(existing, requested string) bool {
 	if current.Year > 0 && want.Year > 0 && current.Year != want.Year {
 		return false
 	}
-	if current.Pack && len(current.Episodes) == 0 {
+	if downloadIdentityCoversWholeSeason(existing, current) {
 		return true
 	}
 	if len(current.Episodes) == 0 || len(want.Episodes) == 0 {
@@ -117,6 +121,13 @@ func downloadTitleCoversRequest(existing, requested string) bool {
 		}
 	}
 	return true
+}
+
+func downloadIdentityCoversWholeSeason(title string, identity downloadMediaIdentity) bool {
+	if !identity.Pack || len(identity.Episodes) > 0 {
+		return false
+	}
+	return seriesPackRE.MatchString(title)
 }
 
 func downloadMediaIdentityKey(name string) string {
