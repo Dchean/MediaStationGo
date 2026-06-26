@@ -49,7 +49,7 @@ func (d *DownloadService) AddDownloadWithMeta(ctx context.Context, userID, urlSt
 	if !req.meta.AllowExistingLibrary && d.localMediaAlreadyExists(ctx, req.title) {
 		return nil, ErrMediaAlreadyInLibrary
 	}
-	if existing, ok := d.findExistingDownloadTask(ctx, req.title, strings.TrimSpace(req.meta.SubscriptionID) != ""); ok {
+	if existing, ok := d.findExistingDownloadTask(ctx, req); ok {
 		return existing, ErrDownloadAlreadyExists
 	}
 	_ = d.ReloadConfig(ctx)
@@ -228,8 +228,8 @@ func localMediaRowSeasonEpisode(row model.Media) (int, int) {
 	return rowSeason, rowEpisode
 }
 
-func (d *DownloadService) findExistingDownloadTask(ctx context.Context, title string, allowDeletedReadd bool) (*model.DownloadTask, bool) {
-	key := downloadTaskIdentityKey(title)
+func (d *DownloadService) findExistingDownloadTask(ctx context.Context, req downloadAddRequest) (*model.DownloadTask, bool) {
+	key := downloadTaskIdentityKey(req.title)
 	if key == "" || d == nil || d.repo == nil || d.repo.Download == nil {
 		return nil, false
 	}
@@ -237,20 +237,41 @@ func (d *DownloadService) findExistingDownloadTask(ctx context.Context, title st
 	if err != nil {
 		return nil, false
 	}
+	subscriptionID := strings.TrimSpace(req.meta.SubscriptionID)
 	for i := range rows {
-		if allowDeletedReadd {
+		if subscriptionID != "" {
 			if !downloadTaskBlocksReadd(rows[i].Status) {
+				continue
+			}
+			if !downloadTaskInSubscriptionScope(rows[i], req) {
 				continue
 			}
 		} else if !downloadTaskBlocksDuplicate(rows[i].Status) {
 			continue
 		}
 		current := downloadTaskIdentityKey(rows[i].Title)
-		if downloadTitleCoversRequest(rows[i].Title, title) || current == key {
+		if downloadTitleCoversRequest(rows[i].Title, req.title) || current == key {
 			return &rows[i], true
 		}
 	}
 	return nil, false
+}
+
+func downloadTaskInSubscriptionScope(row model.DownloadTask, req downloadAddRequest) bool {
+	subscriptionID := strings.TrimSpace(req.meta.SubscriptionID)
+	if subscriptionID == "" {
+		return true
+	}
+	rowSubscriptionID := strings.TrimSpace(row.SubscriptionID)
+	if rowSubscriptionID != "" {
+		return rowSubscriptionID == subscriptionID
+	}
+	rowSavePath := strings.TrimSpace(row.SavePath)
+	requestSavePath := strings.TrimSpace(req.savePath)
+	if rowSavePath == "" || requestSavePath == "" {
+		return false
+	}
+	return sameOrChildPath(rowSavePath, requestSavePath) || sameOrChildPath(requestSavePath, rowSavePath)
 }
 
 func (d *DownloadService) torrentExistsByIdentity(ctx context.Context, title string) bool {

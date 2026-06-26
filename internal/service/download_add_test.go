@@ -429,6 +429,69 @@ func TestAddDownloadWithMetaDoesNotDedupRangeAgainstSingleEpisodeTask(t *testing
 	}
 }
 
+func TestAddDownloadWithMetaScopesSubscriptionDedupBySubscriptionOrSavePath(t *testing.T) {
+	var addCalls int32
+	qb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v2/auth/login":
+			_, _ = w.Write([]byte("Ok."))
+		case "/api/v2/torrents/info":
+			http.Error(w, "temporary list unavailable", http.StatusInternalServerError)
+		case "/api/v2/torrents/add":
+			atomic.AddInt32(&addCalls, 1)
+			_, _ = w.Write([]byte("Ok."))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer qb.Close()
+
+	db := newServiceTestDB(t, &model.DownloadTask{}, &model.DownloadClient{}, &model.Setting{})
+	repos := repository.New(db)
+	configureTestDefaultQB(t, repos, qb.URL)
+	for _, existing := range []model.DownloadTask{
+		{
+			UserID:         "u1",
+			SubscriptionID: "other-subscription",
+			Source:         "qbittorrent",
+			URL:            "https://pt.example/download?id=old-sub",
+			Title:          "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+			SavePath:       "/downloads/other",
+			Status:         "completed",
+			Progress:       1,
+		},
+		{
+			UserID:   "u1",
+			Source:   "qbittorrent",
+			URL:      "https://pt.example/download?id=old-manual",
+			Title:    "Archives The Nanyang Mystery 2026 S01E09-S01E10 2160p WEB-DL",
+			SavePath: "/downloads/archive",
+			Status:   "completed",
+			Progress: 1,
+		},
+	} {
+		row := existing
+		if err := repos.Download.Create(t.Context(), &row); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	svc := NewDownloadService(zap.NewNop(), repos, NewHub(zap.NewNop()), nil)
+	task, err := svc.AddDownloadWithMeta(t.Context(), "u1", "magnet:?xt=urn:btih:efefefefefefefefefefefefefefefefefefefef&dn=Archives+The+Nanyang+Mystery+2026+S01E07-S01E08", "/downloads/tv", DownloadTaskMeta{
+		SubscriptionID: "current-subscription",
+		Title:          "Archives The Nanyang Mystery 2026 S01E07-S01E08 2160p WEB-DL",
+	})
+	if err != nil {
+		t.Fatalf("AddDownloadWithMeta returned %v, want queued because old task is outside current subscription scope", err)
+	}
+	if task == nil {
+		t.Fatal("task = nil, want queued task")
+	}
+	if got := atomic.LoadInt32(&addCalls); got != 1 {
+		t.Fatalf("qb add calls = %d, want 1", got)
+	}
+}
+
 func TestAddDownloadWithMetaAutoClassifiesSavePathAndQBitCategory(t *testing.T) {
 	var addCalls int32
 	var gotSavePath string
