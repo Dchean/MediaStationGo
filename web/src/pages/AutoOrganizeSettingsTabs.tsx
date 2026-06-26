@@ -97,6 +97,7 @@ export function AutoOrganizeBasicTab({
         <BooleanSetting config={config} settingKey="afterDownload" label="qB 下载完成后自动整理" onConfigChange={onConfigChange} />
         <BooleanSetting config={config} settingKey="downloadSmartClassify" label="下载器智能分类" onConfigChange={onConfigChange} />
         <BooleanSetting config={config} settingKey="smartClassify" label="智能分类到子库" onConfigChange={onConfigChange} />
+        <BooleanSetting config={config} settingKey="autoAddLibrary" label="自动注册目的地媒体库" onConfigChange={onConfigChange} />
         <BooleanSetting config={config} settingKey="keepSeeding" label="保种" onConfigChange={onConfigChange} />
       </div>
     </>

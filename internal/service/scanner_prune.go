@@ -58,6 +58,52 @@ func (s *ScannerService) pruneMissingMedia(ctx context.Context, libraryID string
 	return s.deleteMediaByIDs(ctx, stale, false)
 }
 
+func (s *ScannerService) pruneMissingMediaForRoot(ctx context.Context, libraryID, rootID, rootPath string, seen map[string]struct{}) (int64, error) {
+	var rows []struct {
+		ID            string
+		Path          string
+		LibraryRootID string
+	}
+	q := s.repo.DB.WithContext(ctx).
+		Model(&model.Media{}).
+		Select("id, path, library_root_id").
+		Where("library_id = ? AND path NOT LIKE ?", libraryID, "cloud://%")
+	if strings.TrimSpace(rootID) != "" {
+		q = q.Where("library_root_id = ? OR library_root_id = '' OR library_root_id IS NULL", rootID)
+	}
+	if err := q.Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	stale := make([]string, 0)
+	for _, row := range rows {
+		if row.Path == "" {
+			continue
+		}
+		if row.LibraryRootID == "" && !pathBelongsToRoot(row.Path, rootPath) {
+			continue
+		}
+		if _, ok := seen[filepath.Clean(row.Path)]; ok {
+			continue
+		}
+		if _, err := os.Stat(row.Path); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			continue
+		}
+		stale = append(stale, row.ID)
+	}
+	return s.deleteMediaByIDs(ctx, stale, false)
+}
+
+func pathBelongsToRoot(pathValue, rootPath string) bool {
+	pathValue = filepath.Clean(strings.TrimSpace(pathValue))
+	rootPath = filepath.Clean(strings.TrimSpace(rootPath))
+	if pathValue == "" || rootPath == "" || pathValue == "." || rootPath == "." {
+		return false
+	}
+	return strings.EqualFold(pathValue, rootPath) || pathWithin(pathValue, rootPath)
+}
+
 // deleteMediaByIDs removes media rows in fixed-size batches so each write
 // transaction stays short and the global write gate is released frequently.
 func (s *ScannerService) deleteMediaByIDs(ctx context.Context, ids []string, hard bool) (int64, error) {

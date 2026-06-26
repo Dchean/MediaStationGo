@@ -218,6 +218,15 @@ func (o *OrganizerService) ensureOrganizeLibraryForRoot(ctx context.Context, roo
 	if strings.TrimSpace(category) == "" && hasContainingLibrary {
 		return containingLibrary, true
 	}
+	if !o.autoAddLibraryEnabled(ctx) {
+		if o.log != nil {
+			o.log.Debug("organize skipped missing library auto-create",
+				zap.String("path", root),
+				zap.String("media_type", mediaType),
+				zap.String("category", category))
+		}
+		return model.Library{}, false
+	}
 	name := strings.TrimSpace(category)
 	if name == "" {
 		name = filepath.Base(root)
@@ -231,7 +240,12 @@ func (o *OrganizerService) ensureOrganizeLibraryForRoot(ctx context.Context, roo
 		Type:    organizeLibraryModelType(mediaType),
 		Enabled: true,
 	}
-	if err := o.repo.Library.Create(ctx, &lib); err != nil {
+	if err := o.repo.Library.CreateWithRoots(ctx, &lib, []model.LibraryRoot{{
+		Name:      name,
+		Path:      root,
+		Enabled:   true,
+		SortOrder: 0,
+	}}); err != nil {
 		if o.log != nil {
 			o.log.Warn("organize auto-create library failed",
 				zap.String("path", root),

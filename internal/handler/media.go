@@ -15,9 +15,11 @@ import (
 )
 
 type createLibraryReq struct {
-	Name string `json:"name" binding:"required"`
-	Path string `json:"path" binding:"required"`
-	Type string `json:"type"`
+	Name  string                     `json:"name" binding:"required"`
+	Path  string                     `json:"path"`
+	Paths []string                   `json:"paths"`
+	Roots []service.LibraryRootInput `json:"roots"`
+	Type  string                     `json:"type"`
 }
 
 func listLibrariesHandler(svc *service.Container) gin.HandlerFunc {
@@ -54,7 +56,16 @@ func createLibraryHandler(svc *service.Container) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		l, err := svc.Media.CreateLibrary(c.Request.Context(), req.Name, req.Path, req.Type)
+		roots := req.Roots
+		if len(roots) == 0 {
+			for _, path := range req.Paths {
+				roots = append(roots, service.LibraryRootInput{Path: path})
+			}
+		}
+		if len(roots) == 0 && strings.TrimSpace(req.Path) != "" {
+			roots = append(roots, service.LibraryRootInput{Path: req.Path})
+		}
+		l, err := svc.Media.CreateLibraryWithRoots(c.Request.Context(), req.Name, req.Type, roots)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -64,6 +75,66 @@ func createLibraryHandler(svc *service.Container) gin.HandlerFunc {
 		// Refresh fsnotify watcher to pick up the new library root.
 		go func() { _ = svc.Watcher.Refresh(context.Background()) }()
 		c.JSON(http.StatusCreated, l)
+	}
+}
+
+func listLibraryRootsHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roots, err := svc.Media.ListLibraryRoots(c.Request.Context(), c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, roots)
+	}
+}
+
+func createLibraryRootHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req service.LibraryRootInput
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		root, err := svc.Media.AddLibraryRoot(c.Request.Context(), c.Param("id"), req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		go func() { _ = svc.Watcher.Refresh(context.Background()) }()
+		c.JSON(http.StatusCreated, root)
+	}
+}
+
+func updateLibraryRootHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req service.LibraryRootInput
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		root, err := svc.Media.UpdateLibraryRoot(c.Request.Context(), c.Param("id"), c.Param("root_id"), req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if root == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "library root not found"})
+			return
+		}
+		go func() { _ = svc.Watcher.Refresh(context.Background()) }()
+		c.JSON(http.StatusOK, root)
+	}
+}
+
+func deleteLibraryRootHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := svc.Media.DeleteLibraryRoot(c.Request.Context(), c.Param("id"), c.Param("root_id")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		go func() { _ = svc.Watcher.Refresh(context.Background()) }()
+		c.Status(http.StatusNoContent)
 	}
 }
 
@@ -150,6 +221,40 @@ func scanLibraryHandler(svc *service.Container) gin.HandlerFunc {
 			"library_id":       id,
 			"queued":           true,
 			"message":          "本地媒体库扫描已在后台运行，页面关闭不会中断",
+			"estimate_message": "可在右上角任务面板查看扫描进度",
+		})
+	}
+}
+
+func scanLibraryRootHandler(svc *service.Container) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		rootID := c.Param("root_id")
+		finishScan, ok := svc.Scan.TryBeginLocalScan(id + ":" + rootID)
+		if !ok {
+			c.JSON(http.StatusAccepted, gin.H{
+				"library_id":       id,
+				"queued":           true,
+				"already_running":  true,
+				"message":          "该路径正在后台扫描，请在任务面板查看进度",
+				"estimate_message": "页面关闭不会中断扫描",
+			})
+			return
+		}
+		task := startScanHTTPTask(svc, "手动扫描媒体库路径", id, rootID)
+		go func(libraryID, libraryRootID string, task *service.TaskHandle, finish func()) {
+			defer finish()
+			res, err := svc.Scan.ScanLibraryRoot(context.Background(), libraryID, libraryRootID)
+			if err != nil {
+				finishHTTPTask(task, err, "scan", "手动扫描路径失败", scanTaskMetrics(res), scanTaskDetails(res, 20))
+				return
+			}
+			finishHTTPTask(task, nil, "completed", "手动扫描路径结束", scanTaskMetrics(res), scanTaskDetails(res, 20))
+		}(id, rootID, task, finishScan)
+		c.JSON(http.StatusAccepted, gin.H{
+			"library_id":       id,
+			"queued":           true,
+			"message":          "媒体库路径扫描已在后台运行，页面关闭不会中断",
 			"estimate_message": "可在右上角任务面板查看扫描进度",
 		})
 	}

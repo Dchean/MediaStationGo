@@ -73,3 +73,14 @@ func (o *OrganizerService) keepSeedingEnabled(ctx context.Context) bool {
 	}
 	return v == "true" || v == "1" || v == "on"
 }
+
+func (o *OrganizerService) autoAddLibraryEnabled(ctx context.Context) bool {
+	if o == nil || o.repo == nil || o.repo.Setting == nil {
+		return true
+	}
+	v, err := o.repo.Setting.Get(ctx, "organize.auto_add_library")
+	if err != nil || strings.TrimSpace(v) == "" {
+		return true
+	}
+	return parseBoolSetting(v, true)
+}

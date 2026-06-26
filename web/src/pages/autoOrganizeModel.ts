@@ -6,6 +6,7 @@ export type AutoOrganizeConfig = {
   scrapeAfter: string
   downloadSmartClassify: string
   smartClassify: string
+  autoAddLibrary: string
   sourceDir: string
   targetDir: string
   transferMode: string
@@ -27,6 +28,7 @@ export const AUTO_ORGANIZE_DEFAULTS: AutoOrganizeConfig = {
   scrapeAfter: 'true',
   downloadSmartClassify: 'true',
   smartClassify: 'true',
+  autoAddLibrary: 'true',
   sourceDir: '',
   targetDir: '',
   transferMode: 'hardlink',
@@ -48,6 +50,7 @@ export const AUTO_ORGANIZE_KEYS: Record<keyof AutoOrganizeConfig, string> = {
   scrapeAfter: 'organize.scrape_after',
   downloadSmartClassify: 'downloads.smart_classify',
   smartClassify: 'organizer.smart_classify',
+  autoAddLibrary: 'organize.auto_add_library',
   sourceDir: 'organize.source_dir',
   targetDir: 'organize.target_dir',
   transferMode: 'organize.transfer_mode',
@@ -73,6 +76,7 @@ export function mergeAutoOrganizeSettings(rows: Setting[]): AutoOrganizeConfig {
     scrapeAfter: idx[AUTO_ORGANIZE_KEYS.scrapeAfter] ?? AUTO_ORGANIZE_DEFAULTS.scrapeAfter,
     downloadSmartClassify: idx[AUTO_ORGANIZE_KEYS.downloadSmartClassify] ?? AUTO_ORGANIZE_DEFAULTS.downloadSmartClassify,
     smartClassify: idx[AUTO_ORGANIZE_KEYS.smartClassify] ?? AUTO_ORGANIZE_DEFAULTS.smartClassify,
+    autoAddLibrary: idx[AUTO_ORGANIZE_KEYS.autoAddLibrary] ?? AUTO_ORGANIZE_DEFAULTS.autoAddLibrary,
     sourceDir: idx[AUTO_ORGANIZE_KEYS.sourceDir] ?? AUTO_ORGANIZE_DEFAULTS.sourceDir,
     targetDir: idx[AUTO_ORGANIZE_KEYS.targetDir] ?? AUTO_ORGANIZE_DEFAULTS.targetDir,
     transferMode: idx[AUTO_ORGANIZE_KEYS.transferMode] ?? AUTO_ORGANIZE_DEFAULTS.transferMode,

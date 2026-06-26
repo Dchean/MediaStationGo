@@ -223,6 +223,12 @@ func addMediaPlacementUpdates(updates map[string]any, existing, incoming model.M
 			updates["library_id"] = incoming.LibraryID
 		}
 	}
+	if incoming.LibraryRootID != "" && incoming.LibraryRootID != existing.LibraryRootID {
+		updates["library_root_id"] = incoming.LibraryRootID
+	}
+	if incoming.RelativePath != "" && incoming.RelativePath != existing.RelativePath {
+		updates["relative_path"] = incoming.RelativePath
+	}
 	seasonChanged := (incoming.SeasonNum > 0 || incoming.EpisodeNum > 0) && existing.SeasonNum != incoming.SeasonNum
 	episodeChanged := incoming.EpisodeNum > 0 && existing.EpisodeNum != incoming.EpisodeNum
 	if seasonChanged {
@@ -353,6 +359,12 @@ func (r *MediaRepository) ListByLibrariesFiltered(ctx context.Context, libraryID
 func (r *MediaRepository) DeleteByLibrary(ctx context.Context, libraryID string) error {
 	// FTS 行由 media 表上的触发器同步清理（软删/硬删都覆盖）。
 	return r.db.WithContext(ctx).Where("library_id = ?", libraryID).Delete(&model.Media{}).Error
+}
+
+func (r *MediaRepository) DeleteByLibraryRoot(ctx context.Context, libraryID, rootID string) error {
+	return r.db.WithContext(ctx).
+		Where("library_id = ? AND library_root_id = ?", libraryID, rootID).
+		Delete(&model.Media{}).Error
 }
 
 // PurgeByLibrary permanently removes media tied to a library. Used for virtual

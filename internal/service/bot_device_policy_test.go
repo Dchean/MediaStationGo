@@ -87,7 +87,7 @@ func TestTerminalDeviceLimitDeduplicatesAppsOnSameDevice(t *testing.T) {
 		dev.RecordLogin(ctx, u.ID, login.id, login.name, login.client, "1.2.3.4")
 		now = now.Add(time.Second)
 	}
-	count, err := repos.UserDevice.CountActiveClients(ctx, u.ID, time.Now().Add(-24*time.Hour))
+	count, err := repos.UserDevice.CountActiveClients(ctx, u.ID, now.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestTerminalDeviceLimitDeduplicatesAppsOnSameDevice(t *testing.T) {
 
 	dev.RecordLogin(ctx, u.ID, "tablet", "iPad", "Infuse", "1.2.3.4")
 	dev.RecordLogin(ctx, u.ID, "pc", "Windows PC", "Browser", "1.2.3.4")
-	count, err = repos.UserDevice.CountActiveClients(ctx, u.ID, time.Now().Add(-24*time.Hour))
+	count, err = repos.UserDevice.CountActiveClients(ctx, u.ID, now.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -215,6 +215,45 @@ func TestOrganizeDirectoryCreatesMissingCategoryLibraryForVisibility(t *testing.
 	}
 }
 
+func TestOrganizeDirectoryCanDisableAutoAddLibrary(t *testing.T) {
+	root := t.TempDir()
+	srcRoot := filepath.Join(root, "downloads")
+	dest := filepath.Join(root, "media")
+	source := filepath.Join(srcRoot, "Some.Show.S01E01.2026.1080p.mkv")
+	writeOrgFile(t, source, "episode")
+
+	repos := newOrganizerTestRepo(t)
+	if err := repos.Setting.Set(t.Context(), "organize.auto_add_library", "false"); err != nil {
+		t.Fatal(err)
+	}
+	org := NewOrganizerService(&config.Config{}, zap.NewNop(), repos)
+	res, err := org.OrganizeDirectory(t.Context(), OrganizeOptions{
+		SourcePath:    srcRoot,
+		DestPath:      dest,
+		MediaType:     "tv",
+		MediaCategory: "未分类",
+		TransferMode:  TransferCopy,
+	})
+	if err != nil {
+		t.Fatalf("organize missing category with auto-add disabled: %v", err)
+	}
+	if res.Organized != 1 || len(res.Items) != 1 {
+		t.Fatalf("result = %+v, want one organized item", res)
+	}
+	want := filepath.Join(dest, "电视剧", "未分类", "Some Show", "Season 01", "Some Show - S01E01.mkv")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("expected organized file at %q: %v", want, err)
+	}
+
+	var count int64
+	if err := repos.DB.Model(&model.Library{}).Where("path = ?", filepath.Join(dest, "电视剧", "未分类")).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("auto-add disabled should not create library, got %d rows", count)
+	}
+}
+
 func TestOrganizeDirectorySmartClassifiesUncategorizedSources(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "downloads")

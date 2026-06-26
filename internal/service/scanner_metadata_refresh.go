@@ -194,6 +194,12 @@ func localDerivedMetadataNeedsRefresh(existing existingLocalMedia, incoming *mod
 	if incoming == nil {
 		return false
 	}
+	if incoming.LibraryRootID != "" && incoming.LibraryRootID != existing.LibraryRootID {
+		return true
+	}
+	if incoming.RelativePath != "" && incoming.RelativePath != existing.RelativePath {
+		return true
+	}
 	return scanDerivedMetadataNeedsRefresh(scanDerivedMetadata{
 		Title:        existing.Title,
 		ScrapeStatus: existing.ScrapeStatus,

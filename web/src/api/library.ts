@@ -1,5 +1,5 @@
 import { api, BATCH_REQUEST_TIMEOUT, LONG_REQUEST_TIMEOUT } from './client'
-import type { Library, Media, ScanResult } from '../types'
+import type { Library, LibraryRoot, Media, ScanResult } from '../types'
 import type { SeriesCard } from '../utils/groupSeries'
 
 export interface MediaPage {
@@ -21,6 +21,13 @@ export interface SeriesPage {
   total: number
   page: number
   page_size: number
+}
+
+export interface LibraryRootInput {
+  name?: string
+  path: string
+  enabled?: boolean
+  sort_order?: number
 }
 
 export interface ManualScrapeCandidate {
@@ -83,10 +90,26 @@ export const libraryAPI = {
   create: (name: string, path: string, type: string) =>
     api.post<Library>('/libraries', { name, path, type }).then((r) => r.data),
 
+  createWithRoots: (name: string, type: string, roots: LibraryRootInput[]) =>
+    api.post<Library>('/libraries', { name, type, roots }).then((r) => r.data),
+
   remove: (id: string) => api.delete(`/libraries/${id}`).then((r) => r.data),
+
+  listRoots: (id: string) => api.get<LibraryRoot[]>(`/libraries/${id}/roots`).then((r) => r.data),
+
+  addRoot: (id: string, root: LibraryRootInput) =>
+    api.post<LibraryRoot>(`/libraries/${id}/roots`, root).then((r) => r.data),
+
+  updateRoot: (id: string, rootID: string, root: Partial<LibraryRootInput>) =>
+    api.patch<LibraryRoot>(`/libraries/${id}/roots/${rootID}`, root).then((r) => r.data),
+
+  removeRoot: (id: string, rootID: string) => api.delete(`/libraries/${id}/roots/${rootID}`).then((r) => r.data),
 
   scan: (id: string) =>
     api.post<ScanResult>(`/libraries/${id}/scan`, null, { timeout: BATCH_REQUEST_TIMEOUT }).then((r) => r.data),
+
+  scanRoot: (id: string, rootID: string) =>
+    api.post<ScanResult>(`/libraries/${id}/roots/${rootID}/scan`, null, { timeout: BATCH_REQUEST_TIMEOUT }).then((r) => r.data),
 
   scrape: (id: string, options?: ScrapeOptions) =>
     api.post(`/libraries/${id}/scrape`, options ?? null, { timeout: BATCH_REQUEST_TIMEOUT }).then((r) => r.data),

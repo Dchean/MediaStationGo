@@ -95,12 +95,24 @@ export interface LoginResponse {
 }
 
 // Library
+export interface LibraryRoot {
+  id: string
+  library_id: string
+  name?: string
+  path: string
+  enabled: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
 export interface Library {
   id: string
   name: string
   path: string
   type: string
   enabled: boolean
+  roots?: LibraryRoot[]
   created_at: string
   updated_at: string
 }
@@ -108,6 +120,7 @@ export interface Library {
 export interface Media {
   id: string
   library_id: string
+  library_root_id?: string
   library_name?: string
   library_path?: string
   display_library_id?: string
@@ -118,6 +131,7 @@ export interface Media {
   original_name?: string
   episode_title?: string
   path: string
+  relative_path?: string
   size_bytes: number
   duration_sec: number
   width: number

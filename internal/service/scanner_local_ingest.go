@@ -13,7 +13,7 @@ import (
 
 // ingestFile upserts a single media file. seenInodes dedups hardlinks within a
 // single scan; pass a fresh map for one-off ingests. It mutates res counters.
-func (s *ScannerService) ingestFile(ctx context.Context, lib *model.Library, path string, size int64, seenInodes map[string]string, existingMedia map[string]existingLocalMedia, writeBatch *localMediaWriteBatch, res *ScanResult) {
+func (s *ScannerService) ingestFile(ctx context.Context, lib *model.Library, root *model.LibraryRoot, path string, size int64, seenInodes map[string]string, existingMedia map[string]existingLocalMedia, writeBatch *localMediaWriteBatch, res *ScanResult) {
 	res.Visited++
 	ext := strings.ToLower(filepath.Ext(path))
 	cleanPath := filepath.Clean(path)
@@ -24,9 +24,10 @@ func (s *ScannerService) ingestFile(ctx context.Context, lib *model.Library, pat
 	}
 
 	parsedSeason, parsedEpisode := ParseEpisode(path)
-	localMeta := s.readLocalScanMetadata(lib, path, parsedSeason, parsedEpisode)
+	localMeta := s.readLocalScanMetadata(lib, root, path, parsedSeason, parsedEpisode)
 	media := s.buildLocalScanMedia(localScanMediaInput{
 		lib:           lib,
+		root:          root,
 		path:          path,
 		ext:           ext,
 		fileID:        fileID,
@@ -87,8 +88,12 @@ func (s *ScannerService) recordLocalFileIdentity(ctx context.Context, path strin
 	return fileID, false
 }
 
-func (s *ScannerService) readLocalScanMetadata(lib *model.Library, path string, parsedSeason, parsedEpisode int) *LocalMetadata {
-	localMeta, err := ReadLocalMetadata(path, lib.Path, librarySupportsSeasons(lib) || parsedSeason > 0 || parsedEpisode > 0)
+func (s *ScannerService) readLocalScanMetadata(lib *model.Library, root *model.LibraryRoot, path string, parsedSeason, parsedEpisode int) *LocalMetadata {
+	rootPath := lib.Path
+	if root != nil && strings.TrimSpace(root.Path) != "" {
+		rootPath = root.Path
+	}
+	localMeta, err := ReadLocalMetadata(path, rootPath, librarySupportsSeasons(lib) || parsedSeason > 0 || parsedEpisode > 0)
 	if err != nil {
 		s.log.Warn("read local metadata failed", zap.String("path", path), zap.Error(err))
 	}
@@ -120,6 +125,7 @@ func (s *ScannerService) localMediaScanState(in localMediaScanStateInput) (bool,
 
 type localScanMediaInput struct {
 	lib           *model.Library
+	root          *model.LibraryRoot
 	path          string
 	ext           string
 	fileID        string
@@ -136,15 +142,17 @@ func (s *ScannerService) buildLocalScanMedia(in localScanMediaInput) *model.Medi
 	}
 
 	media := &model.Media{
-		LibraryID:  in.lib.ID,
-		Title:      title,
-		Year:       year,
-		Path:       in.path,
-		SizeBytes:  in.size,
-		Container:  strings.TrimPrefix(in.ext, "."),
-		FileID:     in.fileID,
-		SeasonNum:  in.parsedSeason,
-		EpisodeNum: in.parsedEpisode,
+		LibraryID:     in.lib.ID,
+		LibraryRootID: libraryRootID(in.root),
+		RelativePath:  localRelativePath(in.path, in.root),
+		Title:         title,
+		Year:          year,
+		Path:          in.path,
+		SizeBytes:     in.size,
+		Container:     strings.TrimPrefix(in.ext, "."),
+		FileID:        in.fileID,
+		SeasonNum:     in.parsedSeason,
+		EpisodeNum:    in.parsedEpisode,
 	}
 	if in.ext == ".strm" {
 		media.Container = "strm"

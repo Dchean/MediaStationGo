@@ -19,6 +19,24 @@ func (s *ScannerService) ScanLibrary(ctx context.Context, libraryID string) (*Sc
 	return s.scanLibrary(ctx, libraryID, true)
 }
 
+func (s *ScannerService) ScanLibraryRoot(ctx context.Context, libraryID, rootID string) (*ScanResult, error) {
+	lib, err := s.repo.Library.FindByID(ctx, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	if lib == nil {
+		return nil, errors.New("library not found")
+	}
+	root, err := s.repo.Library.FindRootByID(ctx, libraryID, rootID)
+	if err != nil {
+		return nil, err
+	}
+	if root == nil {
+		return nil, errors.New("library root not found")
+	}
+	return s.scanLocalLibraryRoot(ctx, lib, root, true)
+}
+
 // ScanLibraryWithoutAutoScrape walks a library without kicking off online
 // metadata enrichment. Cloud mounts can contain very large trees; keeping mount
 // scans import-only prevents scraper bursts from overwhelming small NAS boxes.
@@ -55,9 +73,6 @@ func (s *ScannerService) scanLibrary(ctx context.Context, libraryID string, auto
 	if mount, ok := ParseCloudLibraryMount(lib.Path); ok {
 		return s.scanMountedCloudLibrary(ctx, lib, mount, autoScrape)
 	}
-	if err := s.resolveLocalLibraryPath(ctx, lib); err != nil {
-		return &ScanResult{LibraryID: lib.ID}, err
-	}
 	res := &ScanResult{LibraryID: lib.ID}
 	writeBatch := newLocalMediaWriteBatch(s, ctx, res, 100)
 	existingMedia, err := s.existingLocalMediaSnapshot(ctx, lib.ID)
@@ -66,27 +81,85 @@ func (s *ScannerService) scanLibrary(ctx context.Context, libraryID string, auto
 		existingMedia = nil
 	}
 
-	seen, walkErr := s.scanLocalLibraryFiles(ctx, lib, existingMedia, writeBatch, res)
-	writeBatch.Flush()
-	if walkErr != nil {
-		addScanError(res, lib.Path, walkErr)
-		if res.Added+res.Updated > 0 {
-			s.invalidateMediaCache(ctx)
-		}
-		return res, walkErr
-	}
-	removed, err := s.pruneMissingMedia(ctx, lib.ID, seen)
+	roots, err := s.localLibraryScanRoots(ctx, lib)
 	if err != nil {
-		s.log.Warn("prune missing media failed", zap.String("library_id", lib.ID), zap.Error(err))
-	} else {
-		res.Removed = removed
+		return res, err
+	}
+	if len(roots) == 0 {
+		return res, errors.New("library has no enabled paths")
+	}
+	var scanErr error
+	scannedRoots := 0
+	for i := range roots {
+		root := roots[i]
+		if err := s.resolveLocalLibraryRootPath(ctx, lib, &root); err != nil {
+			addScanError(res, root.Path, err)
+			s.log.Warn("library root scan skipped",
+				zap.String("library_id", lib.ID),
+				zap.String("root_id", root.ID),
+				zap.String("path", root.Path),
+				zap.Error(err))
+			if scanErr == nil {
+				scanErr = err
+			}
+			continue
+		}
+		seen, walkErr := s.scanLocalLibraryFiles(ctx, lib, &root, existingMedia, writeBatch, res)
+		if walkErr != nil {
+			addScanError(res, root.Path, walkErr)
+			if scanErr == nil {
+				scanErr = walkErr
+			}
+			continue
+		}
+		scannedRoots++
+		removed, err := s.pruneMissingMediaForRoot(ctx, lib.ID, root.ID, root.Path, seen)
+		if err != nil {
+			s.log.Warn("prune missing media failed", zap.String("library_id", lib.ID), zap.String("root_id", root.ID), zap.Error(err))
+		} else {
+			res.Removed += removed
+		}
+	}
+	writeBatch.Flush()
+	if scanErr != nil && scannedRoots == 0 {
+		return res, scanErr
 	}
 
 	s.finishLocalLibraryScan(ctx, lib, res, autoScrape)
 	return res, nil
 }
 
-func (s *ScannerService) scanLocalLibraryFiles(ctx context.Context, lib *model.Library, existingMedia map[string]existingLocalMedia, writeBatch *localMediaWriteBatch, res *ScanResult) (map[string]struct{}, error) {
+func (s *ScannerService) scanLocalLibraryRoot(ctx context.Context, lib *model.Library, root *model.LibraryRoot, autoScrape bool) (*ScanResult, error) {
+	res := &ScanResult{LibraryID: lib.ID}
+	if root == nil || !root.Enabled {
+		return res, errors.New("library root disabled or not found")
+	}
+	if err := s.resolveLocalLibraryRootPath(ctx, lib, root); err != nil {
+		return res, err
+	}
+	writeBatch := newLocalMediaWriteBatch(s, ctx, res, 100)
+	existingMedia, err := s.existingLocalMediaSnapshot(ctx, lib.ID)
+	if err != nil {
+		s.log.Warn("load existing local media snapshot failed", zap.String("library_id", lib.ID), zap.Error(err))
+		existingMedia = nil
+	}
+	seen, walkErr := s.scanLocalLibraryFiles(ctx, lib, root, existingMedia, writeBatch, res)
+	writeBatch.Flush()
+	if walkErr != nil {
+		addScanError(res, root.Path, walkErr)
+		return res, walkErr
+	}
+	removed, err := s.pruneMissingMediaForRoot(ctx, lib.ID, root.ID, root.Path, seen)
+	if err != nil {
+		s.log.Warn("prune missing media failed", zap.String("library_id", lib.ID), zap.String("root_id", root.ID), zap.Error(err))
+	} else {
+		res.Removed = removed
+	}
+	s.finishLocalLibraryScan(ctx, lib, res, autoScrape)
+	return res, nil
+}
+
+func (s *ScannerService) scanLocalLibraryFiles(ctx context.Context, lib *model.Library, root *model.LibraryRoot, existingMedia map[string]existingLocalMedia, writeBatch *localMediaWriteBatch, res *ScanResult) (map[string]struct{}, error) {
 	seen := make(map[string]struct{})
 	seenInodes := existingLocalMediaFileIDs(existingMedia)
 	walkFn := func(path string, info walkInfo) error {
@@ -103,10 +176,10 @@ func (s *ScannerService) scanLocalLibraryFiles(ctx context.Context, lib *model.L
 			return nil
 		}
 		seen[filepath.Clean(path)] = struct{}{}
-		s.ingestFile(ctx, lib, path, info.size, seenInodes, existingMedia, writeBatch, res)
+		s.ingestFile(ctx, lib, root, path, info.size, seenInodes, existingMedia, writeBatch, res)
 		return nil
 	}
-	return seen, walk(lib.Path, walkFn)
+	return seen, walk(root.Path, walkFn)
 }
 
 func existingLocalMediaFileIDs(existingMedia map[string]existingLocalMedia) map[string]string {
@@ -234,7 +307,11 @@ func (s *ScannerService) IngestPath(ctx context.Context, libraryID, path string)
 	if err != nil || lib == nil {
 		return false, err
 	}
-	if err := s.resolveLocalLibraryPath(ctx, lib); err != nil {
+	root, err := s.localLibraryRootForPath(ctx, lib, path)
+	if err != nil || root == nil {
+		return false, err
+	}
+	if err := s.resolveLocalLibraryRootPath(ctx, lib, root); err != nil {
 		return false, err
 	}
 	fi, err := os.Stat(path)
@@ -246,7 +323,7 @@ func (s *ScannerService) IngestPath(ctx context.Context, libraryID, path string)
 		return false, nil
 	}
 	res := &ScanResult{LibraryID: lib.ID}
-	s.ingestFile(ctx, lib, path, fi.Size(), make(map[string]string), nil, nil, res)
+	s.ingestFile(ctx, lib, root, path, fi.Size(), make(map[string]string), nil, nil, res)
 	if res.Added+res.Updated > 0 {
 		s.invalidateMediaCache(ctx)
 	}
