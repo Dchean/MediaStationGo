@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -16,48 +15,62 @@ func (s *SystemUpdateService) check(ctx context.Context) SystemUpdateStatus {
 	status.CheckedAt = &now
 
 	customCommand := s.rawUpdateCommand(ctx)
+	composeTarget, composeErr := s.resolveComposeTarget(ctx)
+	status.ComposeDir = composeTarget.Dir
+	status.ComposeFile = composeTarget.File
+	status.ComposeCommand = composeTarget.Command
+
+	if strings.TrimSpace(customCommand) != "" {
+		status.CanApply = true
+		status.Message = "将执行自定义更新命令"
+	}
+
 	dockerPath, err := exec.LookPath("docker")
 	if err != nil {
-		return systemUpdateCustomFallback(status, systemUpdateFallback{
-			command:        customCommand,
-			customMessage:  "当前环境无法检查 Docker；将执行自定义更新命令",
-			customDetails:  err.Error(),
-			defaultMessage: "当前镜像内未安装 docker CLI，无法自动拉取并重启 Docker 镜像",
-		})
-	}
-	if runtime.GOOS != "windows" {
-		if _, err := os.Stat("/var/run/docker.sock"); err != nil {
-			return systemUpdateCustomFallback(status, systemUpdateFallback{
-				command:        customCommand,
-				customMessage:  "未检测到 Docker socket；将执行自定义更新命令",
-				customDetails:  err.Error(),
-				defaultMessage: "未检测到 /var/run/docker.sock，请挂载 Docker socket 后再使用热更新",
-				defaultDetails: err.Error(),
-			})
+		if status.CanApply {
+			status.Details = err.Error()
+			return status
 		}
+		status.Message = "当前环境未安装 docker CLI，无法执行 Docker Compose 更新"
+		status.Details = err.Error()
+		return status
+	}
+	if status.ComposeCommand == "" {
+		status.ComposeCommand = availableComposeCommand(ctx, dockerPath)
+	}
+	if status.ComposeCommand == "" && strings.TrimSpace(customCommand) == "" {
+		status.Message = "当前环境未安装 docker compose 插件或 docker-compose 命令"
+		return status
+	}
+
+	if strings.TrimSpace(customCommand) == "" {
+		if composeErr != "" {
+			status.Message = composeErr
+			return status
+		}
+		status.CanApply = true
+		status.Message = "已识别 Docker Compose 安装目录，可执行一键更新"
 	}
 
 	checkCtx, cancel := context.WithTimeout(ctx, systemUpdateCheckTimeout)
 	defer cancel()
 	if out, err := runSystemUpdateCommand(checkCtx, dockerPath, "version", "--format", "{{.Server.Version}}"); err != nil {
 		details := strings.TrimSpace(out + "\n" + err.Error())
-		return systemUpdateCustomFallback(status, systemUpdateFallback{
-			command:        customCommand,
-			customMessage:  "无法连接 Docker 引擎；将执行自定义更新命令",
-			customDetails:  details,
-			defaultMessage: "无法连接 Docker 引擎，请检查 Docker socket 权限",
-			defaultDetails: details,
-		})
+		status.Details = details
+		if status.CanApply {
+			status.Message = "Docker Compose 更新命令已就绪；当前无法读取 Docker 引擎摘要，执行时如失败请检查 Docker 权限"
+			return status
+		}
+		status.Message = "无法连接 Docker 引擎，请检查 Docker 权限"
+		return status
 	}
 	status.DockerAvailable = true
 
 	containerID := currentContainerID()
 	status.ContainerID = containerID
 	if containerID == "" {
-		status.Message = "无法识别当前容器 ID；请配置自定义更新命令"
-		if customCommand != "" {
-			status.CanApply = true
-			status.Message = "无法识别当前容器 ID；将执行自定义更新命令"
+		if status.CanApply {
+			status.Message = "已识别 Docker Compose 安装目录；无法识别当前容器 ID，将使用默认容器名 mediastation-go 重启"
 		}
 		return status
 	}
@@ -67,6 +80,18 @@ func (s *SystemUpdateService) check(ctx context.Context) SystemUpdateStatus {
 	status.CanApply = true
 	status.Message = systemUpdateCheckMessage(status)
 	return status
+}
+
+func availableComposeCommand(ctx context.Context, dockerPath string) string {
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if _, err := runSystemUpdateCommand(checkCtx, dockerPath, "compose", "version"); err == nil {
+		return "docker compose"
+	}
+	if _, err := exec.LookPath("docker-compose"); err == nil {
+		return "docker-compose"
+	}
+	return ""
 }
 
 type systemUpdateFallback struct {

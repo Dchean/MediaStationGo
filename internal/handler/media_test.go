@@ -95,6 +95,34 @@ func TestListLibrariesIncludeHiddenNormalizesCloudDisplayNames(t *testing.T) {
 	}
 }
 
+func TestListLibrariesIncludeHiddenHidesInternalAutoCategoryLibraries(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&model.Library{}, &model.Media{}); err != nil {
+		t.Fatal(err)
+	}
+	repos := repository.New(db)
+	root := model.Library{Name: "OpenList", Path: "cloud://openlist", Type: "movie", Enabled: true}
+	auto := model.Library{Name: "欧美剧", Path: service.BuildCloudAutoCategoryLibraryPath("openlist", "电视剧/欧美剧"), Type: "tv", Enabled: true}
+	for _, lib := range []*model.Library{&root, &auto} {
+		if err := repos.Library.Create(t.Context(), lib); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svc := &service.Container{
+		Repo:  repos,
+		Media: service.NewMediaService(&config.Config{}, zap.NewNop(), repos),
+	}
+
+	all := requestLibraries(t, svc, "admin", "admin", "/api/libraries?include_hidden=1")
+	if len(all) != 1 || all[0].ID != root.ID {
+		t.Fatalf("include_hidden list = %#v, want only user-mounted cloud library", all)
+	}
+}
+
 func TestGetLibraryAllowsEmptyLibrary(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

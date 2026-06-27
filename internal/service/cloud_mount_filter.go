@@ -13,6 +13,7 @@ func FilterDisplayCloudLibraries(ctx context.Context, repo *repository.Container
 		return libs
 	}
 	libs = FilterDeprecatedNativeCloudLibraries(libs)
+	libs = FilterInternalCloudAutoCategoryLibraries(libs)
 	counts := cloudLibraryMediaCounts(ctx, repo, libs)
 	collapsed := make([]model.Library, 0, len(libs))
 	byKey := make(map[string]int, len(libs))
@@ -33,6 +34,20 @@ func FilterDisplayCloudLibraries(ctx context.Context, repo *repository.Container
 	}
 	collapsed = FilterShadowedCloudLibraries(collapsed)
 	return mergeDisplayCloudLibraries(collapsed)
+}
+
+func FilterInternalCloudAutoCategoryLibraries(libs []model.Library) []model.Library {
+	if len(libs) == 0 {
+		return libs
+	}
+	out := make([]model.Library, 0, len(libs))
+	for _, lib := range libs {
+		if CloudLibraryAutoCategory(lib) {
+			continue
+		}
+		out = append(out, lib)
+	}
+	return out
 }
 
 func FilterScannableCloudLibraries(ctx context.Context, repo *repository.Container, libs []model.Library) []model.Library {

@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -58,7 +59,10 @@ func (a *NexusPHPAdapter) Authenticate(ctx context.Context, cfg SiteConfig) erro
 
 func (a *NexusPHPAdapter) Search(ctx context.Context, cfg SiteConfig, keyword string, page int) (*SiteSearchResult, error) {
 	params := url.Values{}
+	params.Set("searchstr", keyword)
 	params.Set("search", keyword)
+	params.Set("search_area", "0")
+	params.Set("search_mode", "0")
 	params.Set("page", strconv.Itoa(page))
 	params.Set("inclbookmarked", "0")
 	params.Set("incldead", "0")
@@ -119,11 +123,7 @@ func parseNexusPHPHTML(html, siteName, baseURL string) (*SiteSearchResult, error
 		Page:     1,
 	}
 
-	// Extract table rows from torrent table
-	rowRegex := regexp.MustCompile(`<tr[^>]*>\s*<td[^>]*class="rowfollow"[^>]*>.*?</tr>`)
-	matches := rowRegex.FindAllString(html, -1)
-
-	for _, row := range matches {
+	for _, row := range nexusPHPTorrentRows(html) {
 		item := parseNexusPHPRow(row, baseURL)
 		if item.ID != "" {
 			result.Items = append(result.Items, item)
@@ -139,40 +139,41 @@ func parseNexusPHPRow(row, baseURL string) TorrentItem {
 	item := TorrentItem{}
 
 	// Extract torrent ID and title
-	idRegex := regexp.MustCompile(`details\.php\?id=(\d+)[^"]*"[^>]*>([^<]+)`)
-	idMatches := idRegex.FindStringSubmatch(row)
-	if len(idMatches) >= 3 {
-		item.ID = idMatches[1]
-		item.Title = strings.TrimSpace(idMatches[2])
-		item.DetailURL = baseURL + "/details.php?id=" + item.ID
+	if link := firstNexusPHPLink(row, "details.php"); link != nil {
+		item.ID = link.query.Get("id")
+		item.Title = nexusPHPTitleFromLink(*link)
+		item.Subtitle = nexusPHPSubtitle(row)
+		item.DetailURL = resolveSiteURL(baseURL, link.href)
 	}
 
 	// Extract download link
-	dlRegex := regexp.MustCompile(`download\.php\?id=(\d+)`)
-	if dlMatches := dlRegex.FindStringSubmatch(row); len(dlMatches) >= 2 {
-		item.DownloadURL = baseURL + "/download.php?id=" + dlMatches[1]
+	if link := firstNexusPHPLink(row, "download.php"); link != nil {
+		item.DownloadURL = resolveSiteURL(baseURL, link.href)
 	}
 
 	// Extract size
-	sizeRegex := regexp.MustCompile(`(?i)(\d+\.?\d*)\s*(GB|MB|TB|KB)`)
+	sizeRegex := regexp.MustCompile(`(?i)(\d+\.?\d*)\s*(GiB|MiB|TiB|KiB|GB|MB|TB|KB)`)
 	if sizeMatches := sizeRegex.FindStringSubmatch(row); len(sizeMatches) >= 3 {
 		item.Size = parseSizeString(sizeMatches[1], sizeMatches[2])
 	}
 
 	// Extract seeders and leechers
-	seedersRegex := regexp.MustCompile(`seeders[^"]*"[^>]*>(\d+)<`)
-	if m := seedersRegex.FindStringSubmatch(row); len(m) >= 2 {
-		item.Seeders, _ = strconv.Atoi(m[1])
+	if value, ok := nexusPHPIntByClass(row, "seeders"); ok {
+		item.Seeders = value
 	}
-	leechersRegex := regexp.MustCompile(`leechers[^"]*"[^>]*>(\d+)<`)
-	if m := leechersRegex.FindStringSubmatch(row); len(m) >= 2 {
-		item.Leechers, _ = strconv.Atoi(m[1])
+	if value, ok := nexusPHPIntByClass(row, "leechers"); ok {
+		item.Leechers = value
+	}
+	if value, ok := nexusPHPIntByClass(row, "snatched"); ok {
+		item.Snatched = value
 	}
 
 	// Extract snatched
 	snatchedRegex := regexp.MustCompile(`snatched[^"]*"[^>]*>(\d+)`)
-	if m := snatchedRegex.FindStringSubmatch(row); len(m) >= 2 {
-		item.Snatched, _ = strconv.Atoi(m[1])
+	if item.Snatched == 0 {
+		if m := snatchedRegex.FindStringSubmatch(row); len(m) >= 2 {
+			item.Snatched, _ = strconv.Atoi(m[1])
+		}
 	}
 
 	// Check for free flag
@@ -194,6 +195,104 @@ func parseNexusPHPRow(row, baseURL string) TorrentItem {
 	}
 
 	return item
+}
+
+type nexusPHPLink struct {
+	href  string
+	attrs string
+	text  string
+	query url.Values
+}
+
+func nexusPHPTorrentRows(pageHTML string) []string {
+	rowRegex := regexp.MustCompile(`(?is)<tr\b[^>]*>.*?</tr>`)
+	rows := rowRegex.FindAllString(pageHTML, -1)
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if strings.Contains(strings.ToLower(row), "details.php") {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func firstNexusPHPLink(row, path string) *nexusPHPLink {
+	pattern := regexp.MustCompile(`(?is)<a\b([^>]*href\s*=\s*["']([^"']*` + regexp.QuoteMeta(path) + `[^"']*)["'][^>]*)>(.*?)</a>`)
+	for _, match := range pattern.FindAllStringSubmatch(row, -1) {
+		if len(match) < 4 {
+			continue
+		}
+		href := html.UnescapeString(strings.TrimSpace(match[2]))
+		parsed, err := url.Parse(href)
+		if err != nil {
+			continue
+		}
+		return &nexusPHPLink{
+			href:  href,
+			attrs: match[1],
+			text:  cleanNexusPHPText(match[3]),
+			query: parsed.Query(),
+		}
+	}
+	return nil
+}
+
+func nexusPHPTitleFromLink(link nexusPHPLink) string {
+	for _, attr := range []string{"title", "data-title"} {
+		if value := htmlAttr(link.attrs, attr); value != "" {
+			return value
+		}
+	}
+	return link.text
+}
+
+func nexusPHPSubtitle(row string) string {
+	for _, pattern := range []*regexp.Regexp{
+		regexp.MustCompile(`(?is)<span\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:subtitle|small_descr|descr|sub)[^"']*["'][^>]*>(.*?)</span>`),
+		regexp.MustCompile(`(?is)<font\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:subtitle|small_descr|descr|sub)[^"']*["'][^>]*>(.*?)</font>`),
+	} {
+		if match := pattern.FindStringSubmatch(row); len(match) >= 2 {
+			return cleanNexusPHPText(match[1])
+		}
+	}
+	return ""
+}
+
+func nexusPHPIntByClass(row, className string) (int, bool) {
+	pattern := regexp.MustCompile(`(?is)<td\b[^>]*(?:class|id)\s*=\s*["'][^"']*` + regexp.QuoteMeta(className) + `[^"']*["'][^>]*>(.*?)</td>`)
+	if match := pattern.FindStringSubmatch(row); len(match) >= 2 {
+		text := cleanNexusPHPText(match[1])
+		valueMatch := regexp.MustCompile(`\d+`).FindString(text)
+		if valueMatch != "" {
+			value, _ := strconv.Atoi(valueMatch)
+			return value, true
+		}
+	}
+	return 0, false
+}
+
+func htmlAttr(attrs, name string) string {
+	pattern := regexp.MustCompile(`(?is)\b` + regexp.QuoteMeta(name) + `\s*=\s*["']([^"']*)["']`)
+	if match := pattern.FindStringSubmatch(attrs); len(match) >= 2 {
+		return cleanNexusPHPText(match[1])
+	}
+	return ""
+}
+
+func cleanNexusPHPText(value string) string {
+	return strings.Join(strings.Fields(html.UnescapeString(stripHTML(value))), " ")
+}
+
+func resolveSiteURL(baseURL, href string) string {
+	base, err := url.Parse(strings.TrimRight(baseURL, "/") + "/")
+	if err != nil {
+		return strings.TrimSpace(href)
+	}
+	ref, err := url.Parse(strings.TrimSpace(href))
+	if err != nil {
+		return strings.TrimSpace(href)
+	}
+	return base.ResolveReference(ref).String()
 }
 
 // parseNexusPHPDetailHTML 解析种子详情页。

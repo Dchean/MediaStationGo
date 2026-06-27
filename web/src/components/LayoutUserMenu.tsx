@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronDown, LogOut, Settings, User as UserIcon, UserCog } from 'lucide-react'
+import { ChevronDown, Loader2, LogOut, RotateCw, Settings, User as UserIcon, UserCog } from 'lucide-react'
 import clsx from 'clsx'
+import toast from 'react-hot-toast'
 
+import { adminAPI } from '../api/admin'
 import type { PlayProfile } from '../types'
 
 type LayoutUser = {
@@ -39,6 +41,7 @@ export function LayoutUserMenu({
   const location = useLocation()
   const rootRef = useRef<HTMLDivElement>(null)
   const lastLocationRef = useRef(`${location.pathname}${location.search}`)
+  const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
     if (!isOpen) return undefined
@@ -67,6 +70,22 @@ export function LayoutUserMenu({
     lastLocationRef.current = nextLocation
     if (isOpen) onClose()
   }, [isOpen, location.pathname, location.search, onClose])
+
+  const applySystemUpdate = async () => {
+    if (updating) return
+    setUpdating(true)
+    try {
+      const status = await adminAPI.systemUpdateApply()
+      toast.success(status.message || '系统更新任务已启动')
+      onClose()
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '启动系统更新失败'
+      toast.error(msg)
+    } finally {
+      setUpdating(false)
+    }
+  }
 
   return (
     <div ref={rootRef} className="relative" data-testid="layout-user-menu">
@@ -101,6 +120,17 @@ export function LayoutUserMenu({
             <UserMenuLink to="/profile" icon={<UserIcon size={16} />} label="个人基本信息" onClick={onClose} />
             {user?.role === 'admin' && (
               <UserMenuLink to="/admin" icon={<Settings size={16} />} label="管理主控制台" onClick={onClose} />
+            )}
+            {user?.role === 'admin' && (
+              <button
+                type="button"
+                onClick={applySystemUpdate}
+                disabled={updating}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-[var(--app-subtle)] transition-colors hover:bg-[var(--app-hover)] hover:text-[var(--app-text)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {updating ? <Loader2 size={16} className="animate-spin" /> : <RotateCw size={16} />}
+                <span>一键更新系统</span>
+              </button>
             )}
             <div className="my-1.5 border-t border-[var(--app-border)]" />
             <div className="px-3 py-2">

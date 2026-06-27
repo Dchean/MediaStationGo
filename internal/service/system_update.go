@@ -18,6 +18,7 @@ const (
 	SystemUpdateImageSettingKey           = "system.update.image"
 	SystemUpdateWatchtowerImageSettingKey = "system.update.watchtower_image"
 	SystemUpdateCommandSettingKey         = "system.update.command"
+	SystemUpdateComposeDirSettingKey      = "system.update.compose_dir"
 
 	DefaultSystemUpdateImage           = "ghcr.io/shukebta/mediastation-go:latest"
 	DefaultSystemUpdateWatchtowerImage = "containrrr/watchtower:latest"
@@ -33,6 +34,10 @@ var ErrSystemUpdateRunning = errors.New("system update already running")
 type SystemUpdateStatus struct {
 	Image           string  `json:"image"`
 	WatchtowerImage string  `json:"watchtower_image,omitempty"`
+	UpdateMode      string  `json:"update_mode,omitempty"`
+	ComposeDir      string  `json:"compose_dir,omitempty"`
+	ComposeFile     string  `json:"compose_file,omitempty"`
+	ComposeCommand  string  `json:"compose_command,omitempty"`
 	ContainerID     string  `json:"container_id,omitempty"`
 	ContainerName   string  `json:"container_name,omitempty"`
 	CurrentImageID  string  `json:"current_image_id,omitempty"`
@@ -199,6 +204,7 @@ func (s *SystemUpdateService) baseStatus(ctx context.Context) SystemUpdateStatus
 	return SystemUpdateStatus{
 		Image:           image,
 		WatchtowerImage: watchtowerImage,
+		UpdateMode:      "compose",
 		ContainerID:     currentContainerID(),
 	}
 }

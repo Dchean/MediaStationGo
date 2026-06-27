@@ -30,18 +30,23 @@ func MergedLibraryIDsForLibrary(ctx context.Context, repo *repository.Container,
 func MergedLibraryIDs(libs []model.Library, lib model.Library) []string {
 	ids := []string{}
 	seen := map[string]struct{}{}
-	add := func(id string) {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return
+	add := func(more ...string) {
+		for _, id := range more {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
 		}
-		if _, ok := seen[id]; ok {
-			return
-		}
-		seen[id] = struct{}{}
-		ids = append(ids, id)
 	}
 	add(lib.ID)
+	if rootAutoIDs := cloudRootAutoCategoryLibraryIDs(libs, lib); len(rootAutoIDs) > 0 {
+		add(rootAutoIDs...)
+	}
 	key, ok := CloudLibraryMergeKey(lib)
 	if !ok {
 		return ids
@@ -60,6 +65,24 @@ func MergedLibraryIDs(libs []model.Library, lib model.Library) []string {
 			continue
 		}
 		add(candidate.ID)
+	}
+	return ids
+}
+
+func cloudRootAutoCategoryLibraryIDs(libs []model.Library, lib model.Library) []string {
+	mount, ok := ParseCloudLibraryMount(lib.Path)
+	if !ok || !cloudRootMountNeedsAutoCategory(mount) {
+		return nil
+	}
+	ids := make([]string, 0)
+	for _, candidate := range libs {
+		if candidate.ID == lib.ID || !candidate.Enabled || !CloudLibraryAutoCategory(candidate) {
+			continue
+		}
+		info, ok := ParseCloudLibraryMount(candidate.Path)
+		if ok && info.Provider == mount.Provider {
+			ids = appendUniqueLibraryIDs(ids, candidate.ID)
+		}
 	}
 	return ids
 }

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -31,6 +33,58 @@ func TestRenderSystemUpdateCommand(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("command %q does not contain %q", got, want)
 		}
+	}
+}
+
+func TestDefaultSystemUpdateCommandUsesCompose(t *testing.T) {
+	status := SystemUpdateStatus{
+		ComposeDir:     "/opt/mediastation-go",
+		ComposeCommand: "docker compose",
+		ContainerName:  "mediastation-go",
+	}
+	got := renderSystemUpdateCommand(defaultSystemUpdateCommand(), status)
+	for _, want := range []string{
+		"cd " + shellQuote("/opt/mediastation-go"),
+		"docker compose pull",
+		"docker compose up -d",
+		"docker image prune -f",
+		"docker restart " + shellQuote("mediastation-go"),
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("default command %q does not contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "watchtower") {
+		t.Fatalf("default command should not use watchtower: %q", got)
+	}
+}
+
+func TestComposeTargetInDirMatchesMediaStationCompose(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(`
+services:
+  mediastation-go:
+    image: ghcr.io/shukebta/mediastation-go:latest
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := composeTargetInDir(dir)
+	if target.Dir != dir || !strings.HasSuffix(target.File, "docker-compose.yml") {
+		t.Fatalf("compose target = %#v", target)
+	}
+}
+
+func TestComposeTargetInDirIgnoresUnrelatedCompose(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(`
+services:
+  redis:
+    image: redis:7
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if target := composeTargetInDir(dir); target.Dir != "" {
+		t.Fatalf("unrelated compose should be ignored: %#v", target)
 	}
 }
 

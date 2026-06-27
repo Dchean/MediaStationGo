@@ -4,6 +4,10 @@ import type { AccessLog, Setting, User } from '../types'
 export interface SystemUpdateStatus {
   image: string
   watchtower_image?: string
+  update_mode?: string
+  compose_dir?: string
+  compose_file?: string
+  compose_command?: string
   container_id?: string
   container_name?: string
   current_image_id?: string

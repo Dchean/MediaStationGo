@@ -30,7 +30,7 @@ func parseSizeString(value string, unit string) int64 {
 	if err != nil {
 		return 0
 	}
-	switch strings.ToLower(unit) {
+	switch strings.TrimSuffix(strings.ToLower(unit), "i") {
 	case "kb":
 		return int64(v * 1024)
 	case "mb":

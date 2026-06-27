@@ -22,7 +22,11 @@ func (s *MediaService) attachLibraryMetadata(ctx context.Context, items []model.
 	}
 	resolver := newMediaDisplayLibraryResolver(ctx, s.repo, libs)
 	for i := range items {
+		var own model.Library
+		var hasOwn bool
 		if lib, ok := byID[items[i].LibraryID]; ok {
+			own = lib
+			hasOwn = true
 			items[i].LibraryName = lib.Name
 			items[i].LibraryPath = lib.Path
 		}
@@ -30,6 +34,10 @@ func (s *MediaService) attachLibraryMetadata(ctx context.Context, items []model.
 			items[i].DisplayLibraryID = lib.ID
 			items[i].DisplayLibraryName = lib.Name
 			items[i].DisplayLibraryPath = lib.Path
+			if hasOwn && CloudLibraryAutoCategory(own) {
+				items[i].LibraryName = lib.Name
+				items[i].LibraryPath = lib.Path
+			}
 		}
 	}
 }
@@ -72,12 +80,34 @@ func (r mediaDisplayLibraryResolver) DisplayLibraryForMedia(media model.Media) (
 	}
 	own, hasOwn := r.byID[media.LibraryID]
 	if hasOwn {
+		if CloudLibraryAutoCategory(own) {
+			if lib, ok := r.rootCloudDisplayLibraryForAutoCategory(own); ok {
+				return lib, true
+			}
+		}
 		if key, ok := CloudLibraryMergeKey(own); ok {
 			if lib, exists := r.displayByMergeKey[key]; exists {
 				return lib, true
 			}
 		}
 		return own, true
+	}
+	return model.Library{}, false
+}
+
+func (r mediaDisplayLibraryResolver) rootCloudDisplayLibraryForAutoCategory(auto model.Library) (model.Library, bool) {
+	info, ok := ParseCloudLibraryMount(auto.Path)
+	if !ok {
+		return model.Library{}, false
+	}
+	for _, lib := range r.displayLibraries {
+		if !lib.Enabled {
+			continue
+		}
+		candidate, ok := ParseCloudLibraryMount(lib.Path)
+		if ok && candidate.Provider == info.Provider && cloudRootMountNeedsAutoCategory(candidate) {
+			return lib, true
+		}
 	}
 	return model.Library{}, false
 }

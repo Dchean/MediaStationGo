@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -177,6 +178,72 @@ func TestBuildRequestAPIKeyHeaderBySite(t *testing.T) {
 	}
 	if got := mteamReq.Header.Get("Authorization"); got != "" {
 		t.Fatalf("M-Team Authorization = %q, want empty", got)
+	}
+}
+
+func TestNexusPHPSearchUsesSearchstr(t *testing.T) {
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte(`<table class="torrents"><tr><td><a href="details.php?id=123" title="测试资源">测试资源</a></td><td><a href="download.php?id=123">下载</a></td></tr></table>`))
+	}))
+	defer server.Close()
+
+	adapter := NewNexusPHPAdapter()
+	result, err := adapter.Search(t.Context(), SiteConfig{
+		Name:     "Nexus",
+		URL:      server.URL,
+		AuthType: "cookie",
+		Cookie:   "uid=1; pass=token",
+		Timeout:  5 * time.Second,
+	}, "测试", 2)
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	values, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values.Get("searchstr") != "测试" || values.Get("search") != "测试" || values.Get("page") != "2" {
+		t.Fatalf("query = %q", gotQuery)
+	}
+	if len(result.Items) != 1 || result.Items[0].Title != "测试资源" {
+		t.Fatalf("items = %#v", result.Items)
+	}
+}
+
+func TestParseNexusPHPHTMLModernRows(t *testing.T) {
+	page := `
+<table class="torrents">
+  <tr class="torrent">
+    <td class="cat"><a href="torrents.php?cat=401" title="电影">电影</a></td>
+    <td>
+      <a class="torrent-title" href="/details.php?id=456&hit=1" title="Some &amp; Movie 2026 2160p">ignored</a>
+      <span class="subtitle">副标题 &amp; 描述</span>
+      <a href="/download.php?id=456&passkey=abc">下载</a>
+    </td>
+    <td>12.5 GiB</td>
+    <td class="seeders"><a>33</a></td>
+    <td class="leechers"><span>4</span></td>
+    <td class="snatched">99</td>
+  </tr>
+</table>`
+	result, err := parseNexusPHPHTML(page, "Nexus", "https://pt.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("items = %#v", result.Items)
+	}
+	item := result.Items[0]
+	if item.ID != "456" || item.Title != "Some & Movie 2026 2160p" || item.Subtitle != "副标题 & 描述" {
+		t.Fatalf("parsed item = %#v", item)
+	}
+	if item.DetailURL != "https://pt.example/details.php?id=456&hit=1" || item.DownloadURL != "https://pt.example/download.php?id=456&passkey=abc" {
+		t.Fatalf("urls = detail %q download %q", item.DetailURL, item.DownloadURL)
+	}
+	if item.Seeders != 33 || item.Leechers != 4 || item.Snatched != 99 {
+		t.Fatalf("stats = %#v", item)
 	}
 }
 

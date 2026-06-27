@@ -100,7 +100,7 @@ export function SystemUpdatePanel() {
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-xl font-semibold text-ink-600">Docker 热更新</h2>
+              <h2 className="font-display text-xl font-semibold text-ink-600">Docker Compose 一键更新</h2>
               <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${tone.className}`}>
                 <ToneIcon size={13} />
                 {tone.label}
@@ -130,7 +130,7 @@ export function SystemUpdatePanel() {
           <button
             type="button"
             className="btn-primary"
-            disabled={applying || status?.running || !status?.can_apply}
+            disabled={applying || status?.running}
             onClick={applyUpdate}
           >
             {applying || status?.running ? <Loader2 size={16} className="animate-spin" /> : <RotateCw size={16} />}
@@ -140,13 +140,15 @@ export function SystemUpdatePanel() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <UpdateFact icon={Server} label="Docker" value={status?.docker_available ? '可连接' : '未就绪'} />
+        <UpdateFact icon={Server} label="更新方式" value={status?.update_mode === 'compose' ? 'Docker Compose' : '自定义命令'} />
+        <UpdateFact label="Compose 目录" value={status?.compose_dir || '自动识别'} mono />
         <UpdateFact label="应用镜像" value={status?.image || '-'} mono />
         <UpdateFact label="当前容器" value={status?.container_name || status?.container_id || '-'} mono />
-        <UpdateFact label="最近检查" value={formatDate(status?.checked_at)} />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
+        <DigestRow label="Compose 文件" digest={status?.compose_file} />
+        <DigestRow label="Docker 连接" digest={status?.docker_available ? '可连接' : '未连接或未检查'} />
         <DigestRow label="本地摘要" digest={status?.local_digest} />
         <DigestRow label="远端摘要" digest={status?.remote_digest} />
       </div>
@@ -217,7 +219,7 @@ function updateTone(status: SystemUpdateStatus | null): {
   if (status.running) {
     return { label: '更新中', className: 'border-yellow-400/50 text-yellow-600', icon: Loader2 }
   }
-  if (!status.docker_available || !status.can_apply) {
+  if (!status.can_apply && status.message && status.message !== '尚未检查更新') {
     return { label: '不可更新', className: 'border-red-400/50 text-red-500', icon: AlertTriangle }
   }
   if (status.update_available === true) {
@@ -232,13 +234,6 @@ function updateTone(status: SystemUpdateStatus | null): {
 function shortDigest(digest?: string): string {
   if (!digest) return '-'
   return digest.length > 24 ? `${digest.slice(0, 18)}…${digest.slice(-8)}` : digest
-}
-
-function formatDate(value?: string): string {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString()
 }
 
 function apiErrorMessage(err: unknown, fallback: string): string {

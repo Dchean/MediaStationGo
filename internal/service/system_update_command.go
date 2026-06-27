@@ -23,14 +23,17 @@ func (s *SystemUpdateService) rawUpdateCommand(ctx context.Context) string {
 }
 
 func defaultSystemUpdateCommand() string {
-	return "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock {{watchtower_image}} --run-once --cleanup {{container}}"
+	return "cd {{compose_dir}} && {{compose_command}} pull && {{compose_command}} up -d && docker image prune -f && docker restart {{container}}"
 }
 
 func renderSystemUpdateCommand(template string, status SystemUpdateStatus) string {
 	replacements := map[string]string{
 		"{{image}}":            shellQuote(status.Image),
 		"{{watchtower_image}}": shellQuote(firstNonEmpty(status.WatchtowerImage, DefaultSystemUpdateWatchtowerImage)),
-		"{{container}}":        shellQuote(firstNonEmpty(status.ContainerName, status.ContainerID)),
+		"{{compose_dir}}":      shellQuote(status.ComposeDir),
+		"{{compose_file}}":     shellQuote(status.ComposeFile),
+		"{{compose_command}}":  firstNonEmpty(status.ComposeCommand, "docker compose"),
+		"{{container}}":        shellQuote(firstNonEmpty(status.ContainerName, status.ContainerID, "mediastation-go")),
 		"{{container_id}}":     shellQuote(status.ContainerID),
 		"{{container_name}}":   shellQuote(status.ContainerName),
 	}

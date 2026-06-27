@@ -31,6 +31,7 @@ func listLibrariesHandler(svc *service.Container) gin.HandlerFunc {
 			return
 		}
 		libs = service.FilterDeprecatedNativeCloudLibraries(libs)
+		libs = service.FilterInternalCloudAutoCategoryLibraries(libs)
 		role, _ := c.Get(middleware.CtxUserRole)
 		includeHidden := role == "admin" && (c.Query("include_hidden") == "1" || c.Query("all") == "1")
 		if !includeHidden {
@@ -62,6 +63,7 @@ func getLibraryHandler(svc *service.Container) gin.HandlerFunc {
 			return
 		}
 		libs := service.FilterDeprecatedNativeCloudLibraries([]model.Library{*lib})
+		libs = service.FilterInternalCloudAutoCategoryLibraries(libs)
 		if len(libs) == 0 {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return

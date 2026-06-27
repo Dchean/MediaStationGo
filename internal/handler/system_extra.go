@@ -136,7 +136,7 @@ func schemaHandler(_ *service.Container) gin.HandlerFunc {
 					"label": "系统更新",
 					"items": []gin.H{
 						{"key": "system.update.image", "type": "text", "label": "应用镜像"},
-						{"key": "system.update.watchtower_image", "type": "text", "label": "Watchtower 镜像"},
+						{"key": "system.update.compose_dir", "type": "text", "label": "Docker Compose 安装目录"},
 						{"key": "system.update.command", "type": "textarea", "label": "自定义更新命令"},
 					},
 				},

@@ -248,8 +248,8 @@ func TestAutoCategoryCloudLibrariesDoNotShadowRootOrScan(t *testing.T) {
 		t.Fatalf("auto category should not shadow root scan: %#v", shadow)
 	}
 	display := FilterDisplayCloudLibraries(t.Context(), repos, libs)
-	if len(display) != 2 {
-		t.Fatalf("display libraries = %#v, want root plus auto category", display)
+	if len(display) != 1 || display[0].ID != root.ID {
+		t.Fatalf("display libraries = %#v, want only user-mounted root", display)
 	}
 	scannable := FilterScannableCloudLibraries(t.Context(), repos, libs)
 	if len(scannable) != 1 || scannable[0].ID != root.ID {
@@ -263,6 +263,40 @@ func TestAutoCategoryCloudLibrariesDoNotShadowRootOrScan(t *testing.T) {
 	}
 	if len(statuses) != 1 || statuses[0].LibraryID != root.ID {
 		t.Fatalf("scan-all statuses = %#v, want only root queued", statuses)
+	}
+}
+
+func TestRootCloudLibraryIncludesHiddenAutoCategoryMedia(t *testing.T) {
+	db := newServiceTestDB(t, &model.Library{}, &model.Media{})
+	repos := repository.New(db)
+	root := model.Library{Name: "OpenList", Path: "cloud://openlist", Type: "movie", Enabled: true}
+	auto := model.Library{Name: "欧美剧", Path: BuildCloudAutoCategoryLibraryPath("openlist", "电视剧/欧美剧"), Type: "tv", Enabled: true}
+	for _, lib := range []*model.Library{&root, &auto} {
+		if err := repos.Library.Create(t.Context(), lib); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repos.DB.Create(&model.Media{
+		LibraryID: auto.ID,
+		Title:     "The Show",
+		Path:      "cloud://openlist/电视剧/欧美剧/The Show/The.Show.S01E01.mkv",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc := NewMediaService(&config.Config{}, zap.NewNop(), repos)
+
+	items, total, err := svc.ListMediaVisible(t.Context(), root.ID, 1, 20, MediaVisibility{IncludeNSFW: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(items) != 1 {
+		t.Fatalf("root cloud items total=%d len=%d, want hidden auto-category media", total, len(items))
+	}
+	if items[0].LibraryName != root.Name || items[0].LibraryPath != root.Path {
+		t.Fatalf("media library metadata = (%q, %q), want user-mounted root", items[0].LibraryName, items[0].LibraryPath)
+	}
+	if items[0].DisplayLibraryID != root.ID || items[0].DisplayLibraryPath != root.Path {
+		t.Fatalf("display library = (%q, %q), want user-mounted root", items[0].DisplayLibraryID, items[0].DisplayLibraryPath)
 	}
 }
 
