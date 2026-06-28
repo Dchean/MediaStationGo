@@ -80,6 +80,46 @@ func TestOrganizeDirectoryUsesExplicitCategoryLibraryRoot(t *testing.T) {
 	}
 }
 
+func TestOrganizeDirectoryDoesNotTargetLegacyCategoryLibrary(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "downloads", "Some.Movie.2026.1080p.mkv")
+	dest := filepath.Join(root, "media")
+	writeOrgFile(t, src, "movie")
+
+	repos := newOrganizerTestRepo(t)
+	legacyRoot := filepath.Join(dest, "电影", "外语电影")
+	currentRoot := filepath.Join(dest, "电影", "欧美电影")
+	legacyLib := model.Library{Name: "外语电影", Path: legacyRoot, Type: "movie", Enabled: true}
+	currentLib := model.Library{Name: "欧美电影", Path: currentRoot, Type: "movie", Enabled: true}
+	if err := repos.Library.Create(t.Context(), &legacyLib); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Library.Create(t.Context(), &currentLib); err != nil {
+		t.Fatal(err)
+	}
+
+	org := NewOrganizerService(&config.Config{}, zap.NewNop(), repos)
+	res, err := org.OrganizeDirectory(t.Context(), OrganizeOptions{
+		SourcePath:    src,
+		DestPath:      dest,
+		MediaType:     "movie",
+		MediaCategory: "外语电影",
+		TransferMode:  TransferCopy,
+	})
+	if err != nil {
+		t.Fatalf("organize legacy category: %v", err)
+	}
+	if res.Organized != 1 || len(res.Items) != 1 {
+		t.Fatalf("result = %+v, want one organized item", res)
+	}
+	if !pathWithin(res.Items[0].Target, currentRoot) {
+		t.Fatalf("target = %q, want current category root %q", res.Items[0].Target, currentRoot)
+	}
+	if pathWithin(res.Items[0].Target, legacyRoot) {
+		t.Fatalf("target must not use legacy category root %q", res.Items[0].Target)
+	}
+}
+
 func TestOrganizeDirectoryTreatsCategoryDestAsCollectionRoot(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "downloads", "Some.Show.S01E01.2026.1080p.mkv")
@@ -172,7 +212,7 @@ func TestOrganizeDirectoryCreatesMissingCategoryLibraryForVisibility(t *testing.
 	srcRoot := filepath.Join(root, "downloads")
 	dest := filepath.Join(root, "media")
 	source := filepath.Join(srcRoot, "Gourd.Brothers.S01E01.2026.1080p.mkv")
-	target := filepath.Join(dest, "电视剧", "未分类", "Gourd Brothers", "Season 01", "Gourd Brothers - S01E01.mkv")
+	target := filepath.Join(dest, "电视剧", "欧美剧", "Gourd Brothers", "Season 01", "Gourd Brothers - S01E01.mkv")
 	writeOrgFile(t, source, "source")
 	writeOrgFile(t, target, "already-there")
 
@@ -182,7 +222,7 @@ func TestOrganizeDirectoryCreatesMissingCategoryLibraryForVisibility(t *testing.
 		SourcePath:           srcRoot,
 		DestPath:             dest,
 		MediaType:            "tv",
-		MediaCategory:        "未分类",
+		MediaCategory:        "欧美剧",
 		TransferMode:         TransferCopy,
 		AllowReplaceExisting: false,
 	})
@@ -194,11 +234,11 @@ func TestOrganizeDirectoryCreatesMissingCategoryLibraryForVisibility(t *testing.
 	}
 
 	var lib model.Library
-	if err := repos.DB.Where("path = ?", filepath.Join(dest, "电视剧", "未分类")).First(&lib).Error; err != nil {
+	if err := repos.DB.Where("path = ?", filepath.Join(dest, "电视剧", "欧美剧")).First(&lib).Error; err != nil {
 		t.Fatalf("missing auto-created category library: %v", err)
 	}
-	if lib.Name != "未分类" || lib.Type != "tv" || !lib.Enabled {
-		t.Fatalf("auto-created library = %+v, want enabled tv 未分类", lib)
+	if lib.Name != "欧美剧" || lib.Type != "tv" || !lib.Enabled {
+		t.Fatalf("auto-created library = %+v, want enabled tv 欧美剧", lib)
 	}
 
 	scanner := NewScannerService(&config.Config{}, zap.NewNop(), repos, NewHub(zap.NewNop()), nil, nil)
@@ -231,7 +271,7 @@ func TestOrganizeDirectoryCanDisableAutoAddLibrary(t *testing.T) {
 		SourcePath:    srcRoot,
 		DestPath:      dest,
 		MediaType:     "tv",
-		MediaCategory: "未分类",
+		MediaCategory: "欧美剧",
 		TransferMode:  TransferCopy,
 	})
 	if err != nil {
@@ -240,13 +280,13 @@ func TestOrganizeDirectoryCanDisableAutoAddLibrary(t *testing.T) {
 	if res.Organized != 1 || len(res.Items) != 1 {
 		t.Fatalf("result = %+v, want one organized item", res)
 	}
-	want := filepath.Join(dest, "电视剧", "未分类", "Some Show", "Season 01", "Some Show - S01E01.mkv")
+	want := filepath.Join(dest, "电视剧", "欧美剧", "Some Show", "Season 01", "Some Show - S01E01.mkv")
 	if _, err := os.Stat(want); err != nil {
 		t.Fatalf("expected organized file at %q: %v", want, err)
 	}
 
 	var count int64
-	if err := repos.DB.Model(&model.Library{}).Where("path = ?", filepath.Join(dest, "电视剧", "未分类")).Count(&count).Error; err != nil {
+	if err := repos.DB.Model(&model.Library{}).Where("path = ?", filepath.Join(dest, "电视剧", "欧美剧")).Count(&count).Error; err != nil {
 		t.Fatal(err)
 	}
 	if count != 0 {
@@ -282,9 +322,9 @@ func TestOrganizeDirectorySmartClassifiesUncategorizedSources(t *testing.T) {
 
 	for _, want := range []string{
 		filepath.Join(dest, "电影", "华语电影", "流浪地球2 (2023)", "流浪地球2 (2023).mkv"),
-		filepath.Join(dest, "电影", "外语电影", "Dune (2021)", "Dune (2021).mkv"),
+		filepath.Join(dest, "电影", "欧美电影", "Dune (2021)", "Dune (2021).mkv"),
 		filepath.Join(dest, "电视剧", "国产剧", "狂飙", "Season 01", "狂飙 - S01E01.mkv"),
-		filepath.Join(dest, "电视剧", "未分类", "The Last Of Us", "Season 01", "The Last Of Us - S01E01.mkv"),
+		filepath.Join(dest, "电视剧", "欧美剧", "The Last Of Us", "Season 01", "The Last Of Us - S01E01.mkv"),
 	} {
 		if _, err := os.Stat(want); err != nil {
 			t.Fatalf("expected smart classified file at %q: %v; items=%+v", want, err, res.Items)

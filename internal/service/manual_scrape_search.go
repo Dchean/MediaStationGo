@@ -13,7 +13,7 @@ func (s *ScraperService) ManualSearch(ctx context.Context, media *model.Media, q
 		return nil, errors.New("media required")
 	}
 	lib, _ := s.repo.Library.FindByID(ctx, media.LibraryID)
-	queries := manualSearchQueries(media, lib, query)
+	queries := s.manualSearchQueries(ctx, media, lib, query)
 	if len(queries) == 0 {
 		return nil, errors.New("search query required")
 	}
@@ -28,7 +28,7 @@ func (s *ScraperService) ManualSearch(ctx context.Context, media *model.Media, q
 	providers := manualSearchProviderSet(provider)
 	year := mediaYearHint(media)
 	if year <= 0 {
-		_, year = CleanQuery(queries[0])
+		_, year = CleanQueryWithRecognition(ctx, s.repo, queries[0])
 	}
 
 	out := make([]ExternalMediaResult, 0, 6)
@@ -124,7 +124,7 @@ func (p manualSearchProviders) want(provider string) bool {
 	return ok
 }
 
-func manualSearchQueries(media *model.Media, lib *model.Library, query string) []string {
+func (s *ScraperService) manualSearchQueries(ctx context.Context, media *model.Media, lib *model.Library, query string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, 4)
 	add := func(value string) {
@@ -140,16 +140,16 @@ func manualSearchQueries(media *model.Media, lib *model.Library, query string) [
 		out = append(out, value)
 	}
 
-	add(query)
+	add(ApplyRecognitionWords(ctx, s.repo, query))
 	if strings.TrimSpace(query) == "" && media != nil {
 		add(firstText(media.Title, media.OriginalName))
 	}
 	if media != nil {
-		for _, candidate := range scrapeQueryCandidates(media, lib) {
+		for _, candidate := range scrapeQueryCandidatesWithRecognition(ctx, s.repo, media, lib) {
 			add(candidate)
 		}
 		if len(out) == 0 {
-			title, _ := CleanQuery(media.Path)
+			title, _ := CleanQueryWithRecognition(ctx, s.repo, media.Path)
 			add(title)
 		}
 	}

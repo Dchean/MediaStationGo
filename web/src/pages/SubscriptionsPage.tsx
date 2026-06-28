@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import { subscriptionsAPI } from '../api/subscriptions'
@@ -15,22 +16,40 @@ export function SubscriptionsPage() {
   const [formValues, setFormValues] = useState<SubscriptionFormValues>(defaultSubscriptionFormValues)
   const [editingId, setEditingId] = useState('')
   const [loading, setLoading] = useState(true)
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [listError, setListError] = useState('')
+  const [historyError, setHistoryError] = useState('')
 
   const refresh = async () => {
     setLoading(true)
-    void subscriptionsAPI
+    setHistoryLoading(true)
+    setListError('')
+    setHistoryError('')
+
+    const historyPromise = subscriptionsAPI
       .history()
-      .then(setHistoryItems)
-      .catch(() => toast.error('订阅历史加载失败'))
+      .then((history) => {
+        setHistoryItems(history)
+      })
+      .catch((err: unknown) => {
+        const msg = apiErrorMessage(err, '订阅历史加载失败')
+        setHistoryError(msg)
+        toast.error(msg)
+      })
+      .finally(() => setHistoryLoading(false))
 
     try {
       const active = await subscriptionsAPI.list()
       setItems(active)
-    } catch {
-      toast.error('订阅列表加载失败')
+    } catch (err: unknown) {
+      const msg = apiErrorMessage(err, '订阅列表加载失败')
+      setListError(msg)
+      setItems([])
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
+    await historyPromise
   }
 
   useEffect(() => {
@@ -69,8 +88,7 @@ export function SubscriptionsPage() {
       resetForm()
       await refresh()
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? '创建失败'
+      const msg = apiErrorMessage(err, '创建失败')
       toast.error(msg)
     }
   }
@@ -117,21 +135,30 @@ export function SubscriptionsPage() {
       }
       await refresh()
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || '恢复订阅失败'
+      const msg = apiErrorMessage(err, '恢复订阅失败')
       toast.error(msg)
     }
   }
 
   const runSubscriptionNow = async (subscription: Subscription) => {
-    const result = await subscriptionsAPI.runNow(subscription.id)
-    toast.success(`已加入 ${result.queued} 项`)
+    try {
+      const result = await subscriptionsAPI.runNow(subscription.id)
+      toast.success(`已加入 ${result.queued} 项`)
+      await refresh()
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, '运行订阅失败'))
+    }
   }
 
   const removeSubscription = async (subscription: Subscription) => {
     if (!(await confirmAction({ title: '删除订阅', message: `删除订阅「${subscription.name}」?`, confirmText: '删除' }))) return
-    await subscriptionsAPI.remove(subscription.id)
-    toast.success('已删除')
-    await refresh()
+    try {
+      await subscriptionsAPI.remove(subscription.id)
+      toast.success('已删除')
+      await refresh()
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, '删除失败'))
+    }
   }
 
   return (
@@ -149,10 +176,24 @@ export function SubscriptionsPage() {
         onChange={updateFormValue}
       />
 
-      {loading && <p className="text-sand-500">加载中…</p>}
-      {!loading && items.length === 0 && <p className="text-ink-50">暂无订阅。</p>}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-xl font-semibold text-ink-600">正在订阅</h2>
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-xl border border-primary-400/40 bg-white px-3 py-2 text-xs font-semibold text-brand-500 hover:bg-primary-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => refresh().catch(() => undefined)}
+          disabled={loading || historyLoading}
+        >
+          <RefreshCw size={14} className={loading || historyLoading ? 'animate-spin' : ''} />
+          刷新
+        </button>
+      </div>
 
-      {items.length > 0 && (
+      {loading && <p className="text-sand-500">加载中…</p>}
+      {!loading && listError && <SubscriptionLoadError message={listError} onRetry={refresh} />}
+      {!loading && !listError && items.length === 0 && <p className="text-ink-50">暂无订阅。</p>}
+
+      {!listError && items.length > 0 && (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((subscription) => (
             <SubscriptionCard
@@ -166,7 +207,42 @@ export function SubscriptionsPage() {
         </div>
       )}
 
-      <SubscriptionHistorySection subscriptions={historyItems} onRestore={restoreHistorySubscription} />
+      <SubscriptionHistorySection
+        subscriptions={historyItems}
+        loading={historyLoading}
+        error={historyError}
+        onRefresh={refresh}
+        onRestore={restoreHistorySubscription}
+      />
     </div>
   )
+}
+
+function SubscriptionLoadError({ message, onRetry }: { message: string; onRetry: () => Promise<void> }) {
+  return (
+    <div className="rounded-2xl border border-red-300/70 bg-red-50 px-4 py-3 text-sm text-red-700">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <AlertTriangle size={16} className="shrink-0" />
+          <span className="break-words">订阅列表加载失败：{message}</span>
+        </div>
+        <button
+          type="button"
+          className="rounded-xl border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
+          onClick={() => onRetry().catch(() => undefined)}
+        >
+          重试
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function apiErrorMessage(err: unknown, fallback: string): string {
+  const data = (err as { response?: { data?: { error?: string; message?: string }; status?: number } })?.response
+  if (data?.data?.error) return data.data.error
+  if (data?.data?.message) return data.data.message
+  if (data?.status) return `${fallback} (${data.status})`
+  if ((err as { code?: string })?.code === 'ECONNABORTED') return '请求超时，请检查服务或网络'
+  return fallback
 }

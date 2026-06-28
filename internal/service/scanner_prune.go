@@ -131,6 +131,31 @@ func (s *ScannerService) pruneMissingCloudMedia(ctx context.Context, libraryID s
 	return s.pruneMissingCloudMediaForLibraries(ctx, []string{libraryID}, seen)
 }
 
+func (s *ScannerService) pruneMissingCloudMediaForRoot(ctx context.Context, libraryID, rootID string, seen map[string]struct{}) (int64, error) {
+	if strings.TrimSpace(libraryID) == "" || strings.TrimSpace(rootID) == "" {
+		return 0, nil
+	}
+	var rows []struct {
+		ID   string
+		Path string
+	}
+	if err := s.repo.DB.WithContext(ctx).
+		Model(&model.Media{}).
+		Select("id, path").
+		Where("library_id = ? AND library_root_id = ? AND path LIKE ?", libraryID, rootID, "cloud://%").
+		Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	stale := make([]string, 0)
+	for _, row := range rows {
+		if _, ok := seen[row.Path]; ok {
+			continue
+		}
+		stale = append(stale, row.ID)
+	}
+	return s.deleteMediaByIDs(ctx, stale, true)
+}
+
 func (s *ScannerService) pruneMissingCloudMediaForLibraries(ctx context.Context, libraryIDs []string, seen map[string]struct{}) (int64, error) {
 	if len(libraryIDs) == 0 {
 		return 0, nil

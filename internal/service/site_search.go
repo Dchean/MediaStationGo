@@ -102,28 +102,10 @@ func (s *SiteService) Search(ctx context.Context, keyword string) ([]SearchResul
 			if result == nil {
 				return
 			}
-			items := result.Items
-			if items == nil {
-				items = []TorrentItem{}
-			}
-			for _, item := range items {
-				mu.Lock()
-				results = append(results, SearchResult{
-					SiteName:      site.Name,
-					SiteID:        site.ID,
-					Title:         item.Title,
-					Subtitle:      item.Subtitle,
-					TorrentURL:    item.DetailURL,
-					DownloadURL:   item.DownloadURL,
-					Category:      item.Category,
-					SearchKeyword: keyword,
-					Size:          item.Size,
-					Seeders:       item.Seeders,
-					Leechers:      item.Leechers,
-					Free:          item.Free,
-				})
-				mu.Unlock()
-			}
+			siteResults := siteSearchResultsFromItems(site, result, keyword)
+			mu.Lock()
+			results = append(results, siteResults...)
+			mu.Unlock()
 		}(sites[i])
 	}
 	wg.Wait()
@@ -151,4 +133,84 @@ func (s *SiteService) Search(ctx context.Context, keyword string) ([]SearchResul
 		return results, fmt.Errorf("all enabled sites failed while searching %q: %s", keyword, strings.Join(failures, "; "))
 	}
 	return results, nil
+}
+
+// SearchSite runs a keyword search against one configured site, regardless of
+// whether the site is enabled globally. This is used by per-site diagnostics in
+// the management UI, where the user expects the selected site to be tested
+// directly instead of a full fan-out followed by filtering.
+func (s *SiteService) SearchSite(ctx context.Context, siteID, keyword string, page int) ([]SearchResult, error) {
+	if strings.TrimSpace(keyword) == "" {
+		return []SearchResult{}, nil
+	}
+	if page <= 0 {
+		page = 1
+	}
+	site, err := s.FindByID(ctx, siteID)
+	if err != nil {
+		return nil, err
+	}
+	if site == nil {
+		return nil, fmt.Errorf("site not found")
+	}
+	adapter := NewSiteAdapter(site)
+	if adapter == nil {
+		return nil, fmt.Errorf("%s: unsupported site type %s", site.Name, site.Type)
+	}
+	cfg := s.siteModelToConfig(site)
+	timeout := time.Duration(site.Timeout) * time.Second
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	result, err := adapter.Search(ctxWithTimeout, cfg, keyword, page)
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("single site search failed",
+				zap.String("site", site.Name),
+				zap.String("type", site.Type),
+				zap.String("url", site.URL),
+				zap.String("keyword", keyword),
+				zap.Duration("timeout", timeout),
+				zap.Error(err))
+		}
+		return nil, err
+	}
+	out := siteSearchResultsFromItems(*site, result, keyword)
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Seeders > out[j].Seeders
+	})
+	if s.log != nil {
+		s.log.Info("single site search completed",
+			zap.String("site", site.Name),
+			zap.String("keyword", keyword),
+			zap.Int("results_count", len(out)))
+	}
+	return out, nil
+}
+
+func siteSearchResultsFromItems(site model.Site, result *SiteSearchResult, keyword string) []SearchResult {
+	if result == nil || len(result.Items) == 0 {
+		return []SearchResult{}
+	}
+	out := make([]SearchResult, 0, len(result.Items))
+	for _, item := range result.Items {
+		out = append(out, SearchResult{
+			SiteName:      site.Name,
+			SiteID:        site.ID,
+			Title:         item.Title,
+			Subtitle:      item.Subtitle,
+			TorrentURL:    item.DetailURL,
+			DownloadURL:   item.DownloadURL,
+			Category:      item.Category,
+			SearchKeyword: keyword,
+			Size:          item.Size,
+			Seeders:       item.Seeders,
+			Leechers:      item.Leechers,
+			Free:          item.Free,
+		})
+	}
+	return out
 }

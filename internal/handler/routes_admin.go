@@ -25,6 +25,7 @@ func registerAdminRoutes(api *gin.RouterGroup, cfg *config.Config, svc *service.
 	registerAdminRepairRoutes(admin, svc)
 	registerAdminAPIConfigRoutes(admin, svc)
 	registerAdminSchedulerRoutes(admin, svc)
+	registerAdminRecognitionWordRoutes(admin, svc)
 }
 
 func registerAdminUserRoutes(admin *gin.RouterGroup, svc *service.Container) {
@@ -129,4 +130,11 @@ func registerAdminAPIConfigRoutes(admin *gin.RouterGroup, svc *service.Container
 func registerAdminSchedulerRoutes(admin *gin.RouterGroup, svc *service.Container) {
 	admin.GET("/scheduler", schedulerStatusHandler(svc))
 	admin.POST("/scheduler/:name/run", schedulerRunHandler(svc))
+}
+
+func registerAdminRecognitionWordRoutes(admin *gin.RouterGroup, svc *service.Container) {
+	admin.GET("/recognition-words", getRecognitionWordsHandler(svc))
+	admin.PUT("/recognition-words", saveRecognitionWordsHandler(svc))
+	admin.POST("/recognition-words/sync", syncRecognitionWordsHandler(svc))
+	admin.POST("/recognition-words/test", testRecognitionWordsHandler(svc))
 }

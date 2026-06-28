@@ -42,6 +42,9 @@ export function suggestedSTRMOutputDir(root: string, library: Library) {
   const base = trimPath(root)
   const subdir = strmLibraryOutputSubdir(library)
   if (!subdir) return base
+  if (pathEndsWith(base, subdir) || pathEndsWith(base, pathBase(subdir))) return base
+  const tail = missingCategoryTail(base, subdir)
+  if (tail) return joinPath(base, tail)
   return joinPath(base || 'data/strm', subdir)
 }
 
@@ -77,7 +80,7 @@ function categoryPartsFromPath(parts: string[]) {
     const root = canonicalRoot(part)
     if (root) return [root, ...parts.slice(index + 1)]
     const categoryRoot = categoryRootFor(part)
-    if (categoryRoot) return [categoryRoot, part]
+    if (categoryRoot) return [categoryRoot, canonicalCategory(part)]
   }
   return null
 }
@@ -124,11 +127,32 @@ function canonicalRoot(part: string) {
 
 function categoryRootFor(part: string) {
   const key = part.trim().toLowerCase()
-  if (['动画电影', '动漫电影', '华语电影', '国产电影', '外语电影', '欧美电影', '日韩电影'].includes(key)) return '电影'
-  if (['国产剧', '欧美剧', '日韩剧', '日剧', '韩剧', '综艺', '真人秀', '纪录片', '纪录', '未分类'].includes(key)) return '电视剧'
-  if (['国漫', '国产动漫', '日番', '番剧', '日漫', '日本动漫', '日本动画', '欧美动漫', '欧美动画', '西方动画', '儿童', '少儿'].includes(key)) return '动漫'
+  if (['演唱会', '音乐会', '纪录片', '纪录', '动画电影', '动漫电影', '华语电影', '国产电影', '外语电影', '外国电影', '欧美电影', '日韩电影', '日本电影', '韩国电影'].includes(key)) return '电影'
+  if (['国产剧', '欧美剧', '日韩剧', '日剧', '韩剧', '综艺', '真人秀', '儿童', '少儿', '未分类'].includes(key)) return '电视剧'
+  if (['国漫', '国产动漫', '日番', '番剧', '日漫', '日本动漫', '日本动画', '韩漫', '韩国动漫', '韩国动画', '美漫', '欧美动漫', '欧美动画', '西方动画', '其他', '其他动漫', '其它动漫'].includes(key)) return '动漫'
   if (key === '番号') return '成人'
   return ''
+}
+
+function canonicalCategory(part: string) {
+  const key = part.trim().toLowerCase()
+  if (key === '音乐会') return '演唱会'
+  if (key === '纪录') return '纪录片'
+  if (key === '动漫电影') return '动画电影'
+  if (key === '国产电影') return '华语电影'
+  if (key === '外语电影' || key === '外国电影') return '欧美电影'
+  if (key === '日本电影' || key === '韩国电影') return '日韩电影'
+  if (key === '日剧' || key === '韩剧') return '日韩剧'
+  if (key === '真人秀') return '综艺'
+  if (key === '少儿') return '儿童'
+  if (key === '未分类') return '欧美剧'
+  if (key === '国产动漫') return '国漫'
+  if (['番剧', '日漫', '日本动漫', '日本动画'].includes(key)) return '日番'
+  if (key === '韩国动漫' || key === '韩国动画') return '韩漫'
+  if (['欧美动漫', '欧美动画', '西方动画'].includes(key)) return '美漫'
+  if (key === '其他动漫' || key === '其它动漫') return '其他'
+  if (key === '番号') return '成人'
+  return part.trim()
 }
 
 function splitPath(raw: string) {
@@ -151,6 +175,23 @@ function stripLibraryCategoryAfterSTRMRoot(raw: string) {
 
 function joinPath(root: string, ...parts: string[]) {
   return [trimPath(root), ...parts.map(trimPath)].filter(Boolean).join('/')
+}
+
+function missingCategoryTail(base: string, subdir: string) {
+  const parts = splitPath(subdir)
+  if (parts.length < 2 || !pathEndsWith(base, parts[0])) return ''
+  return joinPath('', ...parts.slice(1))
+}
+
+function pathEndsWith(pathValue: string, suffix: string) {
+  const path = trimPath(pathValue).toLowerCase()
+  const tail = trimPath(suffix).toLowerCase()
+  return !!path && !!tail && (path === tail || path.endsWith(`/${tail}`))
+}
+
+function pathBase(pathValue: string) {
+  const parts = splitPath(pathValue)
+  return parts[parts.length - 1] || ''
 }
 
 function trimPath(raw: string) {

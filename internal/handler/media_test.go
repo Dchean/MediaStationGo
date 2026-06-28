@@ -95,7 +95,7 @@ func TestListLibrariesIncludeHiddenNormalizesCloudDisplayNames(t *testing.T) {
 	}
 }
 
-func TestListLibrariesIncludeHiddenHidesInternalAutoCategoryLibraries(t *testing.T) {
+func TestListLibrariesShowsAutoCategoryLibraries(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -118,8 +118,32 @@ func TestListLibrariesIncludeHiddenHidesInternalAutoCategoryLibraries(t *testing
 	}
 
 	all := requestLibraries(t, svc, "admin", "admin", "/api/libraries?include_hidden=1")
-	if len(all) != 1 || all[0].ID != root.ID {
-		t.Fatalf("include_hidden list = %#v, want only user-mounted cloud library", all)
+	if len(all) != 2 {
+		t.Fatalf("include_hidden list = %#v, want root plus auto category library", all)
+	}
+	ids := map[string]bool{}
+	for _, lib := range all {
+		ids[lib.ID] = true
+	}
+	if !ids[root.ID] || !ids[auto.ID] {
+		t.Fatalf("include_hidden list = %#v, want root %s and auto category %s", all, root.ID, auto.ID)
+	}
+
+	visible := requestLibraries(t, svc, "user-1", "user", "/api/libraries")
+	if len(visible) != 2 {
+		t.Fatalf("visible list = %#v, want root plus auto category library", visible)
+	}
+	ids = map[string]bool{}
+	for _, lib := range visible {
+		ids[lib.ID] = true
+	}
+	if !ids[root.ID] || !ids[auto.ID] {
+		t.Fatalf("visible list = %#v, want root %s and auto category %s", visible, root.ID, auto.ID)
+	}
+
+	got := requestLibrary(t, svc, "user-1", "user", "/api/libraries/"+auto.ID, auto.ID)
+	if got.ID != auto.ID || got.Name != auto.Name {
+		t.Fatalf("auto category detail = %#v, want accessible category library", got)
 	}
 }
 

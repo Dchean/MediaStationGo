@@ -190,7 +190,7 @@ func TestOrganizeDirectoryMovieMetadataOverridesWrongTVFolder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("organize directory: %v", err)
 	}
-	want := filepath.Join(dest, "电影", "外语电影", "杀的就是你 (2026)", "杀的就是你 (2026).mkv")
+	want := filepath.Join(dest, "电影", "欧美电影", "杀的就是你 (2026)", "杀的就是你 (2026).mkv")
 	if res.Organized != 1 || res.Reclassified != 0 {
 		t.Fatalf("result = %+v, want organized movie only; paths=%v", res, paths)
 	}
@@ -200,8 +200,8 @@ func TestOrganizeDirectoryMovieMetadataOverridesWrongTVFolder(t *testing.T) {
 	if len(paths) == 0 || paths[0] != "/search/movie" {
 		t.Fatalf("first metadata search path = %q, want /search/movie; all=%v", firstQuery(paths), paths)
 	}
-	if len(res.Items) != 1 || res.Items[0].MediaType != "movie" || res.Items[0].Category != "外语电影" {
-		t.Fatalf("organize item = %#v, want movie/外语电影", res.Items)
+	if len(res.Items) != 1 || res.Items[0].MediaType != "movie" || res.Items[0].Category != "欧美电影" {
+		t.Fatalf("organize item = %#v, want movie/欧美电影", res.Items)
 	}
 }
 
@@ -238,7 +238,7 @@ func TestOrganizeDirectoryReclassifiesMovieFromDirtyGeneratedEpisodePath(t *test
 	root := t.TempDir()
 	dest := filepath.Join(root, "media")
 	euusLib := model.Library{Name: "欧美剧", Path: filepath.Join(dest, "电视剧", "欧美剧"), Type: "tv", Enabled: true}
-	foreignMovieLib := model.Library{Name: "外语电影", Path: filepath.Join(dest, "电影", "外语电影"), Type: "movie", Enabled: true}
+	foreignMovieLib := model.Library{Name: "欧美电影", Path: filepath.Join(dest, "电影", "欧美电影"), Type: "movie", Enabled: true}
 	if err := repos.Library.Create(t.Context(), &euusLib); err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +477,7 @@ func TestOrganizeDirectoryEpisodeMarkerOverridesMovieSourceFolder(t *testing.T) 
 	root := t.TempDir()
 	srcRoot := filepath.Join(root, "downloads")
 	dest := filepath.Join(root, "media")
-	sourceFile := filepath.Join(srcRoot, "外语电影", "The.Last.of.Us.S01E01.2023.1080p.mkv")
+	sourceFile := filepath.Join(srcRoot, "欧美电影", "The.Last.of.Us.S01E01.2023.1080p.mkv")
 	writeOrgFile(t, sourceFile, "episode")
 
 	organizer := NewOrganizerService(cfg, zap.NewNop(), repos)

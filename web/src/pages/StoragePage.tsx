@@ -67,10 +67,11 @@ export function StoragePage() {
         <summary className="cursor-pointer list-none font-display text-lg font-semibold text-ink-600">
           低频维护入口 <span className="text-xs font-normal text-sand-500">（点击展开）</span>
         </summary>
-        <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-6">
           <MaintenanceLink to="/strm" title="STRM 生成" />
           <MaintenanceLink to="/scheduler" title="定时任务" />
           <MaintenanceLink to="/tasks" title="任务队列" />
+          <MaintenanceLink to="/stats" title="运行状态" />
           <MaintenanceLink to="/notify-channels" title="通知渠道" />
           <MaintenanceLink to="/assistant" title="AI 对话台" />
         </div>

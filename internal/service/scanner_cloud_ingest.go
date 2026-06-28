@@ -10,10 +10,10 @@ import (
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 )
 
-func (s *ScannerService) ingestCloudFile(ctx context.Context, lib *model.Library, typ, ref, path, name string, size int64, localMeta *LocalMetadata, existingMedia map[string]existingCloudMedia, writeBatch *localMediaWriteBatch, probeBudget *int, res *ScanResult) {
+func (s *ScannerService) ingestCloudFile(ctx context.Context, lib *model.Library, rootID, typ, ref, path, name string, size int64, localMeta *LocalMetadata, existingMedia map[string]existingCloudMedia, writeBatch *localMediaWriteBatch, probeBudget *int, res *ScanResult) {
 	res.Visited++
 	ext := strings.ToLower(filepath.Ext(name))
-	title, year := CleanQuery(name)
+	title, year := CleanQueryWithRecognition(ctx, s.repo, name)
 	if title == "" {
 		title = strings.TrimSuffix(filepath.Base(name), ext)
 	}
@@ -31,16 +31,17 @@ func (s *ScannerService) ingestCloudFile(ctx context.Context, lib *model.Library
 	}
 	expectedSTRMURL := BuildRelativeCloudPlayURL(typ, ref)
 	m := &model.Media{
-		LibraryID:    lib.ID,
-		Title:        title,
-		Year:         year,
-		Path:         path,
-		SizeBytes:    size,
-		Container:    strings.TrimPrefix(ext, "."),
-		STRMURL:      expectedSTRMURL,
-		ScrapeStatus: "pending",
-		SeasonNum:    parsedSeason,
-		EpisodeNum:   parsedEpisode,
+		LibraryID:     lib.ID,
+		LibraryRootID: strings.TrimSpace(rootID),
+		Title:         title,
+		Year:          year,
+		Path:          path,
+		SizeBytes:     size,
+		Container:     strings.TrimPrefix(ext, "."),
+		STRMURL:       expectedSTRMURL,
+		ScrapeStatus:  "pending",
+		SeasonNum:     parsedSeason,
+		EpisodeNum:    parsedEpisode,
 	}
 	if ext == ".strm" {
 		if targetURL, err := s.resolveCloudSTRMTarget(ctx, typ, ref); err == nil && targetURL != "" {

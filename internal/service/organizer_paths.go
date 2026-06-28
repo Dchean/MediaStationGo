@@ -26,10 +26,71 @@ func (o *OrganizerService) organizeRoot(libraryPath, mediaType, category string)
 }
 
 func (o *OrganizerService) mediaTypeRootDirForCategory(mediaType, category string) string {
+	if root := o.categoryPhysicalRootDirForType(mediaType, category); root != "" {
+		return root
+	}
 	if root := o.categoryPhysicalRootDir(category); root != "" {
 		return root
 	}
 	return mediaTypeRootDir(mediaType)
+}
+
+func (o *OrganizerService) categoryPhysicalRootDirForType(mediaType, category string) string {
+	key := normalizeOrganizeCategoryKey(category)
+	if key == "" {
+		return ""
+	}
+	categories := o.categoryMap()
+	match := func(values ...string) bool {
+		for _, value := range values {
+			if key == normalizeOrganizeCategoryKey(value) {
+				return true
+			}
+		}
+		return false
+	}
+	switch normalizeMediaType(mediaType, "", "") {
+	case "movie":
+		if match(
+			categoryName(categories, "concert_movie", "演唱会"),
+			categoryName(categories, "documentary_movie", "纪录片"),
+			categoryName(categories, "animation_movie", "动画电影"),
+			categoryName(categories, "chinese_movie", "华语电影"),
+			categoryName(categories, "euus_movie", "欧美电影"),
+			categoryName(categories, "jk_movie", "日韩电影"),
+			"演唱会", "音乐会", "纪录片", "纪录", "动画电影", "动漫电影", "华语电影", "国产电影", "外语电影", "外国电影", "欧美电影", "日韩电影",
+		) {
+			return "电影"
+		}
+	case "tv", "variety":
+		if match(
+			categoryName(categories, "domestic_tv", "国产剧"),
+			categoryName(categories, "euus_tv", "欧美剧"),
+			categoryName(categories, "jk_tv", "日韩剧"),
+			categoryName(categories, "variety", "综艺"),
+			categoryName(categories, "documentary", "纪录片"),
+			categoryName(categories, "children", "儿童"),
+			"国产剧", "欧美剧", "日韩剧", "日剧", "韩剧", "综艺", "真人秀", "纪录片", "纪录", "儿童", "少儿", "未分类",
+		) {
+			return "电视剧"
+		}
+	case "anime":
+		if match(
+			categoryName(categories, "cn_anime", "国漫"),
+			categoryName(categories, "jp_anime", "日番"),
+			categoryName(categories, "kr_anime", "韩漫"),
+			categoryName(categories, "us_anime", "美漫"),
+			categoryName(categories, "other_anime", "其他"),
+			"国漫", "国产动漫", "日番", "番剧", "日漫", "日本动漫", "日本动画", "韩漫", "韩国动漫", "美漫", "欧美动漫", "欧美动画", "西方动画", "其他", "其他动漫", "其它动漫",
+		) {
+			return "动漫"
+		}
+	case "adult":
+		if match(categoryName(categories, "adult", "成人"), "成人", "9kg", "番号", "jav") {
+			return "成人"
+		}
+	}
+	return ""
 }
 
 func (o *OrganizerService) categoryPhysicalRootDir(category string) string {
@@ -50,9 +111,10 @@ func (o *OrganizerService) categoryPhysicalRootDir(category string) string {
 	case match(
 		categoryName(categories, "cn_anime", "国漫"),
 		categoryName(categories, "jp_anime", "日番"),
-		categoryName(categories, "euus_anime", "欧美动漫"),
-		categoryName(categories, "children", "儿童"),
-		"国漫", "国产动漫", "日番", "番剧", "日漫", "日本动漫", "日本动画", "欧美动漫", "欧美动画", "西方动画", "儿童", "少儿",
+		categoryName(categories, "kr_anime", "韩漫"),
+		categoryName(categories, "us_anime", "美漫"),
+		categoryName(categories, "other_anime", "其他"),
+		"国漫", "国产动漫", "日番", "番剧", "日漫", "日本动漫", "日本动画", "韩漫", "韩国动漫", "美漫", "欧美动漫", "欧美动画", "西方动画", "其他", "其他动漫", "其它动漫",
 	):
 		return "动漫"
 	case match(
@@ -61,20 +123,21 @@ func (o *OrganizerService) categoryPhysicalRootDir(category string) string {
 		categoryName(categories, "jk_tv", "日韩剧"),
 		categoryName(categories, "variety", "综艺"),
 		categoryName(categories, "documentary", "纪录片"),
-		categoryName(categories, "uncategorized_tv", "未分类"),
-		"国产剧", "欧美剧", "日韩剧", "日剧", "韩剧", "综艺", "真人秀", "纪录片", "纪录", "未分类",
+		categoryName(categories, "children", "儿童"),
+		"国产剧", "欧美剧", "日韩剧", "日剧", "韩剧", "综艺", "真人秀", "纪录片", "纪录", "儿童", "少儿", "未分类",
 	):
 		return "电视剧"
 	case match(
+		categoryName(categories, "concert_movie", "演唱会"),
+		categoryName(categories, "documentary_movie", "纪录片"),
 		categoryName(categories, "animation_movie", "动画电影"),
 		categoryName(categories, "chinese_movie", "华语电影"),
-		categoryName(categories, "foreign_movie", "外语电影"),
 		categoryName(categories, "euus_movie", "欧美电影"),
 		categoryName(categories, "jk_movie", "日韩电影"),
-		"动画电影", "动漫电影", "华语电影", "国产电影", "外语电影", "欧美电影", "日韩电影",
+		"演唱会", "音乐会", "动画电影", "动漫电影", "华语电影", "国产电影", "外语电影", "外国电影", "欧美电影", "日韩电影",
 	):
 		return "电影"
-	case match(categoryName(categories, "adult", "成人"), categoryName(categories, "adult_9kg", "9KG"), categoryName(categories, "adult_jav", "番号"), "成人", "9kg", "番号", "jav"):
+	case match(categoryName(categories, "adult", "成人"), "成人", "9kg", "番号", "jav"):
 		return "成人"
 	default:
 		return ""

@@ -106,24 +106,46 @@ func (o *OrganizerService) directoryCategoryTypes() map[string]organizeDirectory
 		add(fallback, mediaType)
 		add(categoryName(categories, key, fallback), mediaType)
 	}
+	addAlias := func(alias, canonicalKey, fallback, mediaType string) {
+		alias = strings.TrimSpace(alias)
+		if alias == "" {
+			return
+		}
+		out[strings.ToLower(alias)] = organizeDirectoryLayout{
+			MediaType: mediaType,
+			Category:  categoryName(categories, canonicalKey, fallback),
+		}
+	}
+	addConfigured("concert_movie", "演唱会", "movie")
+	addConfigured("documentary_movie", "纪录片", "movie")
 	addConfigured("animation_movie", "动画电影", "movie")
 	addConfigured("chinese_movie", "华语电影", "movie")
 	addConfigured("jk_movie", "日韩电影", "movie")
 	addConfigured("euus_movie", "欧美电影", "movie")
-	addConfigured("foreign_movie", "外语电影", "movie")
+	addAlias("外语电影", "euus_movie", "欧美电影", "movie")
+	addAlias("外国电影", "euus_movie", "欧美电影", "movie")
 	addConfigured("domestic_tv", "国产剧", "tv")
 	addConfigured("euus_tv", "欧美剧", "tv")
 	addConfigured("jk_tv", "日韩剧", "tv")
 	addConfigured("cn_anime", "国漫", "anime")
 	addConfigured("jp_anime", "日番", "anime")
-	addConfigured("euus_anime", "欧美动漫", "anime")
+	addConfigured("kr_anime", "韩漫", "anime")
+	addConfigured("us_anime", "美漫", "anime")
+	addConfigured("other_anime", "其他", "anime")
+	addAlias("欧美动漫", "us_anime", "美漫", "anime")
+	addAlias("欧美动画", "us_anime", "美漫", "anime")
+	addAlias("西方动画", "us_anime", "美漫", "anime")
+	addAlias("其他动漫", "other_anime", "其他", "anime")
+	addAlias("其它动漫", "other_anime", "其他", "anime")
 	addConfigured("variety", "综艺", "variety")
 	addConfigured("documentary", "纪录片", "tv")
 	addConfigured("children", "儿童", "tv")
-	addConfigured("uncategorized_tv", "未分类", "tv")
+	addAlias("未分类", "euus_tv", "欧美剧", "tv")
+	addAlias("uncategorized", "euus_tv", "欧美剧", "tv")
 	addConfigured("adult", "成人", "adult")
-	addConfigured("adult_9kg", "9KG", "adult")
-	addConfigured("adult_jav", "番号", "adult")
+	addAlias("9KG", "adult", "成人", "adult")
+	addAlias("番号", "adult", "成人", "adult")
+	addAlias("JAV", "adult", "成人", "adult")
 	return out
 }
 

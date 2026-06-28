@@ -194,7 +194,7 @@ func TestReclassifyMisclassifiedMediaMovesWesternAnimationToWesternAnimeLibrary(
 	root := t.TempDir()
 	dest := filepath.Join(root, "media")
 	jpAnimeLib := model.Library{Name: "日番", Path: filepath.Join(dest, "动漫", "日番"), Type: "anime", Enabled: true}
-	westernAnimeLib := model.Library{Name: "欧美动漫", Path: filepath.Join(dest, "动漫", "欧美动漫"), Type: "anime", Enabled: true}
+	westernAnimeLib := model.Library{Name: "美漫", Path: filepath.Join(dest, "动漫", "美漫"), Type: "anime", Enabled: true}
 	for _, lib := range []*model.Library{&jpAnimeLib, &westernAnimeLib} {
 		if err := repos.Library.Create(t.Context(), lib); err != nil {
 			t.Fatal(err)

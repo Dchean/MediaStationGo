@@ -16,6 +16,7 @@ const TYPE_ICONS: Record<string, ReactNode> = {
   anime: <PlayCircle size={18} />,
   variety: <Tv size={18} />,
   music: <Music size={18} />,
+  adult: <Film size={18} />,
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -24,6 +25,7 @@ const TYPE_LABELS: Record<string, string> = {
   anime: '动漫',
   variety: '综艺',
   music: '音乐',
+  adult: '成人',
 }
 
 export function LibrariesHeader({

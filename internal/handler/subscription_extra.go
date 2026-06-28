@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 	"github.com/ShukeBta/MediaStationGo/internal/service"
@@ -56,9 +57,17 @@ func updateSubscriptionHandler(svc *service.Container) gin.HandlerFunc {
 			Model(&model.Subscription{}).
 			Where("id = ?", c.Param("id")).
 			Updates(updates).Error; err != nil {
+			logSubscriptionWarn(svc, "subscription update failed",
+				zap.String("user_id", subscriptionRequestUserID(c)),
+				zap.String("subscription_id", c.Param("id")),
+				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		logSubscriptionInfo(svc, "subscription updated",
+			zap.String("user_id", subscriptionRequestUserID(c)),
+			zap.String("subscription_id", c.Param("id")),
+			zap.Strings("fields", subscriptionUpdateFieldNames(updates)))
 		c.Status(http.StatusNoContent)
 	}
 }
@@ -144,6 +153,14 @@ func subscriptionPatchUpdates(patch subscriptionPatchReq) map[string]any {
 		updates["enabled"] = *patch.Enabled
 	}
 	return updates
+}
+
+func subscriptionUpdateFieldNames(updates map[string]any) []string {
+	names := make([]string, 0, len(updates))
+	for name := range updates {
+		names = append(names, name)
+	}
+	return names
 }
 
 // searchSubscriptionHandler runs a one-off keyword search against the

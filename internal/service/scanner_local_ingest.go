@@ -136,7 +136,7 @@ type localScanMediaInput struct {
 }
 
 func (s *ScannerService) buildLocalScanMedia(in localScanMediaInput) *model.Media {
-	title, year := CleanQuery(in.path)
+	title, year := CleanQueryWithRecognition(context.Background(), s.repo, in.path)
 	if title == "" {
 		title = strings.TrimSuffix(filepath.Base(in.path), in.ext)
 	}

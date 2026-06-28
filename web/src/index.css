@@ -98,20 +98,54 @@ body {
 :root[data-theme='dark'] .bg-white,
 :root[data-theme='dark'] .bg-gray-50,
 :root[data-theme='dark'] .bg-gray-50\/50,
+:root[data-theme='dark'] .bg-gray-50\/60,
 :root[data-theme='dark'] .bg-gray-50\/70,
+:root[data-theme='dark'] .bg-gray-50\/80,
+:root[data-theme='dark'] .bg-gray-50\/90,
+:root[data-theme='dark'] .bg-white\/50,
+:root[data-theme='dark'] .bg-white\/60,
+:root[data-theme='dark'] .bg-white\/70,
+:root[data-theme='dark'] .bg-white\/75,
 :root[data-theme='dark'] .bg-white\/80,
 :root[data-theme='dark'] .bg-white\/82,
-:root[data-theme='dark'] .bg-white\/85 {
+:root[data-theme='dark'] .bg-white\/85,
+:root[data-theme='dark'] .bg-white\/90,
+:root[data-theme='dark'] .bg-white\/95 {
   background-color: var(--app-panel) !important;
 }
 
 :root[data-theme='dark'] .bg-gray-100,
-:root[data-theme='dark'] .bg-gray-100\/50 {
+:root[data-theme='dark'] .bg-gray-100\/50,
+:root[data-theme='dark'] .bg-gray-100\/60,
+:root[data-theme='dark'] .bg-gray-100\/70,
+:root[data-theme='dark'] .bg-gray-100\/80 {
   background-color: var(--app-hover) !important;
+}
+
+:root[data-theme='dark'] .bg-brand-50,
+:root[data-theme='dark'] .bg-primary-400\/10,
+:root[data-theme='dark'] .bg-primary-400\/15,
+:root[data-theme='dark'] .bg-primary-400\/20,
+:root[data-theme='dark'] .bg-sand-50,
+:root[data-theme='dark'] .bg-amber-50,
+:root[data-theme='dark'] .bg-yellow-50,
+:root[data-theme='dark'] .bg-emerald-50,
+:root[data-theme='dark'] .bg-green-50,
+:root[data-theme='dark'] .bg-red-50 {
+  background-color: var(--app-control-bg) !important;
 }
 
 :root[data-theme='dark'] .bg-\[\#f9fafb\] {
   background-color: var(--app-bg) !important;
+}
+
+:root[data-theme='dark'] .hover\:bg-gray-50:hover,
+:root[data-theme='dark'] .hover\:bg-gray-50\/50:hover,
+:root[data-theme='dark'] .hover\:bg-gray-100:hover,
+:root[data-theme='dark'] .hover\:bg-brand-50:hover,
+:root[data-theme='dark'] .hover\:bg-primary-400\/10:hover,
+:root[data-theme='dark'] .hover\:bg-red-100:hover {
+  background-color: var(--app-hover) !important;
 }
 
 :root[data-theme='dark'] .text-gray-900,

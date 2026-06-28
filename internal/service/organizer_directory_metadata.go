@@ -43,7 +43,7 @@ func (o *OrganizerService) lookupOrganizeMetadata(ctx context.Context, src, sour
 		SeasonNum:  lookupSeason,
 		EpisodeNum: lookupEpisode,
 	}
-	for _, candidate := range scrapeQueryCandidates(media, lib) {
+	for _, candidate := range scrapeQueryCandidatesWithRecognition(ctx, o.repo, media, lib) {
 		key := organizeMetadataCacheKey(lib.Type, candidate, year)
 		if cache != nil {
 			if cached, ok := cache[key]; ok {

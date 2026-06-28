@@ -108,7 +108,7 @@ func strmCategoryPartsFromPath(parts []string) []string {
 			return append([]string{root}, strmSanitizedTail(parts[i+1:])...)
 		}
 		if root := strmCategoryRoot(part); root != "" {
-			return []string{root, part}
+			return []string{root, strmCanonicalCategory(part)}
 		}
 	}
 	return nil
@@ -143,15 +143,55 @@ func strmCanonicalRoot(part string) string {
 func strmCategoryRoot(part string) string {
 	key := strings.ToLower(strings.TrimSpace(part))
 	switch key {
-	case "动画电影", "动漫电影", "华语电影", "国产电影", "外语电影", "欧美电影", "日韩电影":
+	case "演唱会", "音乐会", "纪录片", "纪录", "动画电影", "动漫电影", "华语电影", "国产电影", "外语电影", "外国电影", "欧美电影", "日韩电影", "日本电影", "韩国电影":
 		return "电影"
-	case "国产剧", "欧美剧", "日韩剧", "日剧", "韩剧", "综艺", "真人秀", "纪录片", "纪录", "未分类":
+	case "国产剧", "欧美剧", "日韩剧", "日剧", "韩剧", "综艺", "真人秀", "儿童", "少儿", "未分类":
 		return "电视剧"
-	case "国漫", "国产动漫", "日番", "番剧", "日漫", "日本动漫", "日本动画", "欧美动漫", "欧美动画", "西方动画", "儿童", "少儿":
+	case "国漫", "国产动漫", "日番", "番剧", "日漫", "日本动漫", "日本动画", "韩漫", "韩国动漫", "韩国动画", "美漫", "欧美动漫", "欧美动画", "西方动画", "其他", "其他动漫", "其它动漫":
 		return "动漫"
 	case "番号":
 		return "成人"
 	default:
 		return ""
+	}
+}
+
+func strmCanonicalCategory(part string) string {
+	key := strings.ToLower(strings.TrimSpace(part))
+	switch key {
+	case "音乐会":
+		return "演唱会"
+	case "纪录":
+		return "纪录片"
+	case "动漫电影":
+		return "动画电影"
+	case "国产电影":
+		return "华语电影"
+	case "外语电影", "外国电影":
+		return "欧美电影"
+	case "日本电影", "韩国电影":
+		return "日韩电影"
+	case "日剧", "韩剧":
+		return "日韩剧"
+	case "真人秀":
+		return "综艺"
+	case "少儿":
+		return "儿童"
+	case "未分类":
+		return "欧美剧"
+	case "国产动漫":
+		return "国漫"
+	case "番剧", "日漫", "日本动漫", "日本动画":
+		return "日番"
+	case "韩国动漫", "韩国动画":
+		return "韩漫"
+	case "欧美动漫", "欧美动画", "西方动画":
+		return "美漫"
+	case "其他动漫", "其它动漫":
+		return "其他"
+	case "番号":
+		return "成人"
+	default:
+		return strings.TrimSpace(part)
 	}
 }

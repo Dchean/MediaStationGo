@@ -63,6 +63,7 @@ func (b *serviceContainerBuilder) initProviderServices() {
 	b.c.TheTVDB = NewTheTVDBProvider(b.cfg, b.log)
 	b.c.Douban = NewDoubanProvider(b.cfg, b.log)
 	b.c.Fanart = NewFanartProvider(b.cfg, b.log)
+	b.c.RecognitionWords = NewRecognitionWordsService(b.log, b.repos)
 
 	adult := NewAdultProvider(b.log, b.c.APIConfig)
 	b.c.Scraper = NewScraperService(

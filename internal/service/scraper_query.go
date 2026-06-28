@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/ShukeBta/MediaStationGo/internal/model"
+	"github.com/ShukeBta/MediaStationGo/internal/repository"
 )
 
 var (
@@ -16,10 +18,22 @@ var (
 )
 
 func scrapeQueryCandidates(m *model.Media, lib *model.Library) []string {
+	return scrapeQueryCandidatesWithNormalizer(m, lib, func(raw string) (string, int) {
+		return CleanQuery(raw)
+	})
+}
+
+func scrapeQueryCandidatesWithRecognition(ctx context.Context, repo *repository.Container, m *model.Media, lib *model.Library) []string {
+	return scrapeQueryCandidatesWithNormalizer(m, lib, func(raw string) (string, int) {
+		return CleanQueryWithRecognition(ctx, repo, raw)
+	})
+}
+
+func scrapeQueryCandidatesWithNormalizer(m *model.Media, lib *model.Library, clean func(string) (string, int)) []string {
 	seen := map[string]struct{}{}
 	var out []string
 	add := func(raw string) {
-		cleaned, _ := CleanQuery(raw)
+		cleaned, _ := clean(raw)
 		if cleaned == "" {
 			cleaned = strings.TrimSpace(raw)
 		}

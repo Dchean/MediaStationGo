@@ -61,7 +61,7 @@ func (s *ScraperService) EnrichOneWithOptions(ctx context.Context, m *model.Medi
 		return s.applyProviderMatchWithOptions(ctx, m, lib, match, options)
 	}
 
-	candidates := scrapeQueryCandidates(m, lib)
+	candidates := scrapeQueryCandidatesWithRecognition(ctx, s.repo, m, lib)
 	var query string
 	match := (*Match)(nil)
 	for _, candidate := range candidates {

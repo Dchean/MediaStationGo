@@ -72,9 +72,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("organize.scrape_after", true)
 	v.SetDefault("scrape.delay_min_ms", 250)
 	v.SetDefault("scrape.delay_max_ms", 500)
+	v.SetDefault("organizer.categories.concert_movie", "演唱会")
+	v.SetDefault("organizer.categories.documentary_movie", "纪录片")
 	v.SetDefault("organizer.categories.chinese_movie", "华语电影")
 	v.SetDefault("organizer.categories.animation_movie", "动画电影")
-	v.SetDefault("organizer.categories.foreign_movie", "外语电影")
 	v.SetDefault("organizer.categories.euus_movie", "欧美电影")
 	v.SetDefault("organizer.categories.jk_movie", "日韩电影")
 	v.SetDefault("organizer.categories.domestic_tv", "国产剧")
@@ -82,11 +83,19 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("organizer.categories.jk_tv", "日韩剧")
 	v.SetDefault("organizer.categories.jp_anime", "日番")
 	v.SetDefault("organizer.categories.cn_anime", "国漫")
-	v.SetDefault("organizer.categories.euus_anime", "欧美动漫")
+	v.SetDefault("organizer.categories.kr_anime", "韩漫")
+	v.SetDefault("organizer.categories.us_anime", "美漫")
+	v.SetDefault("organizer.categories.other_anime", "其他")
 	v.SetDefault("organizer.categories.variety", "综艺")
 	v.SetDefault("organizer.categories.documentary", "纪录片")
 	v.SetDefault("organizer.categories.children", "儿童")
-	v.SetDefault("organizer.categories.uncategorized_tv", "未分类")
+	v.SetDefault("organizer.categories.adult", "成人")
+	v.SetDefault("recognition_words.enabled", true)
+	v.SetDefault("recognition_words.shared_urls", []string{
+		"https://raw.githubusercontent.com/Putarku/MoviePilot-Help/main/Words/general.txt",
+		"https://raw.githubusercontent.com/Putarku/MoviePilot-Help/main/Words/TV.txt",
+		"https://raw.githubusercontent.com/Putarku/MoviePilot-Help/main/Words/anime.txt",
+	})
 
 	v.SetDefault("transcoder.encoder", "")
 	v.SetDefault("transcoder.enabled", true)

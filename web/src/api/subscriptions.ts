@@ -42,10 +42,14 @@ export function buildSubscriptionAliases(item: {
 
 export const subscriptionsAPI = {
   list: () =>
-    api.get<{ items: Subscription[] }>('/subscriptions').then((r) => r.data.items),
+    api
+      .get<{ items: Subscription[] }>('/subscriptions', subscriptionListRequestConfig())
+      .then((r) => r.data.items),
 
   history: () =>
-    api.get<{ items: Subscription[] }>('/subscriptions/history').then((r) => r.data.items),
+    api
+      .get<{ items: Subscription[] }>('/subscriptions/history', subscriptionListRequestConfig())
+      .then((r) => r.data.items),
 
   create: (input: {
     name: string
@@ -85,4 +89,11 @@ export const subscriptionsAPI = {
 
   runNow: (id: string) =>
     api.post<{ queued: number }>(`/subscriptions/${id}/run`).then((r) => r.data),
+}
+
+function subscriptionListRequestConfig() {
+  return {
+    headers: { 'Cache-Control': 'no-cache' },
+    params: { _ts: Date.now() },
+  }
 }

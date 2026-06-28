@@ -19,8 +19,21 @@ type rssSubscriptionRunState struct {
 	washOff           bool
 }
 
-func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscription) (int, error) {
+func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscription) (queued int, err error) {
 	s.prepareSubscriptionForRun(ctx, sub)
+	started := time.Now()
+	if s.log != nil {
+		s.log.Info("subscription run started", subscriptionRunLogFields(sub)...)
+		defer func() {
+			fields := appendSubscriptionRunResultFields(subscriptionRunLogFields(sub), queued, started)
+			if err != nil {
+				fields = append(fields, zap.Error(err))
+				s.log.Warn("subscription run finished with error", fields...)
+				return
+			}
+			s.log.Info("subscription run finished", fields...)
+		}()
+	}
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(sub.FeedURL)), "site-search://") {
 		return s.runSiteSearch(ctx, sub)
 	}
@@ -50,7 +63,7 @@ func (s *SubscriptionService) runOne(ctx context.Context, sub *model.Subscriptio
 		washOff:           !sub.WashEnabled,
 	}
 	candidates := selectRSSSubscriptionCandidates(feed.Channel.Items, sub, filter, runState.seenSet, runState.availability)
-	queued := s.enqueueRSSSubscriptionCandidates(ctx, sub, candidates, runState)
+	queued = s.enqueueRSSSubscriptionCandidates(ctx, sub, candidates, runState)
 	s.finishRSSSubscriptionRun(ctx, sub, guidKey, runState, queued)
 	return queued, nil
 }
@@ -105,6 +118,15 @@ func (s *SubscriptionService) enqueueRSSSubscriptionCandidate(ctx context.Contex
 			zap.Error(err))
 		return false
 	}
+	if s.log != nil {
+		s.log.Info("rss subscription candidate queued",
+			zap.String("subscription_id", sub.ID),
+			zap.String("subscription", sub.Name),
+			zap.String("title", item.Title),
+			zap.String("media_type", mediaType),
+			zap.String("media_category", mediaCategory),
+			zap.String("save_path", savePath))
+	}
 	state.markTitleAvailable(item.Title)
 	state.markSeen(candidate.GUID)
 	return true
@@ -116,11 +138,26 @@ func (s *SubscriptionService) finishRSSSubscriptionRun(ctx context.Context, sub 
 	if len(state.seen) > 200 {
 		state.seen = state.seen[len(state.seen)-200:]
 	}
-	_ = s.repo.Setting.Set(ctx, guidKey, strings.Join(state.seen, "\n"))
+	if err := s.repo.Setting.Set(ctx, guidKey, strings.Join(state.seen, "\n")); err != nil && s.log != nil {
+		s.log.Warn("subscription seen state update failed",
+			zap.String("subscription_id", sub.ID),
+			zap.String("subscription", sub.Name),
+			zap.Error(err))
+	}
 
 	now := time.Now()
-	_ = s.repo.DB.Model(sub).Updates(map[string]any{"last_run_at": &now}).Error
-	_ = s.archiveCompletedSubscription(ctx, sub, state.availability)
+	if err := s.repo.DB.Model(sub).Updates(map[string]any{"last_run_at": &now}).Error; err != nil && s.log != nil {
+		s.log.Warn("subscription last_run_at update failed",
+			zap.String("subscription_id", sub.ID),
+			zap.String("subscription", sub.Name),
+			zap.Error(err))
+	}
+	if err := s.archiveCompletedSubscription(ctx, sub, state.availability); err != nil && s.log != nil {
+		s.log.Warn("subscription archive check failed",
+			zap.String("subscription_id", sub.ID),
+			zap.String("subscription", sub.Name),
+			zap.Error(err))
+	}
 	if queued > 0 {
 		s.hub.Publish("subscription", map[string]any{
 			"id":     sub.ID,

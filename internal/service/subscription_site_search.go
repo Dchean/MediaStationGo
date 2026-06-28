@@ -69,15 +69,42 @@ func (s *SubscriptionService) runSiteSearch(ctx context.Context, sub *model.Subs
 func (s *SubscriptionService) finishSiteSearchRun(ctx context.Context, sub *model.Subscription, guidKey string, state *siteSearchRunState) LocalAvailability {
 	availability := s.finalizePendingAvailability(sub, state.Availability)
 	seen := trimSiteSearchSeen(state.Seen)
-	_ = s.repo.Setting.Set(ctx, guidKey, strings.Join(seen, "\n"))
+	if err := s.repo.Setting.Set(ctx, guidKey, strings.Join(seen, "\n")); err != nil && s.log != nil {
+		s.log.Warn("site-search subscription seen state update failed",
+			zap.String("subscription_id", sub.ID),
+			zap.String("subscription", sub.Name),
+			zap.Error(err))
+	}
 	now := time.Now()
-	_ = s.repo.DB.Model(sub).Updates(map[string]any{"last_run_at": &now}).Error
-	_ = s.archiveCompletedSubscription(ctx, sub, availability)
+	if err := s.repo.DB.Model(sub).Updates(map[string]any{"last_run_at": &now}).Error; err != nil && s.log != nil {
+		s.log.Warn("site-search subscription last_run_at update failed",
+			zap.String("subscription_id", sub.ID),
+			zap.String("subscription", sub.Name),
+			zap.Error(err))
+	}
+	if err := s.archiveCompletedSubscription(ctx, sub, availability); err != nil && s.log != nil {
+		s.log.Warn("site-search subscription archive check failed",
+			zap.String("subscription_id", sub.ID),
+			zap.String("subscription", sub.Name),
+			zap.Error(err))
+	}
 	return availability
 }
 
 func (s *SubscriptionService) handleSiteSearchQueueResult(sub *model.Subscription, keyword string, queueResult siteSearchQueueResult, selectionStats siteSearchSelectionStats, availability LocalAvailability) (int, error) {
 	if queueResult.Queued > 0 {
+		if s.log != nil {
+			fields := subscriptionSiteSearchLogFields(sub, keyword)
+			fields = appendSiteSearchSelectionLogFields(fields, selectionStats)
+			fields = appendAvailabilityLogFields(fields, availability)
+			fields = append(fields,
+				zap.Int("queued", queueResult.Queued),
+				zap.Strings("resources", queueResult.Resources),
+				zap.Bool("archived", sub.ArchivedAt != nil),
+				zap.String("archive_reason", sub.ArchiveReason),
+			)
+			s.log.Info("site-search subscription queued resources", fields...)
+		}
 		s.hub.Publish("subscription", map[string]any{
 			"id":        sub.ID,
 			"name":      sub.Name,
@@ -186,7 +213,12 @@ func (s *SubscriptionService) finishSiteSearchNoResults(sub *model.Subscription,
 		s.log.Info("site-search subscription no results", fields...)
 	}
 	now := time.Now()
-	_ = s.repo.DB.Model(sub).Updates(map[string]any{"last_run_at": &now}).Error
+	if err := s.repo.DB.Model(sub).Updates(map[string]any{"last_run_at": &now}).Error; err != nil && s.log != nil {
+		s.log.Warn("site-search subscription last_run_at update failed",
+			zap.String("subscription_id", sub.ID),
+			zap.String("subscription", sub.Name),
+			zap.Error(err))
+	}
 	return 0, nil
 }
 

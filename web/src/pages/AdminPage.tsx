@@ -42,6 +42,8 @@ export function AdminPage() {
           { to: '/download-clients', title: '下载器管理', description: '配置 qBittorrent 等下载器连接', badge: '下载', group: '站点与下载' },
           { to: '/files', title: '手动整理', description: '从下载目录选择文件夹并整理入库', group: '文件与入库' },
           { to: '/storage', title: '存储与文件', description: '查看占用、清理重复项和管理文件', group: '文件与入库' },
+          { to: '/notify-channels', title: '通知渠道', description: '配置 Bot、Webhook、邮件等通知出口', group: '系统运维' },
+          { to: '/assistant', title: 'AI 会话', description: '查看和接管后台 AI 操作记录', group: '系统运维' },
         ]}
       />
       <div className="flex flex-wrap gap-2 border-b border-gray-200">

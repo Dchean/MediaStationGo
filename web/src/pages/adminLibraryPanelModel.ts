@@ -7,6 +7,27 @@ export const emptyRootDraft = (): RootDraft => ({ name: '', path: '', enabled: t
 
 export const rootDraftKey = (libraryID: string, rootID: string) => `${libraryID}:${rootID}`
 
+export function displayLibraryRootPath(path: string) {
+  if (!path.toLowerCase().startsWith('cloud://')) return path
+  return decodePercentEscapes(path)
+}
+
+export function displayLibraryRootName(name: string | undefined, path: string) {
+  const value = name?.trim() || '默认路径'
+  if (!path.toLowerCase().startsWith('cloud://') && !/%[0-9a-f]{2}/i.test(value)) return value
+  return decodePercentEscapes(value)
+}
+
+function decodePercentEscapes(value: string) {
+  return value.replace(/%[0-9a-f]{2}/gi, (token) => {
+    try {
+      return decodeURIComponent(token)
+    } catch {
+      return token
+    }
+  })
+}
+
 export function createRootPayload(roots: RootDraft[]) {
   return roots
     .map((root, index) => ({

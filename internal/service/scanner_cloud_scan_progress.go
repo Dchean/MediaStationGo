@@ -12,6 +12,7 @@ type cloudCandidate struct {
 	size               int64
 	path               string
 	categoryDisplayDir string
+	categoryScanDir    string
 	localMeta          *LocalMetadata
 }
 

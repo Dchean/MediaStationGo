@@ -2,6 +2,7 @@ package service
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,17 +126,105 @@ func TestFilterDisplayCloudLibrariesMergesCategoryNameAliases(t *testing.T) {
 	}
 
 	filtered := FilterDisplayCloudLibraries(t.Context(), repos, []model.Library{foreignMovie, westernMovie, eastAsianMovie, jpAnime, jpAnimeCloud})
-	if got := libraryNames(filtered); !slices.Equal(got, []string{"外语电影", "日番"}) {
-		t.Fatalf("filtered names = %#v, want user-facing alias libraries only", got)
+	if got := libraryNames(filtered); !slices.Equal(got, []string{"欧美电影", "日韩电影", "日番"}) {
+		t.Fatalf("filtered names = %#v, want legacy foreign movie merged into western movie plus anime aliases", got)
 	}
 
 	movieMerged := MergedLibraryIDs([]model.Library{foreignMovie, westernMovie, eastAsianMovie, jpAnime, jpAnimeCloud}, foreignMovie)
-	if !slices.Equal(movieMerged, []string{foreignMovie.ID, westernMovie.ID, eastAsianMovie.ID}) {
-		t.Fatalf("movie merged ids = %#v, want foreign movie aliases", movieMerged)
+	if !slices.Equal(movieMerged, []string{foreignMovie.ID, westernMovie.ID}) {
+		t.Fatalf("movie merged ids = %#v, want legacy foreign movie merged with western movie", movieMerged)
 	}
 	animeMerged := MergedLibraryIDs([]model.Library{foreignMovie, westernMovie, eastAsianMovie, jpAnime, jpAnimeCloud}, jpAnime)
 	if !slices.Equal(animeMerged, []string{jpAnime.ID, jpAnimeCloud.ID}) {
 		t.Fatalf("anime merged ids = %#v, want jp anime aliases", animeMerged)
+	}
+}
+
+func TestFilterDisplayCloudLibrariesCanonicalizesLegacyDisplayPaths(t *testing.T) {
+	db := newServiceTestDB(t, &model.Library{}, &model.Media{})
+	repos := repository.New(db)
+	westernAnimation := model.Library{Name: "欧美动漫", Path: `F:\media\动漫\欧美动漫`, Type: "tv", Enabled: true}
+	uncategorizedCloud := model.Library{Name: "OpenList · 未分类", Path: BuildCloudLibraryPath("openlist", "/未分类", "/未分类"), Type: "movie", Enabled: true}
+	adult := model.Library{Name: "9KG", Path: `F:\media\成人\9KG`, Type: "movie", Enabled: true}
+	for _, lib := range []*model.Library{&westernAnimation, &uncategorizedCloud, &adult} {
+		if err := repos.Library.Create(t.Context(), lib); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	filtered := FilterDisplayCloudLibraries(t.Context(), repos, []model.Library{westernAnimation, uncategorizedCloud, adult})
+	if got := libraryNames(filtered); !slices.Equal(got, []string{"美漫", "欧美剧", "成人"}) {
+		t.Fatalf("filtered names = %#v, want canonical category names", got)
+	}
+	if got := []string{filtered[0].Type, filtered[1].Type, filtered[2].Type}; !slices.Equal(got, []string{"anime", "tv", "adult"}) {
+		t.Fatalf("filtered types = %#v, want canonical display types", got)
+	}
+	combined := strings.Join([]string{filtered[0].Path, filtered[1].Path, filtered[2].Path}, "\n")
+	for _, legacy := range []string{"欧美动漫", "未分类", "9KG"} {
+		if strings.Contains(combined, legacy) {
+			t.Fatalf("display paths contain legacy category %q: %s", legacy, combined)
+		}
+	}
+}
+
+func TestCanonicalLibraryDisplayPathPreservesAutoCategoryScanDir(t *testing.T) {
+	raw := BuildCloudAutoCategoryLibraryPathWithScanDir("openlist", "国漫", "动漫/国产动漫")
+
+	got := CanonicalLibraryDisplayPath(model.Library{Name: "国漫", Path: raw, Type: "anime", Enabled: true})
+	info, ok := ParseCloudLibraryMount(got)
+	if !ok {
+		t.Fatalf("canonical path did not parse: %q", got)
+	}
+	if !CloudLibraryAutoCategory(model.Library{Path: got}) {
+		t.Fatalf("canonical path lost auto_category flag: %q", got)
+	}
+	if info.ScanDir != "国漫" || info.DisplayDir != "动漫/国漫" {
+		t.Fatalf("canonical path info = %#v, want scan 国漫 and canonical display 动漫/国漫", info)
+	}
+}
+
+func TestListMediaVisibleDoesNotMergeDistinctMovieRegionLibraries(t *testing.T) {
+	db := newServiceTestDB(t, &model.Library{}, &model.Media{})
+	repos := repository.New(db)
+	foreignMovie := model.Library{Name: "外语电影", Path: "/media/电影/外语电影", Type: "movie", Enabled: true}
+	westernMovie := model.Library{Name: "OpenList · 欧美电影", Path: BuildCloudLibraryPath("openlist", "/欧美电影", "/欧美电影"), Type: "movie", Enabled: true}
+	eastAsianMovie := model.Library{Name: "OpenList · 日韩电影", Path: BuildCloudLibraryPath("openlist", "/日韩电影", "/日韩电影"), Type: "movie", Enabled: true}
+	for _, lib := range []*model.Library{&foreignMovie, &westernMovie, &eastAsianMovie} {
+		if err := repos.Library.Create(t.Context(), lib); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repos.DB.Create(&model.Media{
+		LibraryID: westernMovie.ID,
+		Title:     "Western Movie",
+		Path:      "cloud://openlist/欧美电影/Western.Movie.2026.mkv",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc := NewMediaService(&config.Config{}, zap.NewNop(), repos)
+
+	items, total, err := svc.ListMediaVisible(t.Context(), foreignMovie.ID, 1, 20, MediaVisibility{IncludeNSFW: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || !slices.Equal(mediaTitles(items), []string{"Western Movie"}) {
+		t.Fatalf("legacy foreign movie items total=%d items=%#v, want merged western media", total, mediaTitles(items))
+	}
+
+	items, total, err = svc.ListMediaVisible(t.Context(), eastAsianMovie.ID, 1, 20, MediaVisibility{IncludeNSFW: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 0 || len(items) != 0 {
+		t.Fatalf("east asian movie items total=%d items=%#v, want empty isolated library", total, mediaTitles(items))
+	}
+
+	items, total, err = svc.ListMediaVisible(t.Context(), westernMovie.ID, 1, 20, MediaVisibility{IncludeNSFW: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || !slices.Equal(mediaTitles(items), []string{"Western Movie"}) {
+		t.Fatalf("western movie items total=%d items=%#v, want own media only", total, mediaTitles(items))
 	}
 }
 
@@ -284,12 +373,13 @@ func TestStartAllCloudLibraryScansIncludesMergedCloudMounts(t *testing.T) {
 	}
 }
 
-func TestAutoCategoryCloudLibrariesDoNotShadowRootOrScan(t *testing.T) {
+func TestAutoCategoryCloudLibrariesMergeIntoExistingDisplayLibrary(t *testing.T) {
 	db := newServiceTestDB(t, &model.Library{}, &model.Media{})
 	repos := repository.New(db)
+	local := model.Library{Name: "欧美剧", Path: "/media/电视剧/欧美剧", Type: "tv", Enabled: true}
 	root := model.Library{Name: "OpenList", Path: "cloud://openlist", Type: "movie", Enabled: true}
 	auto := model.Library{Name: "欧美剧", Path: BuildCloudAutoCategoryLibraryPath("openlist", "电视剧/欧美剧"), Type: "tv", Enabled: true}
-	for _, lib := range []*model.Library{&root, &auto} {
+	for _, lib := range []*model.Library{&local, &root, &auto} {
 		if err := repos.Library.Create(t.Context(), lib); err != nil {
 			t.Fatal(err)
 		}
@@ -303,12 +393,12 @@ func TestAutoCategoryCloudLibrariesDoNotShadowRootOrScan(t *testing.T) {
 		t.Fatalf("auto category should not shadow root scan: %#v", shadow)
 	}
 	display := FilterDisplayCloudLibraries(t.Context(), repos, libs)
-	if len(display) != 1 || display[0].ID != root.ID {
-		t.Fatalf("display libraries = %#v, want only user-mounted root", display)
+	if got := libraryNames(display); !slices.Equal(got, []string{"欧美剧", "OpenList"}) {
+		t.Fatalf("display libraries = %#v, want local library and user-mounted root only", got)
 	}
 	scannable := FilterScannableCloudLibraries(t.Context(), repos, libs)
-	if len(scannable) != 1 || scannable[0].ID != root.ID {
-		t.Fatalf("scannable libraries = %#v, want only root", scannable)
+	if got := libraryNames(scannable); !slices.Equal(got, []string{"欧美剧", "OpenList"}) {
+		t.Fatalf("scannable libraries = %#v, want local library and root only", got)
 	}
 
 	scanner := NewScannerService(&config.Config{}, zap.NewNop(), repos, NewHub(zap.NewNop()), nil, nil)
@@ -317,11 +407,11 @@ func TestAutoCategoryCloudLibrariesDoNotShadowRootOrScan(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(statuses) != 1 || statuses[0].LibraryID != root.ID {
-		t.Fatalf("scan-all statuses = %#v, want only root queued", statuses)
+		t.Fatalf("scan-all statuses = %#v, want only cloud root queued", statuses)
 	}
 }
 
-func TestRootCloudLibraryIncludesHiddenAutoCategoryMedia(t *testing.T) {
+func TestRootCloudLibraryIncludesAutoCategoryMedia(t *testing.T) {
 	db := newServiceTestDB(t, &model.Library{}, &model.Media{})
 	repos := repository.New(db)
 	root := model.Library{Name: "OpenList", Path: "cloud://openlist", Type: "movie", Enabled: true}
@@ -345,13 +435,13 @@ func TestRootCloudLibraryIncludesHiddenAutoCategoryMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 	if total != 1 || len(items) != 1 {
-		t.Fatalf("root cloud items total=%d len=%d, want hidden auto-category media", total, len(items))
+		t.Fatalf("root cloud items total=%d len=%d, want auto-category media", total, len(items))
 	}
-	if items[0].LibraryName != root.Name || items[0].LibraryPath != root.Path {
-		t.Fatalf("media library metadata = (%q, %q), want user-mounted root", items[0].LibraryName, items[0].LibraryPath)
+	if items[0].LibraryName != auto.Name || items[0].LibraryPath != auto.Path {
+		t.Fatalf("media library metadata = (%q, %q), want auto category", items[0].LibraryName, items[0].LibraryPath)
 	}
-	if items[0].DisplayLibraryID != root.ID || items[0].DisplayLibraryPath != root.Path {
-		t.Fatalf("display library = (%q, %q), want user-mounted root", items[0].DisplayLibraryID, items[0].DisplayLibraryPath)
+	if items[0].DisplayLibraryID != auto.ID || items[0].DisplayLibraryPath != auto.Path {
+		t.Fatalf("display library = (%q, %q), want auto category", items[0].DisplayLibraryID, items[0].DisplayLibraryPath)
 	}
 }
 

@@ -152,7 +152,7 @@ func TestCloudDrive2MutableProviderUsesWebDAV(t *testing.T) {
 	if _, err := mutable.Rename(context.Background(), "/TV", "电视剧"); err != nil {
 		t.Fatalf("rename: %v", err)
 	}
-	moved, err := mutable.(MovableProvider).Move(context.Background(), "/Inbox/Movie.mkv", "/电影/外语电影/Movie (2026)", "Movie (2026).mkv")
+	moved, err := mutable.(MovableProvider).Move(context.Background(), "/Inbox/Movie.mkv", "/电影/欧美电影/Movie (2026)", "Movie (2026).mkv")
 	if err != nil {
 		t.Fatalf("move: %v", err)
 	}
@@ -162,10 +162,10 @@ func TestCloudDrive2MutableProviderUsesWebDAV(t *testing.T) {
 	if destinations[0] != srv.URL+"/dav/%E7%94%B5%E8%A7%86%E5%89%A7" {
 		t.Fatalf("rename Destination = %q", destinations[0])
 	}
-	if destinations[1] != srv.URL+"/dav/%E7%94%B5%E5%BD%B1/%E5%A4%96%E8%AF%AD%E7%94%B5%E5%BD%B1/Movie%20%282026%29/Movie%20%282026%29.mkv" {
+	if destinations[1] != srv.URL+"/dav/%E7%94%B5%E5%BD%B1/%E6%AC%A7%E7%BE%8E%E7%94%B5%E5%BD%B1/Movie%20%282026%29/Movie%20%282026%29.mkv" {
 		t.Fatalf("move Destination = %q", destinations[1])
 	}
-	if moved.ID != "/电影/外语电影/Movie (2026)/Movie (2026).mkv" {
+	if moved.ID != "/电影/欧美电影/Movie (2026)/Movie (2026).mkv" {
 		t.Fatalf("moved entry = %#v", moved)
 	}
 }

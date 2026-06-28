@@ -4,17 +4,16 @@ import toast from 'react-hot-toast'
 import { libraryAPI } from '../api/library'
 import type { Library, LibraryRoot } from '../types'
 import { confirmAction } from '../components/confirmAction'
-import { apiErrorMessage, createRootPayload, emptyRootDraft, rootDraftKey, type RootDraft } from './adminLibraryPanelModel'
+import { apiErrorMessage, createRootPayload, displayLibraryRootName, displayLibraryRootPath, emptyRootDraft, rootDraftKey, type RootDraft } from './adminLibraryPanelModel'
 
 export function useAdminLibraryPanel() {
   const { libs, refresh } = useAdminLibraryList()
   const createForm = useCreateLibraryForm(refresh)
-  const newRoots = useNewLibraryRootDrafts(refresh)
   const editableRoots = useEditableRootDrafts()
   const rootActions = useEditableLibraryRootActions(refresh, editableRoots)
   const libraryActions = useLibraryActions(refresh)
 
-  return { libs, createForm, newRoots, editableRoots, rootActions, libraryActions }
+  return { libs, createForm, editableRoots, rootActions, libraryActions }
 }
 
 function useAdminLibraryList() {
@@ -42,7 +41,7 @@ function useCreateLibraryForm(refresh: () => Promise<void>) {
         return
       }
       await libraryAPI.createWithRoots(name, type, payload)
-      toast.success('媒体库已创建')
+      toast.success('媒体库已保存')
       setName('')
       setRoots([emptyRootDraft()])
       await refresh()
@@ -68,37 +67,14 @@ function useCreateLibraryForm(refresh: () => Promise<void>) {
   }
 }
 
-function useNewLibraryRootDrafts(refresh: () => Promise<void>) {
-  const [newRootByLibrary, setNewRootByLibrary] = useState<Record<string, RootDraft>>({})
-  const newRootDraft = (libraryID: string) => newRootByLibrary[libraryID] ?? emptyRootDraft()
-
-  const setNewRootDraft = (libraryID: string, patch: Partial<RootDraft>) => {
-    setNewRootByLibrary((prev) => ({ ...prev, [libraryID]: { ...newRootDraft(libraryID), ...patch } }))
-  }
-
-  const addLibraryRoot = async (libraryID: string) => {
-    const draft = newRootDraft(libraryID)
-    if (!draft.path?.trim()) {
-      toast.error('请填写路径')
-      return
-    }
-    await libraryAPI.addRoot(libraryID, { ...draft, path: draft.path.trim(), name: draft.name?.trim() })
-    setNewRootByLibrary((prev) => ({ ...prev, [libraryID]: emptyRootDraft() }))
-    toast.success('路径已添加')
-    await refresh()
-  }
-
-  return { newRootDraft, setNewRootDraft, addLibraryRoot }
-}
-
 function useEditableRootDrafts() {
   const [rootDrafts, setRootDrafts] = useState<Record<string, RootDraft>>({})
 
   const editableRootDraft = (libraryID: string, root: LibraryRoot): RootDraft => {
     const key = rootDraftKey(libraryID, root.id)
     return rootDrafts[key] ?? {
-      name: root.name ?? '',
-      path: root.path,
+      name: displayLibraryRootName(root.name, root.path),
+      path: displayLibraryRootPath(root.path),
       enabled: root.enabled,
       sort_order: root.sort_order,
     }
@@ -154,7 +130,7 @@ function useEditableLibraryRootActions(refresh: () => Promise<void>, drafts: Edi
   }
 
   const removeLibraryRoot = async (library: Library, root: LibraryRoot) => {
-    if (!(await confirmAction({ title: '删除媒体库路径', message: `确定删除「${root.path}」?`, confirmText: '删除' }))) return
+    if (!(await confirmAction({ title: '删除媒体库路径', message: `确定删除「${displayLibraryRootPath(root.path)}」?`, confirmText: '删除' }))) return
     await libraryAPI.removeRoot(library.id, root.id)
     toast.success('路径已删除')
     await refresh()

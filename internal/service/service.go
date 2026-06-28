@@ -74,6 +74,7 @@ type Container struct {
 	Device           *DeviceService
 	Cache            *RuntimeCacheService
 	Sessions         *SessionTrackerService
+	RecognitionWords *RecognitionWordsService
 
 	stopCtx    context.Context
 	stopCancel context.CancelFunc

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
 	"github.com/ShukeBta/MediaStationGo/internal/middleware"
 	"github.com/ShukeBta/MediaStationGo/internal/model"
@@ -80,9 +81,24 @@ func createSubscriptionHandler(svc *service.Container) gin.HandlerFunc {
 		}
 		enrichSubscriptionArtwork(c.Request.Context(), svc, s)
 		if err := svc.Subscription.Create(c.Request.Context(), s); err != nil {
+			logSubscriptionWarn(svc, "subscription create failed",
+				zap.String("user_id", s.UserID),
+				zap.String("name", req.Name),
+				zap.String("feed_kind", subscriptionFeedKind(req.FeedURL)),
+				zap.Bool("enabled", enabled),
+				zap.Error(err))
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		logSubscriptionInfo(svc, "subscription created",
+			zap.String("user_id", s.UserID),
+			zap.String("subscription_id", s.ID),
+			zap.String("name", s.Name),
+			zap.String("feed_kind", subscriptionFeedKind(s.FeedURL)),
+			zap.String("media_type", s.MediaType),
+			zap.String("media_category", s.MediaCategory),
+			zap.Bool("enabled", s.Enabled),
+			zap.Bool("wash_enabled", s.WashEnabled))
 		enriched := []model.Subscription{*s}
 		svc.Subscription.EnrichManagementProgress(c.Request.Context(), enriched)
 		*s = enriched[0]
@@ -94,11 +110,18 @@ func listSubscriptionsHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		items, err := svc.Subscription.List(c.Request.Context())
 		if err != nil {
+			logSubscriptionWarn(svc, "subscription list failed",
+				zap.String("user_id", subscriptionRequestUserID(c)),
+				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		svc.Subscription.EnrichManagementProgress(c.Request.Context(), items)
 		go enrichAndPersistSubscriptions(context.Background(), svc, append([]model.Subscription(nil), items...))
+		logSubscriptionInfo(svc, "subscription list returned",
+			zap.String("user_id", subscriptionRequestUserID(c)),
+			zap.Int("count", len(items)),
+			zap.Bool("history", false))
 		c.JSON(http.StatusOK, gin.H{"items": items})
 	}
 }
@@ -107,10 +130,17 @@ func listSubscriptionHistoryHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		items, err := svc.Subscription.History(c.Request.Context())
 		if err != nil {
+			logSubscriptionWarn(svc, "subscription history list failed",
+				zap.String("user_id", subscriptionRequestUserID(c)),
+				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		svc.Subscription.EnrichManagementProgress(c.Request.Context(), items)
+		logSubscriptionInfo(svc, "subscription list returned",
+			zap.String("user_id", subscriptionRequestUserID(c)),
+			zap.Int("count", len(items)),
+			zap.Bool("history", true))
 		c.JSON(http.StatusOK, gin.H{"items": items})
 	}
 }
@@ -118,9 +148,16 @@ func listSubscriptionHistoryHandler(svc *service.Container) gin.HandlerFunc {
 func deleteSubscriptionHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := svc.Subscription.Delete(c.Request.Context(), c.Param("id")); err != nil {
+			logSubscriptionWarn(svc, "subscription delete failed",
+				zap.String("user_id", subscriptionRequestUserID(c)),
+				zap.String("subscription_id", c.Param("id")),
+				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		logSubscriptionInfo(svc, "subscription deleted",
+			zap.String("user_id", subscriptionRequestUserID(c)),
+			zap.String("subscription_id", c.Param("id")))
 		c.Status(http.StatusNoContent)
 	}
 }
@@ -129,9 +166,17 @@ func runSubscriptionHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		n, err := svc.Subscription.RunNow(c.Request.Context(), c.Param("id"))
 		if err != nil {
+			logSubscriptionWarn(svc, "subscription run now failed",
+				zap.String("user_id", subscriptionRequestUserID(c)),
+				zap.String("subscription_id", c.Param("id")),
+				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		logSubscriptionInfo(svc, "subscription run now completed",
+			zap.String("user_id", subscriptionRequestUserID(c)),
+			zap.String("subscription_id", c.Param("id")),
+			zap.Int("queued", n))
 		c.JSON(http.StatusOK, gin.H{"queued": n})
 	}
 }
@@ -140,9 +185,17 @@ func restoreSubscriptionHandler(svc *service.Container) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sub, err := svc.Subscription.Restore(c.Request.Context(), c.Param("id"))
 		if err != nil {
+			logSubscriptionWarn(svc, "subscription restore failed",
+				zap.String("user_id", subscriptionRequestUserID(c)),
+				zap.String("subscription_id", c.Param("id")),
+				zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		logSubscriptionInfo(svc, "subscription restored",
+			zap.String("user_id", subscriptionRequestUserID(c)),
+			zap.String("subscription_id", sub.ID),
+			zap.String("name", sub.Name))
 		enriched := []model.Subscription{*sub}
 		svc.Subscription.EnrichManagementProgress(c.Request.Context(), enriched)
 		c.JSON(http.StatusOK, enriched[0])

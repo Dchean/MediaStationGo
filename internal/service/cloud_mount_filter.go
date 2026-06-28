@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strings"
 
 	"github.com/ShukeBta/MediaStationGo/internal/model"
 	"github.com/ShukeBta/MediaStationGo/internal/repository"
@@ -13,7 +12,7 @@ func FilterDisplayCloudLibraries(ctx context.Context, repo *repository.Container
 		return libs
 	}
 	libs = FilterDeprecatedNativeCloudLibraries(libs)
-	libs = FilterInternalCloudAutoCategoryLibraries(libs)
+	libs = FilterMergedCloudAutoCategoryLibraries(libs)
 	counts := cloudLibraryMediaCounts(ctx, repo, libs)
 	collapsed := make([]model.Library, 0, len(libs))
 	byKey := make(map[string]int, len(libs))
@@ -33,7 +32,7 @@ func FilterDisplayCloudLibraries(ctx context.Context, repo *repository.Container
 		collapsed = append(collapsed, lib)
 	}
 	collapsed = FilterShadowedCloudLibraries(collapsed)
-	return mergeDisplayCloudLibraries(collapsed)
+	return normalizeDisplayLibraries(dedupeDisplayLibrariesByMergeKey(mergeDisplayCloudLibraries(collapsed), counts))
 }
 
 func FilterInternalCloudAutoCategoryLibraries(libs []model.Library) []model.Library {
@@ -44,6 +43,33 @@ func FilterInternalCloudAutoCategoryLibraries(libs []model.Library) []model.Libr
 	for _, lib := range libs {
 		if CloudLibraryAutoCategory(lib) {
 			continue
+		}
+		out = append(out, lib)
+	}
+	return out
+}
+
+func FilterMergedCloudAutoCategoryLibraries(libs []model.Library) []model.Library {
+	if len(libs) == 0 {
+		return libs
+	}
+	nonAutoKeys := make(map[string]struct{}, len(libs))
+	for _, lib := range libs {
+		if CloudLibraryAutoCategory(lib) {
+			continue
+		}
+		if key, ok := CloudLibraryMergeKey(lib); ok {
+			nonAutoKeys[key] = struct{}{}
+		}
+	}
+	out := make([]model.Library, 0, len(libs))
+	for _, lib := range libs {
+		if CloudLibraryAutoCategory(lib) {
+			if key, ok := CloudLibraryMergeKey(lib); ok {
+				if _, merged := nonAutoKeys[key]; merged {
+					continue
+				}
+			}
 		}
 		out = append(out, lib)
 	}
@@ -94,188 +120,4 @@ func FilterDeprecatedNativeCloudLibraries(libs []model.Library) []model.Library 
 		out = append(out, lib)
 	}
 	return out
-}
-
-func NormalizeCloudLibraryDisplayNames(libs []model.Library) []model.Library {
-	out := make([]model.Library, 0, len(libs))
-	for _, lib := range libs {
-		if displayName, ok := CloudLibraryDisplayName(lib); ok && displayName != "" {
-			lib.Name = displayName
-		}
-		out = append(out, lib)
-	}
-	return out
-}
-
-func cloudLibraryMediaCounts(ctx context.Context, repo *repository.Container, libs []model.Library) map[string]int64 {
-	counts := make(map[string]int64, len(libs))
-	if repo == nil || repo.DB == nil || len(libs) == 0 {
-		return counts
-	}
-	ids := make([]string, 0, len(libs))
-	for _, lib := range libs {
-		if _, ok := ParseCloudLibraryMount(lib.Path); ok {
-			ids = append(ids, lib.ID)
-		}
-	}
-	if len(ids) == 0 {
-		return counts
-	}
-	var rows []struct {
-		LibraryID string
-		Count     int64
-	}
-	if err := repo.DB.WithContext(ctx).
-		Model(&model.Media{}).
-		Select("library_id, COUNT(*) AS count").
-		Where("library_id IN ? AND deleted_at IS NULL", ids).
-		Group("library_id").
-		Scan(&rows).Error; err != nil {
-		return counts
-	}
-	for _, row := range rows {
-		counts[row.LibraryID] = row.Count
-	}
-	return counts
-}
-
-func cloudLibraryDisplayKey(lib model.Library) (string, bool) {
-	info, ok := ParseCloudLibraryMount(lib.Path)
-	if !ok {
-		return "", false
-	}
-	dir := firstNonEmpty(info.DisplayDir, info.ScanDir)
-	return info.Provider + "\x00" + dir, true
-}
-
-func betterDisplayCloudLibrary(candidate, current model.Library, counts map[string]int64) bool {
-	candidateCount := counts[candidate.ID]
-	currentCount := counts[current.ID]
-	if (candidateCount > 0) != (currentCount > 0) {
-		return candidateCount > 0
-	}
-	if candidate.Enabled != current.Enabled {
-		return candidate.Enabled
-	}
-	candidateCanonical := cloudLibraryPathIsCanonical(candidate)
-	currentCanonical := cloudLibraryPathIsCanonical(current)
-	if candidateCanonical != currentCanonical {
-		return candidateCanonical
-	}
-	if !candidate.CreatedAt.Equal(current.CreatedAt) {
-		return candidate.CreatedAt.After(current.CreatedAt)
-	}
-	return candidate.ID > current.ID
-}
-
-func cloudLibraryPathIsCanonical(lib model.Library) bool {
-	info, ok := ParseCloudLibraryMount(lib.Path)
-	if !ok {
-		return false
-	}
-	return BuildCloudLibraryPath(info.Provider, info.ScanDir, info.DisplayDir) == strings.TrimSpace(lib.Path)
-}
-
-func mergeDisplayCloudLibraries(libs []model.Library) []model.Library {
-	if len(libs) == 0 {
-		return libs
-	}
-	localByKey := make(map[string]struct{}, len(libs))
-	for _, lib := range libs {
-		if _, ok := ParseCloudLibraryMount(lib.Path); ok || !lib.Enabled {
-			continue
-		}
-		if key, ok := CloudLibraryMergeKey(lib); ok {
-			localByKey[key] = struct{}{}
-		}
-	}
-	out := make([]model.Library, 0, len(libs))
-	for _, lib := range libs {
-		if displayName, ok := CloudLibraryDisplayName(lib); ok && displayName != "" {
-			lib.Name = displayName
-			if key, ok := CloudLibraryMergeKey(lib); ok {
-				if _, exists := localByKey[key]; exists {
-					continue
-				}
-			}
-		}
-		out = append(out, lib)
-	}
-	return out
-}
-
-func CloudLibraryDisplayName(lib model.Library) (string, bool) {
-	info, ok := ParseCloudLibraryMount(lib.Path)
-	if !ok {
-		return "", false
-	}
-	name := stripCloudProviderDisplayPrefix(strings.TrimSpace(lib.Name), info.Provider)
-	dir := firstNonEmpty(info.DisplayDir, info.ScanDir)
-	if name == "" || strings.EqualFold(name, CloudMountProviderLabel(info.Provider)) {
-		if base := cloudMountDirBase(dir); base != "" {
-			name = base
-		}
-	}
-	if name == "" {
-		name = CloudMountProviderLabel(info.Provider)
-	}
-	return name, true
-}
-
-func CloudLibraryMergeKey(lib model.Library) (string, bool) {
-	name := strings.TrimSpace(lib.Name)
-	if displayName, ok := CloudLibraryDisplayName(lib); ok {
-		name = displayName
-	}
-	name = normalizeLibraryMergeName(name)
-	if name == "" {
-		return "", false
-	}
-	typeKey := cloudLibraryMergeTypeKey(lib.Type)
-	return typeKey + "\x00" + cloudLibraryMergeNameKey(typeKey, name), true
-}
-
-func cloudLibraryMergeTypeKey(libraryType string) string {
-	switch strings.ToLower(strings.TrimSpace(libraryType)) {
-	case "tv", "anime", "variety":
-		return "tvshows"
-	default:
-		return strings.ToLower(strings.TrimSpace(libraryType))
-	}
-}
-
-func cloudLibraryMergeNameKey(typeKey, name string) string {
-	switch typeKey {
-	case "movie":
-		switch name {
-		case "国产电影", "大陆电影", "华语电影":
-			return "华语电影"
-		case "外语电影", "欧美电影", "日韩电影", "日本电影", "韩国电影":
-			return "外语电影"
-		case "纪录", "纪录片":
-			return "纪录片"
-		case "演唱会", "concert":
-			return "演唱会"
-		case "动画电影", "动漫电影":
-			return "动画电影"
-		}
-	case "tvshows":
-		switch name {
-		case "国产剧", "大陆剧", "华语剧", "国剧":
-			return "国产剧"
-		case "欧美剧", "美剧", "英剧":
-			return "欧美剧"
-		case "日韩剧", "日剧", "韩剧":
-			return "日韩剧"
-		case "国漫", "国产动漫", "国产动画":
-			return "国漫"
-		case "日番", "日漫", "番剧", "日本动漫", "日本动画":
-			return "日番"
-		case "欧美动漫", "欧美动画", "西方动画":
-			return "欧美动漫"
-		case "纪录", "纪录片":
-			return "纪录片"
-		}
-	}
-	return name
 }

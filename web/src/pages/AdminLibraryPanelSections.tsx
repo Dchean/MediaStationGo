@@ -58,11 +58,11 @@ export function AdminLibraryCreateForm({
         </button>
       </div>
       <p className="md:col-span-4 -mt-2 text-xs text-sand-500">
-        Docker 部署时请优先填写容器内路径，例如 /media/电影、/media/电视剧/国产剧；如果误填 NAS
-        宿主机路径，系统会尝试按 compose 挂载自动转换。
+        名称和类型与现有媒体库一致时，会自动把这里填写的路径追加到该媒体库；Docker
+        部署请优先填写容器内路径，例如 /media/电影、/media/电视剧/国产剧。
       </p>
       <button type="submit" className="neon-button md:col-span-4">
-        新建媒体库
+        新建 / 追加路径
       </button>
     </form>
   )
@@ -78,7 +78,7 @@ type CreateRootRowProps = {
 
 function CreateRootRow({ root, index, canRemove, onChange, onRemove }: CreateRootRowProps) {
   return (
-    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
+    <div className="grid gap-2 rounded-xl border border-gray-200/80 bg-white/60 p-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
       <input
         className="input-base"
         placeholder="路径名称"

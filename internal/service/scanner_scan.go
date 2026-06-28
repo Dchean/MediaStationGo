@@ -32,6 +32,9 @@ func (s *ScannerService) ScanLibraryRoot(ctx context.Context, libraryID, rootID 
 	if root == nil {
 		return nil, errors.New("library root not found")
 	}
+	if mount, ok := ParseCloudLibraryMount(root.Path); ok {
+		return s.scanCloudLibraryRoot(ctx, lib, root, mount, true)
+	}
 	return s.scanLocalLibraryRoot(ctx, lib, root, true)
 }
 

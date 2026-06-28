@@ -271,7 +271,7 @@ func TestReclassifyMisclassifiedMediaHonorsManualMovieHint(t *testing.T) {
 	root := t.TempDir()
 	dest := filepath.Join(root, "media")
 	euusLib := model.Library{Name: "欧美剧", Path: filepath.Join(dest, "电视剧", "欧美剧"), Type: "tv", Enabled: true}
-	foreignMovieLib := model.Library{Name: "外语电影", Path: filepath.Join(dest, "电影", "外语电影"), Type: "movie", Enabled: true}
+	foreignMovieLib := model.Library{Name: "欧美电影", Path: filepath.Join(dest, "电影", "欧美电影"), Type: "movie", Enabled: true}
 	if err := repos.Library.Create(t.Context(), &euusLib); err != nil {
 		t.Fatal(err)
 	}

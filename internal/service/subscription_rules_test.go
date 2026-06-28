@@ -24,6 +24,42 @@ func TestMatchesSubscriptionRulesUserExcludeWords(t *testing.T) {
 	}
 }
 
+func TestMatchesSubscriptionRulesReleaseStyleExcludeWords(t *testing.T) {
+	cases := []struct {
+		name  string
+		sub   *model.Subscription
+		title string
+	}{
+		{
+			name:  "default excludes ddp channel suffix",
+			sub:   &model.Subscription{},
+			title: "Some Show 2026 S01E01 1080p WEB-DL DDP5.1 H264",
+		},
+		{
+			name:  "default excludes dolby glued word",
+			sub:   &model.Subscription{},
+			title: "Some Movie 2026 1080p WEB-DL DolbyVision H264",
+		},
+		{
+			name:  "custom dotted list excludes split tokens",
+			sub:   &model.Subscription{ExcludeWords: "DoVi.H265.10bit.杜比"},
+			title: "Some Movie 2026 1080p WEB-DL H265",
+		},
+		{
+			name:  "custom dotted list excludes cjk split token",
+			sub:   &model.Subscription{ExcludeWords: "DoVi.H265.10bit.杜比"},
+			title: "某电影 2026 1080p 杜比全景声",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if matchesSubscriptionRules(c.sub, c.title) {
+				t.Fatalf("expected exclude words to reject %q", c.title)
+			}
+		})
+	}
+}
+
 func TestMatchesSubscriptionRulesDefaultExcludesJunkReleases(t *testing.T) {
 	sub := &model.Subscription{}
 	for _, title := range []string{

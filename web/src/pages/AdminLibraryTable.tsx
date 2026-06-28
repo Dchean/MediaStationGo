@@ -1,16 +1,14 @@
-import { Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import type { MouseEvent, ReactNode } from 'react'
+import { MoreVertical, Power, PowerOff, RefreshCw, Save, Trash2 } from 'lucide-react'
 
 import type { Library, LibraryRoot } from '../types'
 import type { RootDraft } from './adminLibraryPanelModel'
-import { fallbackLibraryRoot } from './adminLibraryPanelModel'
+import { displayLibraryRootName, displayLibraryRootPath, fallbackLibraryRoot } from './adminLibraryPanelModel'
 
 type LibraryTableProps = {
   libs: Library[]
-  newRootDraft: (libraryID: string) => RootDraft
   editableRootDraft: (libraryID: string, root: LibraryRoot) => RootDraft
-  onNewRootChange: (libraryID: string, patch: Partial<RootDraft>) => void
   onEditableRootChange: (libraryID: string, root: LibraryRoot, patch: Partial<RootDraft>) => void
-  onAddRoot: (libraryID: string) => void
   onSaveRoot: (libraryID: string, root: LibraryRoot) => void
   onScanRoot: (libraryID: string, root: LibraryRoot) => void
   onToggleRoot: (libraryID: string, root: LibraryRoot) => void
@@ -21,14 +19,14 @@ type LibraryTableProps = {
 
 export function AdminLibraryTable({ libs, ...actions }: LibraryTableProps) {
   return (
-    <div className="glass-panel">
-      <table className="w-full text-left text-sm">
+    <div className="glass-panel overflow-x-auto !p-3">
+      <table className="w-full min-w-[900px] text-left text-sm">
         <thead className="text-xs uppercase tracking-wider text-sand-500">
           <tr>
-            <th className="py-2">名称</th>
+            <th className="w-28 py-2">名称</th>
             <th>路径</th>
-            <th>类型</th>
-            <th className="text-right">操作</th>
+            <th className="w-20">类型</th>
+            <th className="w-12 text-right">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -48,12 +46,12 @@ type LibraryTableRowProps = Omit<LibraryTableProps, 'libs'> & {
 function LibraryTableRow({ library, ...actions }: LibraryTableRowProps) {
   return (
     <tr className="border-t border-gray-200">
-      <td className="py-2 text-ink-600">{library.name}</td>
-      <td className="text-ink-100">
+      <td className="py-2 pr-3 font-medium text-ink-600">{library.name}</td>
+      <td className="py-1.5 text-ink-100">
         <LibraryRootsCell library={library} {...actions} />
       </td>
-      <td className="text-ink-100">{library.type}</td>
-      <td className="space-x-2 py-2 text-right">
+      <td className="px-3 text-ink-100">{library.type}</td>
+      <td className="py-2 text-right">
         <LibraryActionsCell library={library} {...actions} />
       </td>
     </tr>
@@ -63,11 +61,10 @@ function LibraryTableRow({ library, ...actions }: LibraryTableRowProps) {
 function LibraryRootsCell({ library, ...actions }: LibraryTableRowProps) {
   const roots = library.roots?.length ? library.roots : [fallbackLibraryRoot(library)]
   return (
-    <div className="space-y-2">
+    <div className="min-w-[520px] space-y-1">
       {roots.map((root) => (
         <ExistingRootEditor key={root.id || root.path} library={library} root={root} {...actions} />
       ))}
-      <AddRootRow library={library} {...actions} />
     </div>
   )
 }
@@ -80,16 +77,22 @@ type RootEditorProps = Omit<LibraryTableRowProps, 'library'> & {
 function ExistingRootEditor({ library, root, ...actions }: RootEditorProps) {
   const draft = actions.editableRootDraft(library.id, root)
   return (
-    <div className="rounded border border-gray-200/70 p-2">
-      <div className="grid gap-2 xl:grid-cols-[minmax(120px,0.8fr)_minmax(220px,2fr)_auto]">
-        {root.id ? (
-          <EditableRootFields library={library} root={root} draft={draft} {...actions} />
-        ) : (
-          <span className="min-w-0 break-all xl:col-span-2">{root.name ? `${root.name}：${root.path}` : root.path}</span>
-        )}
-        <RootActionButtons library={library} root={root} draft={draft} {...actions} />
-      </div>
+    <div className="grid items-center gap-1.5 rounded-lg border border-gray-200/80 bg-gray-50/60 p-1.5 xl:grid-cols-[minmax(92px,0.65fr)_minmax(240px,2fr)_auto_auto]">
+      {root.id ? <EditableRootFields library={library} root={root} draft={draft} {...actions} /> : <ReadonlyRootFields root={root} />}
+      <RootStatus enabled={draft.enabled ?? root.enabled} />
+      <RootActionButtons library={library} root={root} draft={draft} {...actions} />
     </div>
+  )
+}
+
+function ReadonlyRootFields({ root }: { root: LibraryRoot }) {
+  return (
+    <>
+      <span className="truncate rounded-md bg-white/80 px-2.5 py-1.5 text-xs text-ink-600">{displayLibraryRootName(root.name, root.path)}</span>
+      <span className="min-w-0 truncate rounded-md bg-white/80 px-2.5 py-1.5 text-xs text-ink-100" title={displayLibraryRootPath(root.path)}>
+        {displayLibraryRootPath(root.path)}
+      </span>
+    </>
   )
 }
 
@@ -97,13 +100,13 @@ function EditableRootFields({ library, root, draft, onEditableRootChange }: Root
   return (
     <>
       <input
-        className="input-base"
+        className="h-9 w-full rounded-lg border border-gray-200 bg-white/80 px-3 text-xs text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100/60"
         placeholder="路径名称"
         value={draft.name ?? ''}
         onChange={(e) => onEditableRootChange(library.id, root, { name: e.target.value })}
       />
       <input
-        className="input-base"
+        className="h-9 w-full rounded-lg border border-gray-200 bg-white/80 px-3 text-xs text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100/60"
         placeholder="真实路径"
         value={draft.path}
         onChange={(e) => onEditableRootChange(library.id, root, { path: e.target.value })}
@@ -112,81 +115,117 @@ function EditableRootFields({ library, root, draft, onEditableRootChange }: Root
   )
 }
 
-function RootActionButtons({ library, root, draft, ...actions }: RootEditorProps & { draft: RootDraft }) {
+function RootStatus({ enabled }: { enabled: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {root.id && (
-        <button
-          className="rounded border border-primary-400/40 p-1 text-brand-500 hover:bg-primary-400/10"
-          title="保存路径"
-          onClick={() => actions.onSaveRoot(library.id, root)}
-        >
-          <Save size={14} />
-        </button>
-      )}
-      <button
-        className="rounded border border-primary-400/40 p-1 text-brand-500 hover:bg-primary-400/10"
-        title="扫描路径"
-        onClick={() => actions.onScanRoot(library.id, root)}
-      >
-        <RefreshCw size={14} />
-      </button>
-      {root.id && (
-        <button className="rounded border border-gray-300 px-2 py-1 text-xs" onClick={() => actions.onToggleRoot(library.id, root)}>
-          {draft.enabled ? '启用' : '禁用'}
-        </button>
-      )}
-      {root.id && (
-        <button
-          className="rounded border border-red-400/40 p-1 text-red-400 hover:bg-red-400/10"
-          title="删除路径"
-          onClick={() => actions.onRemoveRoot(library, root)}
-        >
-          <Trash2 size={14} />
-        </button>
-      )}
-    </div>
+    <span
+      className={`whitespace-nowrap rounded-md border px-2 py-1 text-xs ${
+        enabled ? 'border-emerald-300/60 text-emerald-600' : 'border-gray-300 text-ink-50'
+      }`}
+    >
+      {enabled ? '启用' : '禁用'}
+    </span>
   )
 }
 
-function AddRootRow({ library, ...actions }: LibraryTableRowProps) {
-  const draft = actions.newRootDraft(library.id)
+function RootActionButtons({ library, root, draft, ...actions }: RootEditorProps & { draft: RootDraft }) {
+  const enabled = draft.enabled ?? root.enabled
   return (
-    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
-      <input
-        className="input-base"
-        placeholder="路径名称"
-        value={draft.name ?? ''}
-        onChange={(e) => actions.onNewRootChange(library.id, { name: e.target.value })}
-      />
-      <input
-        className="input-base"
-        placeholder="新增路径"
-        value={draft.path}
-        onChange={(e) => actions.onNewRootChange(library.id, { path: e.target.value })}
-      />
-      <button className="rounded-lg border px-3 py-2 text-sm" onClick={() => actions.onAddRoot(library.id)}>
-        <Plus size={14} />
-      </button>
-    </div>
+    <ActionMenu label="路径操作">
+      {root.id && (
+        <MenuButton
+          icon={<Save size={14} />}
+          label="保存"
+          onClick={() => actions.onSaveRoot(library.id, root)}
+        >
+          保存
+        </MenuButton>
+      )}
+      <MenuButton
+        icon={<RefreshCw size={14} />}
+        label="扫描"
+        onClick={() => actions.onScanRoot(library.id, root)}
+      >
+        扫描
+      </MenuButton>
+      {root.id && (
+        <MenuButton
+          icon={enabled ? <PowerOff size={14} /> : <Power size={14} />}
+          label={enabled ? '禁用' : '启用'}
+          onClick={() => actions.onToggleRoot(library.id, root)}
+        >
+          {enabled ? '禁用' : '启用'}
+        </MenuButton>
+      )}
+      {root.id && (
+        <MenuButton
+          danger
+          icon={<Trash2 size={14} />}
+          label="删除"
+          onClick={() => actions.onRemoveRoot(library, root)}
+        >
+          删除
+        </MenuButton>
+      )}
+    </ActionMenu>
   )
 }
 
 function LibraryActionsCell({ library, onScanLibrary, onRemoveLibrary }: LibraryTableRowProps) {
   return (
-    <>
-      <button
-        className="rounded-lg border border-primary-400/40 px-2 py-1 text-xs text-brand-500 hover:bg-primary-400/10"
-        onClick={() => onScanLibrary(library)}
-      >
+    <ActionMenu label="媒体库操作">
+      <MenuButton icon={<RefreshCw size={14} />} label="扫描" onClick={() => onScanLibrary(library)}>
         扫描
-      </button>
-      <button
-        className="rounded-lg border border-red-400/40 px-2 py-1 text-xs text-red-400 hover:bg-red-400/10"
-        onClick={() => onRemoveLibrary(library)}
+      </MenuButton>
+      <MenuButton danger icon={<Trash2 size={14} />} label="删除" onClick={() => onRemoveLibrary(library)}>
+        删除
+      </MenuButton>
+    </ActionMenu>
+  )
+}
+
+function ActionMenu({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="group relative inline-flex justify-end">
+      <summary
+        className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg border border-gray-200 bg-white text-ink-50 transition hover:border-primary-400/50 hover:text-brand-500 [&::-webkit-details-marker]:hidden"
+        title={label}
       >
-        <Trash2 size={12} />
-      </button>
-    </>
+        <MoreVertical size={16} />
+      </summary>
+      <div className="absolute right-0 top-9 z-30 min-w-28 rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+        {children}
+      </div>
+    </details>
+  )
+}
+
+function MenuButton({
+  icon,
+  label,
+  danger,
+  onClick,
+  children,
+}: {
+  icon: ReactNode
+  label: string
+  danger?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.currentTarget.closest('details')?.removeAttribute('open')
+    onClick()
+  }
+  return (
+    <button
+      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition ${
+        danger ? 'text-red-500 hover:bg-red-50' : 'text-ink-100 hover:bg-gray-50 hover:text-brand-500'
+      }`}
+      title={label}
+      onClick={handleClick}
+    >
+      {icon}
+      <span>{children}</span>
+    </button>
   )
 }

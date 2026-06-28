@@ -56,7 +56,7 @@ func (s *SubscriptionService) lookupSubscriptionMetadata(ctx context.Context, me
 	for _, libType := range subscriptionMetadataLibraryTypes(mediaType, title) {
 		lib := &model.Library{Type: libType, Enabled: true}
 		for _, query := range queries {
-			cleaned, year := CleanQuery(query)
+			cleaned, year := CleanQueryWithRecognition(ctx, s.repo, query)
 			if cleaned == "" {
 				cleaned = strings.TrimSpace(query)
 			}

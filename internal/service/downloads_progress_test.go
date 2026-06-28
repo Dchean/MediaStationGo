@@ -51,7 +51,7 @@ func TestSyncDownloadTaskProgressMatchesSeasonFolderTorrentName(t *testing.T) {
 		Source:   "qbittorrent",
 		URL:      "magnet:?xt=urn:btih:test",
 		Title:    "The First Jasmine S01E01 1080p TX WEB-DL AAC2.0 H.264-MWeb",
-		SavePath: "/downloads/未分类",
+		SavePath: "/downloads/欧美剧",
 		Status:   "queued",
 		Progress: 0.5,
 	}
@@ -82,7 +82,7 @@ func TestProcessDownloadSnapshotQueuesCompletedPendingTaskOnFirstSnapshot(t *tes
 		Source:   "qbittorrent",
 		URL:      "magnet:?xt=urn:btih:test",
 		Title:    "Blades of the Guardians S02E01 1080p TX WEB-DL AAC2.0 H.264-MWeb",
-		SavePath: "/downloads/未分类",
+		SavePath: "/downloads/欧美剧",
 		Status:   "queued",
 		Progress: 0,
 	}
@@ -113,7 +113,7 @@ func TestProcessDownloadSnapshotDoesNotQueueActiveDownloadAtFullProgress(t *test
 		Source:   "qbittorrent",
 		URL:      "magnet:?xt=urn:btih:test",
 		Title:    "Still Downloading S01E01",
-		SavePath: "/downloads/未分类",
+		SavePath: "/downloads/欧美剧",
 		Status:   "downloading",
 		Progress: 0.99,
 	}
@@ -151,7 +151,7 @@ func TestProcessDownloadSnapshotDoesNotQueueFullProgressWithoutQBitState(t *test
 		Source:   "qbittorrent",
 		URL:      "magnet:?xt=urn:btih:test",
 		Title:    "Missing State S01E01",
-		SavePath: "/downloads/未分类",
+		SavePath: "/downloads/欧美剧",
 		Status:   "downloading",
 		Progress: 0.99,
 	}
@@ -188,7 +188,7 @@ func TestProcessDownloadSnapshotDoesNotTrustCompletionOnForActiveDownload(t *tes
 		Source:   "qbittorrent",
 		URL:      "magnet:?xt=urn:btih:test",
 		Title:    "Still Downloading With Completion Timestamp S01E01",
-		SavePath: "/downloads/未分类",
+		SavePath: "/downloads/欧美剧",
 		Status:   "downloading",
 		Progress: 0.5,
 	}

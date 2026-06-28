@@ -166,10 +166,16 @@ func (s *SubscriptionService) Delete(ctx context.Context, id string) error {
 // by the admin UI's "test now" button.
 func (s *SubscriptionService) RunNow(ctx context.Context, id string) (int, error) {
 	var sub model.Subscription
-	if err := s.repo.DB.Where("id = ?", id).First(&sub).Error; err != nil {
+	if err := s.repo.DB.WithContext(ctx).Where("id = ?", id).First(&sub).Error; err != nil {
 		return 0, err
 	}
 	if sub.ArchivedAt != nil {
+		if s.log != nil {
+			s.log.Info("subscription run skipped because it is archived",
+				zap.String("subscription_id", sub.ID),
+				zap.String("subscription", sub.Name),
+				zap.String("archive_reason", sub.ArchiveReason))
+		}
 		return 0, nil
 	}
 	return s.runOne(ctx, &sub)
@@ -235,6 +241,9 @@ func (s *SubscriptionService) runAll(ctx context.Context) {
 	if err != nil {
 		s.log.Warn("subscription list failed", zap.Error(err))
 		return
+	}
+	if s.log != nil {
+		s.log.Info("subscription sweep started", zap.Int("count", len(subs)))
 	}
 	for i := range subs {
 		if !subs[i].Enabled {

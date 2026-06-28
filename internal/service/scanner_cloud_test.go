@@ -88,13 +88,13 @@ func TestInferCloudMountMediaType(t *testing.T) {
 	cases := map[string]string{
 		"/日漫":      "anime",
 		"/国漫":      "anime",
-		"/欧美动漫":    "anime",
+		"/美漫":      "anime",
 		"/电视剧/国产剧": "tv",
 		"/电视剧/欧美剧": "tv",
 		"/电视剧/日韩剧": "tv",
 		"/电影/动画电影": "movie",
 		"/电影/华语电影": "movie",
-		"/电影/外语电影": "movie",
+		"/电影/欧美电影": "movie",
 		"/综艺":      "variety",
 	}
 	for dir, want := range cases {

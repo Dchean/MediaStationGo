@@ -1,167 +1,90 @@
 package service
 
 import (
-	"context"
 	"strings"
 
 	"github.com/ShukeBta/MediaStationGo/internal/model"
-	"github.com/ShukeBta/MediaStationGo/internal/repository"
 )
 
-func MergedLibraryIDsForLibrary(ctx context.Context, repo *repository.Container, libraryID string) ([]string, error) {
-	libraryID = strings.TrimSpace(libraryID)
-	if libraryID == "" || repo == nil || repo.Library == nil {
-		return []string{libraryID}, nil
-	}
-	lib, err := repo.Library.FindByID(ctx, libraryID)
-	if err != nil {
-		return nil, err
-	}
-	if lib == nil {
-		return []string{libraryID}, nil
-	}
-	libs, err := repo.Library.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return MergedLibraryIDs(libs, *lib), nil
-}
-
-func MergedLibraryIDs(libs []model.Library, lib model.Library) []string {
-	ids := []string{}
-	seen := map[string]struct{}{}
-	add := func(more ...string) {
-		for _, id := range more {
-			id = strings.TrimSpace(id)
-			if id == "" {
-				continue
-			}
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			ids = append(ids, id)
-		}
-	}
-	add(lib.ID)
-	if rootAutoIDs := cloudRootAutoCategoryLibraryIDs(libs, lib); len(rootAutoIDs) > 0 {
-		add(rootAutoIDs...)
-	}
-	key, ok := CloudLibraryMergeKey(lib)
+func cloudLibraryDisplayKey(lib model.Library) (string, bool) {
+	info, ok := ParseCloudLibraryMount(lib.Path)
 	if !ok {
-		return ids
+		return "", false
 	}
-	_, libIsCloud := ParseCloudLibraryMount(lib.Path)
-	for _, candidate := range libs {
-		if candidate.ID == lib.ID || !candidate.Enabled {
-			continue
-		}
-		candidateKey, ok := CloudLibraryMergeKey(candidate)
-		if !ok || candidateKey != key {
-			continue
-		}
-		_, candidateIsCloud := ParseCloudLibraryMount(candidate.Path)
-		if !libIsCloud && !candidateIsCloud {
-			continue
-		}
-		add(candidate.ID)
-	}
-	return ids
+	dir := firstNonEmpty(info.DisplayDir, info.ScanDir)
+	return info.Provider + "\x00" + dir, true
 }
 
-func cloudRootAutoCategoryLibraryIDs(libs []model.Library, lib model.Library) []string {
-	mount, ok := ParseCloudLibraryMount(lib.Path)
-	if !ok || !cloudRootMountNeedsAutoCategory(mount) {
-		return nil
+func cloudLibraryPathIsCanonical(lib model.Library) bool {
+	info, ok := ParseCloudLibraryMount(lib.Path)
+	if !ok {
+		return false
 	}
-	ids := make([]string, 0)
-	for _, candidate := range libs {
-		if candidate.ID == lib.ID || !candidate.Enabled || !CloudLibraryAutoCategory(candidate) {
-			continue
-		}
-		info, ok := ParseCloudLibraryMount(candidate.Path)
-		if ok && info.Provider == mount.Provider {
-			ids = appendUniqueLibraryIDs(ids, candidate.ID)
-		}
-	}
-	return ids
+	return BuildCloudLibraryPath(info.Provider, info.ScanDir, info.DisplayDir) == strings.TrimSpace(lib.Path)
 }
 
-func ExpandMediaVisibilityForMergedCloudLibraries(ctx context.Context, repo *repository.Container, visibility MediaVisibility) MediaVisibility {
-	if repo == nil || repo.Library == nil {
-		return visibility
+func CloudLibraryMergeKey(lib model.Library) (string, bool) {
+	name := strings.TrimSpace(lib.Name)
+	if displayName, ok := CloudLibraryDisplayName(lib); ok {
+		name = displayName
 	}
-	libs, err := repo.Library.List(ctx)
-	if err != nil {
-		return visibility
+	name = normalizeLibraryMergeName(name)
+	if name == "" {
+		return "", false
 	}
-	if len(visibility.AllowedLibraryIDs) > 0 {
-		visibility.AllowedLibraryIDs = expandMergedLibraryIDsFromLibraries(libs, visibility.AllowedLibraryIDs)
-	}
-	if len(visibility.HiddenLibraryIDs) > 0 {
-		visibility.HiddenLibraryIDs = expandMergedLibraryIDsFromLibraries(libs, visibility.HiddenLibraryIDs)
-	}
-	visibility.HiddenLibraryIDs = appendUniqueLibraryIDs(visibility.HiddenLibraryIDs, DeprecatedNativeCloudLibraryIDs(libs)...)
-	return visibility
+	typeKey := cloudLibraryMergeTypeKey(lib.Type)
+	return typeKey + "\x00" + cloudLibraryMergeNameKey(typeKey, name), true
 }
 
-func expandMergedLibraryIDs(ctx context.Context, repo *repository.Container, ids []string) []string {
-	if len(ids) == 0 {
-		return ids
+func cloudLibraryMergeTypeKey(libraryType string) string {
+	switch strings.ToLower(strings.TrimSpace(libraryType)) {
+	case "tv", "anime", "variety":
+		return "tvshows"
+	default:
+		return strings.ToLower(strings.TrimSpace(libraryType))
 	}
-	libs, err := repo.Library.List(ctx)
-	if err != nil {
-		return ids
-	}
-	return expandMergedLibraryIDsFromLibraries(libs, ids)
 }
 
-func expandMergedLibraryIDsFromLibraries(libs []model.Library, ids []string) []string {
-	byID := make(map[string]model.Library, len(libs))
-	for _, lib := range libs {
-		byID[lib.ID] = lib
-	}
-	out := make([]string, 0, len(ids))
-	for _, id := range ids {
-		lib, ok := byID[id]
-		if !ok {
-			out = appendUniqueLibraryIDs(out, id)
-			continue
+func cloudLibraryMergeNameKey(typeKey, name string) string {
+	switch typeKey {
+	case "movie":
+		switch name {
+		case "国产电影", "大陆电影":
+			return "华语电影"
+		case "华语电影":
+			return "华语电影"
+		case "外语电影", "外国电影", "欧美电影":
+			return "欧美电影"
+		case "日韩电影", "日本电影", "韩国电影":
+			return "日韩电影"
+		case "纪录", "纪录片":
+			return "纪录片"
+		case "演唱会", "concert":
+			return "演唱会"
+		case "动画电影", "动漫电影":
+			return "动画电影"
 		}
-		for _, mergedID := range MergedLibraryIDs(libs, lib) {
-			out = appendUniqueLibraryIDs(out, mergedID)
-		}
-	}
-	return out
-}
-
-func DeprecatedNativeCloudLibraryIDs(libs []model.Library) []string {
-	ids := make([]string, 0)
-	for _, lib := range libs {
-		info, ok := ParseCloudLibraryMount(lib.Path)
-		if ok && IsDeprecatedNativeCloudProvider(info.Provider) {
-			ids = appendUniqueLibraryIDs(ids, lib.ID)
-		}
-	}
-	return ids
-}
-
-func appendUniqueLibraryIDs(ids []string, more ...string) []string {
-	for _, id := range more {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		found := false
-		for _, existing := range ids {
-			if existing == id {
-				found = true
-				break
-			}
-		}
-		if !found {
-			ids = append(ids, id)
+	case "tvshows":
+		switch name {
+		case "国产剧", "大陆剧", "华语剧", "国剧":
+			return "国产剧"
+		case "欧美剧", "美剧", "英剧":
+			return "欧美剧"
+		case "日韩剧", "日剧", "韩剧":
+			return "日韩剧"
+		case "国漫", "国产动漫", "国产动画":
+			return "国漫"
+		case "日番", "日漫", "番剧", "日本动漫", "日本动画":
+			return "日番"
+		case "韩漫", "韩国动漫", "韩国动画":
+			return "韩漫"
+		case "美漫", "欧美动漫", "欧美动画", "西方动画":
+			return "美漫"
+		case "其他", "其他动漫", "其它动漫", "other":
+			return "其他"
+		case "纪录", "纪录片":
+			return "纪录片"
 		}
 	}
-	return ids
+	return name
 }

@@ -146,3 +146,39 @@ func TestSiteSearchReturnsErrorWhenAllEnabledSitesFail(t *testing.T) {
 		t.Fatalf("error = %q, want site failure context", err.Error())
 	}
 }
+
+func TestSearchSiteQueriesSelectedSiteEvenWhenDisabled(t *testing.T) {
+	var gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte(`<table><tr><td><a href="details.php?id=321" title="Selected Site Result">Selected Site Result</a><a href="download.php?id=321">下载</a></td></tr></table>`))
+	}))
+	defer upstream.Close()
+
+	db := newServiceTestDB(t, &model.Site{})
+	repos := repository.New(db)
+	svc := NewSiteService(zap.NewNop(), repos, "")
+	site := &model.Site{
+		Name:     "Selected Nexus",
+		Type:     "nexusphp",
+		URL:      upstream.URL,
+		AuthType: "cookie",
+		Cookie:   "uid=1; pass=token",
+		Enabled:  false,
+		Timeout:  5,
+	}
+	if err := svc.Create(context.Background(), site); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := svc.SearchSite(context.Background(), site.ID, "Selected", 1)
+	if err != nil {
+		t.Fatalf("SearchSite returned error: %v", err)
+	}
+	if !strings.Contains(gotQuery, "searchstr=Selected") {
+		t.Fatalf("query = %q, want searchstr=Selected", gotQuery)
+	}
+	if len(results) != 1 || results[0].SiteID != site.ID || results[0].Title != "Selected Site Result" {
+		t.Fatalf("results = %#v", results)
+	}
+}

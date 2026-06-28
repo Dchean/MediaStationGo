@@ -46,7 +46,7 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 				Countries: []string{"NL"},
 				Genres:    []string{"Comedy"},
 			},
-			want: "外语电影",
+			want: "欧美电影",
 		},
 		{
 			name: "movie animation source category fallback",
@@ -99,7 +99,7 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 				MediaType: "movie",
 				Title:     "Dune 2021 2160p",
 			},
-			want: "外语电影",
+			want: "欧美电影",
 		},
 		{
 			name: "chinese tv title without metadata",
@@ -110,12 +110,12 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 			want: "国产剧",
 		},
 		{
-			name: "latin tv title without metadata stays uncategorized",
+			name: "latin tv title without metadata falls back to western tv",
 			input: mediaClassifyInput{
 				MediaType: "tv",
 				Title:     "The Last of Us S01E01 1080p",
 			},
-			want: "未分类",
+			want: "欧美剧",
 		},
 		{
 			name: "latin tv keeps explicit western source category",
@@ -133,7 +133,7 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 				Title:     "The Last of Us S01E01 1080p",
 				Category:  "downloads 电视剧",
 			},
-			want: "未分类",
+			want: "欧美剧",
 		},
 		{
 			name: "gala title overrides wrong western source category",
@@ -150,7 +150,7 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 				MediaType: "tv",
 				Title:     "Motherhood.of.Taihang.S01E01.2026.1080p.iQIYI.WEB-DL",
 			},
-			want: "未分类",
+			want: "欧美剧",
 		},
 		{
 			name: "metadata classifies romanized chinese drama",
@@ -170,12 +170,12 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 			want: "综艺",
 		},
 		{
-			name: "japanese anime localized chinese title defaults to jp without metadata",
+			name: "japanese anime localized chinese title without metadata falls back to other",
 			input: mediaClassifyInput{
 				MediaType: "anime",
 				Title:     "葬送的芙莉莲",
 			},
-			want: "日番",
+			want: "其他",
 		},
 		{
 			name: "chinese anime explicit marker without metadata",
@@ -197,7 +197,7 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 			want: "日番",
 		},
 		{
-			name: "western anime metadata uses western anime category",
+			name: "western anime metadata uses us anime category",
 			input: mediaClassifyInput{
 				MediaType: "anime",
 				Title:     "Family Guy",
@@ -205,26 +205,26 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 				Genres:    []string{"16"},
 				Category:  "日番",
 			},
-			want: "欧美动漫",
+			want: "美漫",
 		},
 		{
-			name: "tv animation with western metadata uses western anime category",
+			name: "tv animation with western metadata uses us anime category",
 			input: mediaClassifyInput{
 				MediaType: "tv",
 				Title:     "The Simpsons",
 				Countries: []string{"US"},
 				Genres:    []string{"Animation"},
 			},
-			want: "欧美动漫",
+			want: "美漫",
 		},
 		{
-			name: "western anime source category is preserved without metadata",
+			name: "western anime legacy source category maps to us anime without metadata",
 			input: mediaClassifyInput{
 				MediaType: "anime",
 				Title:     "The Simpsons S01E01 1080p",
 				Category:  "downloads 欧美动漫",
 			},
-			want: "欧美动漫",
+			want: "美漫",
 		},
 		{
 			name: "anime with CN country metadata is cn",
@@ -244,6 +244,47 @@ func TestClassifyMediaCategoryMatchesSmartRules(t *testing.T) {
 				Category:  "downloads 欧美电影",
 			},
 			want: "欧美电影",
+		},
+		{
+			name: "movie concert by music genre",
+			input: mediaClassifyInput{
+				MediaType: "movie",
+				Title:     "Taylor Swift The Eras Tour",
+				Genres:    []string{"10402"},
+			},
+			want: "演唱会",
+		},
+		{
+			name: "movie documentary before region",
+			input: mediaClassifyInput{
+				MediaType: "movie",
+				Title:     "Planet Earth",
+				Languages: []string{"en"},
+				Countries: []string{"GB"},
+				Genres:    []string{"99"},
+			},
+			want: "纪录片",
+		},
+		{
+			name: "movie korean language uses jk movie",
+			input: mediaClassifyInput{
+				MediaType: "movie",
+				Title:     "Parasite",
+				Languages: []string{"ko"},
+				Countries: []string{"KR"},
+				Genres:    []string{"18"},
+			},
+			want: "日韩电影",
+		},
+		{
+			name: "anime korean metadata uses korean anime category",
+			input: mediaClassifyInput{
+				MediaType: "anime",
+				Title:     "Korean Animation",
+				Countries: []string{"KR"},
+				Genres:    []string{"16"},
+			},
+			want: "韩漫",
 		},
 		{
 			name: "jav code is adult",

@@ -85,11 +85,11 @@ func InferCloudMountMediaType(dir, name string) string {
 	switch {
 	case strings.Contains(text, "成人") || strings.Contains(text, "adult") || strings.Contains(text, "jav") || strings.Contains(text, "9kg"):
 		return "adult"
-	case containsAny(text, "动画电影", "华语电影", "外语电影", "欧美电影", "日韩电影", "韩国电影", "日本电影", "港台电影", "香港电影", "台湾电影", "大陆电影", "国产电影", "纪录片", "演唱会", "电影", "movie", "movies", "film", "films", "documentary", "concert"):
+	case containsAny(text, "动画电影", "华语电影", "外语电影", "外国电影", "欧美电影", "日韩电影", "韩国电影", "日本电影", "港台电影", "香港电影", "台湾电影", "大陆电影", "国产电影", "纪录片", "演唱会", "音乐会", "电影", "movie", "movies", "film", "films", "documentary", "concert"):
 		return "movie"
 	case containsAny(text, "综艺", "真人秀", "脱口秀", "晚会", "variety"):
 		return "variety"
-	case containsAny(text, "国漫", "日漫", "日番", "番剧", "动漫", "欧美动漫", "动画剧集", "anime"):
+	case containsAny(text, "国漫", "日漫", "日番", "韩漫", "美漫", "番剧", "动漫", "欧美动漫", "动画剧集", "anime"):
 		return "anime"
 	case containsAny(text, "国产剧", "大陆剧", "华语剧", "欧美剧", "日韩剧", "韩剧", "日剧", "港剧", "台剧", "泰剧", "英剧", "美剧", "短剧", "电视剧", "剧集", "连续剧", "series", "tv", "shows"):
 		return "tv"

@@ -14,11 +14,14 @@ import {
 } from './strmPageModel'
 import { apiErrorMessage, isHTTPURL } from './strmPageUtils'
 
+type OutputRootSource = 'explicit' | 'generated'
+
 export function useStrmGenerateForm(libraries: Library[]) {
   const [generateLibraryID, setGenerateLibraryID] = useState('')
   const [baseURL, setBaseURL] = useState('')
   const [outputDir, setOutputDir] = useState('')
   const [outputRoot, setOutputRoot] = useState('')
+  const [outputRootSource, setOutputRootSource] = useState<OutputRootSource>('explicit')
   const [outputScope, setOutputScope] = useState('')
   const [outputDirTouched, setOutputDirTouched] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
@@ -48,6 +51,7 @@ export function useStrmGenerateForm(libraries: Library[]) {
         setBaseURL(preferredSTRMBaseURL(settings['strm.base_url'] || settings['app.server_url'] || ''))
         setOutputDir(savedOutputDir)
         setOutputRoot(savedOutputDir)
+        setOutputRootSource(settings['strm.output_scope'] === 'library' ? 'generated' : 'explicit')
         setOutputScope(settings['strm.output_scope'] || '')
         setOutputDirTouched(false)
         setCloudPlaybackMode(nextMode)
@@ -69,18 +73,22 @@ export function useStrmGenerateForm(libraries: Library[]) {
 
   useEffect(() => {
     if (!settingsLoaded || outputDirTouched || !generateLibraryID) return
-    const root = outputScope === 'library' ? inferSTRMOutputRoot(outputRoot, libraries) : outputRoot
+    const root =
+      outputScope === 'library' && outputRootSource === 'generated'
+        ? inferSTRMOutputRoot(outputRoot, libraries)
+        : outputRoot
     if (generateLibraryID === '*') {
       setOutputDir(root)
       return
     }
     const library = libraries.find((item) => item.id === generateLibraryID)
     if (library) setOutputDir(suggestedSTRMOutputDir(root, library))
-  }, [settingsLoaded, outputDirTouched, outputRoot, outputScope, generateLibraryID, libraries])
+  }, [settingsLoaded, outputDirTouched, outputRoot, outputRootSource, outputScope, generateLibraryID, libraries])
 
   const onOutputDirChange = (value: string) => {
     setOutputDir(value)
     setOutputRoot(value)
+    setOutputRootSource('explicit')
     setOutputScope('')
     setOutputDirTouched(true)
   }
@@ -95,11 +103,13 @@ export function useStrmGenerateForm(libraries: Library[]) {
     }
 
     setGenerating(true)
+    const submittedOutputDir = outputDir.trim()
+    const submittedOutputWasExplicit = outputDirTouched
     try {
       const result = await strmAPI.generate({
         library_id: generateLibraryID,
         base_url: trimmedBaseURL.replace(/\/+$/, ''),
-        output_dir: outputDir.trim(),
+        output_dir: submittedOutputDir,
         overwrite,
         enabled: autoGenerate,
         include_local: true,
@@ -107,7 +117,8 @@ export function useStrmGenerateForm(libraries: Library[]) {
       const nextOutputDir = result.output_dir || outputDir
       setGenerateResult(result)
       setOutputDir(nextOutputDir)
-      setOutputRoot(inferSTRMOutputRoot(nextOutputDir, libraries))
+      setOutputRoot(submittedOutputWasExplicit ? submittedOutputDir : inferSTRMOutputRoot(nextOutputDir, libraries))
+      setOutputRootSource(submittedOutputWasExplicit ? 'explicit' : 'generated')
       setOutputScope(generateLibraryID === '*' ? 'all' : 'library')
       setOutputDirTouched(false)
       toast.success(`生成完成：新增 ${result.generated} · 更新 ${result.updated} · 跳过 ${result.skipped}`)

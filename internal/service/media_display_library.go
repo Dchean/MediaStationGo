@@ -80,13 +80,13 @@ func (r mediaDisplayLibraryResolver) DisplayLibraryForMedia(media model.Media) (
 	}
 	own, hasOwn := r.byID[media.LibraryID]
 	if hasOwn {
-		if CloudLibraryAutoCategory(own) {
-			if lib, ok := r.rootCloudDisplayLibraryForAutoCategory(own); ok {
+		if key, ok := CloudLibraryMergeKey(own); ok {
+			if lib, exists := r.displayByMergeKey[key]; exists {
 				return lib, true
 			}
 		}
-		if key, ok := CloudLibraryMergeKey(own); ok {
-			if lib, exists := r.displayByMergeKey[key]; exists {
+		if CloudLibraryAutoCategory(own) {
+			if lib, ok := r.rootCloudDisplayLibraryForAutoCategory(own); ok {
 				return lib, true
 			}
 		}

@@ -171,22 +171,43 @@ func (c *cloudScanCandidateCollector) addFileCandidate(displayDir string, entry 
 	c.req.progress.publish(c.scanner, c.lib.ID, c.req.result, "listing", c.req.progress.markFileDiscovered())
 	displayPath := joinCloudDisplayPath(displayDir, entry.Name)
 	path := cloudMediaPath(c.req.provider, displayPath)
-	localMeta := c.scanner.cloudFileMetadata(c.ctx, c.req.provider, displayPath, entry.Name, sidecars, dirMeta, librarySupportsSeasons(c.lib))
-	localMeta = c.scanner.enrichCloudMetadataFromExternalIDs(c.ctx, c.lib, path, localMeta)
-	if localMeta != nil {
-		c.scanner.cacheCloudMetadataArtworkNow(c.ctx, localMeta)
-	}
 	candidate := cloudCandidate{
 		ref:       ref,
 		name:      entry.Name,
 		size:      entry.Size,
 		path:      path,
-		localMeta: localMeta,
 	}
 	if c.req.autoCategoryRoot {
-		candidate.categoryDisplayDir = cloudAutoCategoryDisplayDirForMediaPath(path)
+		candidate.categoryDisplayDir, candidate.categoryScanDir = cloudAutoCategoryDirsForMediaPath(path)
+		if candidate.categoryDisplayDir != "" {
+			displayPath = canonicalCloudAutoCategoryMediaDisplayPath(displayPath, candidate.categoryDisplayDir, candidate.categoryScanDir)
+			candidate.path = cloudMediaPath(c.req.provider, displayPath)
+		}
 	}
+	localMeta := c.scanner.cloudFileMetadata(c.ctx, c.req.provider, displayPath, entry.Name, sidecars, dirMeta, librarySupportsSeasons(c.lib))
+	localMeta = c.scanner.enrichCloudMetadataFromExternalIDs(c.ctx, c.lib, candidate.path, localMeta)
+	if localMeta != nil {
+		c.scanner.cacheCloudMetadataArtworkNow(c.ctx, localMeta)
+	}
+	candidate.localMeta = localMeta
 	c.addCandidate(displayDir, entry, candidate)
+}
+
+func canonicalCloudAutoCategoryMediaDisplayPath(displayPath, categoryDisplayDir, categoryScanDir string) string {
+	displayPath = strings.Trim(strings.TrimSpace(strings.ReplaceAll(displayPath, "\\", "/")), "/")
+	categoryDisplayDir = strings.Trim(strings.TrimSpace(strings.ReplaceAll(categoryDisplayDir, "\\", "/")), "/")
+	categoryScanDir = strings.Trim(strings.TrimSpace(strings.ReplaceAll(categoryScanDir, "\\", "/")), "/")
+	if displayPath == "" || categoryDisplayDir == "" || categoryScanDir == "" || displayPath == categoryDisplayDir || categoryDisplayDir == categoryScanDir {
+		return displayPath
+	}
+	if displayPath == categoryScanDir {
+		return categoryDisplayDir
+	}
+	prefix := strings.TrimRight(categoryScanDir, "/") + "/"
+	if strings.HasPrefix(displayPath, prefix) {
+		return strings.TrimRight(categoryDisplayDir, "/") + "/" + strings.TrimPrefix(displayPath, prefix)
+	}
+	return displayPath
 }
 
 func (c *cloudScanCandidateCollector) markRefSeen(ref string) bool {

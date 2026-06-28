@@ -83,8 +83,10 @@ func (o *OrganizerService) buildOrganizeMediaDestination(ctx context.Context, re
 		category = o.classifyMedia(ctx, m, mediaType)
 	}
 	if impliedType, normalizedCategory := o.mediaTypeForDirectoryCategory(category); impliedType != "" {
-		mediaType = impliedType
 		category = normalizedCategory
+		if normalizeOrganizeMediaType(req.mediaType) == "" {
+			mediaType = impliedType
+		}
 	}
 	root := o.organizeRoot(req.baseRoot, mediaType, category)
 	targetLibraryID := ""

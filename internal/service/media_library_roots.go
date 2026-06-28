@@ -32,12 +32,69 @@ func (s *MediaService) CreateLibraryWithRoots(ctx context.Context, name, kind st
 		return nil, err
 	}
 	kind = inferLibraryKind(name, roots[0].Path, kind)
+	if existing, err := s.findLogicalLibrary(ctx, name, kind); err != nil {
+		return nil, err
+	} else if existing != nil {
+		lib, err := s.appendLibraryRoots(ctx, existing, roots)
+		if err != nil {
+			return nil, err
+		}
+		s.invalidateMediaCache(ctx)
+		return lib, nil
+	}
 	lib := &model.Library{Name: strings.TrimSpace(name), Path: roots[0].Path, Type: kind, Enabled: true}
 	if err := s.repo.Library.CreateWithRoots(ctx, lib, roots); err != nil {
 		return nil, err
 	}
 	s.invalidateMediaCache(ctx)
 	return lib, nil
+}
+
+func (s *MediaService) findLogicalLibrary(ctx context.Context, name, kind string) (*model.Library, error) {
+	if s == nil || s.repo == nil || s.repo.Library == nil {
+		return nil, nil
+	}
+	libs, err := s.repo.Library.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nameKey := strings.ToLower(strings.TrimSpace(name))
+	typeKey := strings.ToLower(strings.TrimSpace(kind))
+	for i := range libs {
+		if strings.ToLower(strings.TrimSpace(libs[i].Name)) == nameKey &&
+			strings.ToLower(strings.TrimSpace(libs[i].Type)) == typeKey {
+			return &libs[i], nil
+		}
+	}
+	return nil, nil
+}
+
+func (s *MediaService) appendLibraryRoots(ctx context.Context, lib *model.Library, roots []model.LibraryRoot) (*model.Library, error) {
+	if lib == nil {
+		return nil, errors.New("library not found")
+	}
+	if err := s.ensureLibraryRoots(ctx, lib.ID); err != nil {
+		return nil, err
+	}
+	existing, err := s.repo.Library.ListRoots(ctx, lib.ID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range roots {
+		root := roots[i]
+		root.LibraryID = lib.ID
+		root.SortOrder = len(existing) + i
+		if err := s.ensureLibraryRootPathUnique(ctx, lib.ID, "", root.Path); err != nil {
+			return nil, err
+		}
+		if err := s.repo.Library.CreateRoot(ctx, &root); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.syncLibraryPrimaryRoot(ctx, lib.ID); err != nil {
+		return nil, err
+	}
+	return s.repo.Library.FindByID(ctx, lib.ID)
 }
 
 func normalizeLibraryRootInputs(inputs []LibraryRootInput, requirePath bool) ([]model.LibraryRoot, error) {
@@ -51,11 +108,11 @@ func normalizeLibraryRootInputs(inputs []LibraryRootInput, requirePath bool) ([]
 			}
 			continue
 		}
-		abs, err := resolveAccessibleLibraryPath(rawPath)
+		abs, err := normalizeLibraryRootPath(rawPath)
 		if err != nil {
 			return nil, err
 		}
-		key := strings.ToLower(filepath.Clean(abs))
+		key := libraryRootPathKey(abs)
 		if _, ok := seen[key]; ok {
 			return nil, fmt.Errorf("duplicate library path: %s", abs)
 		}
@@ -186,7 +243,7 @@ func (s *MediaService) ensureLibraryRoots(ctx context.Context, libraryID string)
 	}
 	root := &model.LibraryRoot{
 		LibraryID: libraryID,
-		Name:      filepath.Base(filepath.Clean(lib.Path)),
+		Name:      libraryRootNameForPath(lib.Path),
 		Path:      lib.Path,
 		Enabled:   lib.Enabled,
 		SortOrder: 0,
@@ -208,13 +265,51 @@ func (s *MediaService) ensureLibraryRootPathUnique(ctx context.Context, libraryI
 		return err
 	}
 	key := strings.ToLower(filepath.Clean(strings.TrimSpace(pathValue)))
+	key = libraryRootPathKey(pathValue)
 	for _, existing := range roots {
 		if existing.ID == exceptRootID {
 			continue
 		}
-		if strings.ToLower(filepath.Clean(strings.TrimSpace(existing.Path))) == key {
+		if libraryRootPathKey(existing.Path) == key {
 			return fmt.Errorf("duplicate library path: %s", pathValue)
 		}
 	}
 	return nil
+}
+
+func normalizeLibraryRootPath(rawPath string) (string, error) {
+	rawPath = strings.TrimSpace(rawPath)
+	if info, ok := ParseCloudLibraryMount(rawPath); ok {
+		displayDir := canonicalLibraryDisplayDir(firstNonEmpty(info.DisplayDir, info.ScanDir))
+		if displayDir == "" {
+			displayDir = firstNonEmpty(info.DisplayDir, info.ScanDir)
+		}
+		if CloudLibraryAutoCategory(model.Library{Path: rawPath}) {
+			return BuildCloudAutoCategoryLibraryPathWithScanDir(info.Provider, info.ScanDir, displayDir), nil
+		}
+		return BuildCloudLibraryPath(info.Provider, info.ScanDir, displayDir), nil
+	}
+	return resolveAccessibleLibraryPath(rawPath)
+}
+
+func libraryRootPathKey(pathValue string) string {
+	pathValue = strings.TrimSpace(pathValue)
+	if info, ok := ParseCloudLibraryMount(pathValue); ok {
+		auto := "0"
+		if CloudLibraryAutoCategory(model.Library{Path: pathValue}) {
+			auto = "1"
+		}
+		return strings.ToLower(info.Provider + "\x00" + info.ScanDir + "\x00" + info.DisplayDir + "\x00" + auto)
+	}
+	return strings.ToLower(filepath.Clean(pathValue))
+}
+
+func libraryRootNameForPath(pathValue string) string {
+	if info, ok := ParseCloudLibraryMount(pathValue); ok {
+		if base := cloudMountDirBase(firstNonEmpty(info.DisplayDir, info.ScanDir)); base != "" {
+			return base
+		}
+		return CloudMountProviderLabel(info.Provider)
+	}
+	return filepath.Base(filepath.Clean(pathValue))
 }

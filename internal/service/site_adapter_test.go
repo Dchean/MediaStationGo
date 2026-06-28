@@ -212,6 +212,25 @@ func TestNexusPHPSearchUsesSearchstr(t *testing.T) {
 	}
 }
 
+func TestNexusPHPSearchReportsExpiredCookieLoginPage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html><form id="loginform" action="takelogin.php"><input type="password" /></form></html>`))
+	}))
+	defer server.Close()
+
+	adapter := NewNexusPHPAdapter()
+	_, err := adapter.Search(t.Context(), SiteConfig{
+		Name:     "Nexus",
+		URL:      server.URL,
+		AuthType: "cookie",
+		Cookie:   "uid=1; pass=expired",
+		Timeout:  5 * time.Second,
+	}, "测试", 1)
+	if err == nil || !strings.Contains(err.Error(), "cookie expired") {
+		t.Fatalf("Search error = %v, want cookie expired hint", err)
+	}
+}
+
 func TestParseNexusPHPHTMLModernRows(t *testing.T) {
 	page := `
 <table class="torrents">

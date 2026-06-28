@@ -3,7 +3,7 @@ import { AdminLibraryTable } from './AdminLibraryTable'
 import { useAdminLibraryPanel } from './useAdminLibraryPanel'
 
 export function AdminLibraryPanel() {
-  const { libs, createForm, newRoots, editableRoots, rootActions, libraryActions } = useAdminLibraryPanel()
+  const { libs, createForm, editableRoots, rootActions, libraryActions } = useAdminLibraryPanel()
 
   return (
     <div className="space-y-6">
@@ -20,11 +20,8 @@ export function AdminLibraryPanel() {
       />
       <AdminLibraryTable
         libs={libs}
-        newRootDraft={newRoots.newRootDraft}
         editableRootDraft={editableRoots.editableRootDraft}
-        onNewRootChange={newRoots.setNewRootDraft}
         onEditableRootChange={editableRoots.setEditableRootDraft}
-        onAddRoot={newRoots.addLibraryRoot}
         onSaveRoot={rootActions.saveLibraryRoot}
         onScanRoot={rootActions.scanLibraryRoot}
         onToggleRoot={rootActions.toggleLibraryRoot}

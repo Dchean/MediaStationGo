@@ -115,7 +115,7 @@ func (o *OrganizerService) organizeLibraryMatchesExpectedPhysicalRoot(libPath, c
 	if strings.TrimSpace(category) == "" {
 		return true
 	}
-	physicalRoot := o.categoryPhysicalRootDir(category)
+	physicalRoot := o.mediaTypeRootDirForCategory(mediaType, category)
 	if physicalRoot == "" {
 		physicalRoot = mediaTypeRootDir(mediaType)
 	}
@@ -126,7 +126,7 @@ func (o *OrganizerService) organizeLibraryMatchesExpectedPhysicalRoot(libPath, c
 }
 
 func (o *OrganizerService) organizeLibraryPhysicalRootScore(libPath, collectionRoot, mediaType, category string) int {
-	physicalRoot := o.categoryPhysicalRootDir(category)
+	physicalRoot := o.mediaTypeRootDirForCategory(mediaType, category)
 	if physicalRoot == "" {
 		physicalRoot = mediaTypeRootDir(mediaType)
 	}

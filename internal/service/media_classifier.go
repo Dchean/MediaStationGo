@@ -44,12 +44,9 @@ func classifyMediaCategory(input mediaClassifyInput, categories map[string]strin
 	isChineseByText := containsHan(rawTitleText) || containsAnyText(strings.ToLower(rawTitleText), "华语", "国产", "国剧", "国漫")
 	isChineseByCategory := containsAnyText(categoryText, "华语", "国产", "国剧", "大陆剧", "国产电视剧", "国产电影", "国漫", "国产动漫", "国产动画")
 	isChinese := isChineseByMetadata || (!hasMetadata && isChineseByText)
-	// 动漫的中文译名几乎都是纯汉字(如日本动画「葬送的芙莉莲」),用 containsHan
-	// 判中文会把日本动画误判成国漫。动漫只在有元数据或显式中文标记时才算国漫,
-	// 否则默认日番(日本动画占绝大多数;未刮削的国漫刮出 origin_country=CN 后仍正确)。
 	isChineseAnime := isChineseByMetadata || (!hasMetadata && containsAnyText(text, "华语", "国产", "国漫", "國漫", "国创", "国产动漫", "国产动画"))
-	isJapanese := hasAny(languages, "JA", "JP") || hasAny(countries, "JP") || containsJapaneseKana(rawText) || strings.Contains(text, "日番")
-	isKorean := hasAny(languages, "KO", "KR") || hasAny(countries, "KR", "KP") || containsKoreanHangul(rawText)
+	isJapanese := hasAny(languages, "JA", "JP") || hasAny(countries, "JP") || containsJapaneseKana(rawTitleText) || (!hasMetadata && strings.Contains(text, "日番"))
+	isKorean := hasAny(languages, "KO", "KR") || hasAny(countries, "KR", "KP") || containsKoreanHangul(rawTitleText) || (!hasMetadata && containsAnyText(categoryText, "韩漫", "韩国动漫", "韩国动画"))
 	isEastAsianByCategory := containsAnyText(categoryText, "日韩剧", "日剧", "韩剧", "日韩电影")
 	isEastAsian := isJapanese || isKorean || hasAny(countries, "TH", "IN", "SG") || (!hasMetadata && isEastAsianByCategory)
 	isWesternByMetadata := hasAny(countries,
@@ -58,9 +55,11 @@ func classifyMediaCategory(input mediaClassifyInput, categories map[string]strin
 	)
 	isWesternByCategory := containsAnyText(categoryText, "欧美剧", "欧美电视剧", "美剧", "英剧", "欧美电影", "外语电影")
 	isWestern := isWesternByMetadata || (!hasMetadata && isWesternByCategory)
-	hasAnimeText := containsAnyText(text, "动画", "动漫", "番剧", "年番", "国漫", "日番", "bangumi", "anime", "b-global", "ani-one", "crunchyroll")
+	isUSAnime := hasAny(countries, "US")
+	hasAnimeText := containsAnyText(text, "动画", "动漫", "番剧", "年番", "国漫", "日番", "韩漫", "美漫", "bangumi", "anime", "b-global", "ani-one", "crunchyroll")
 	hasVarietyText := containsAnyText(text, "综艺", "真人秀", "脱口秀", "晚会", "春晚", "gala", "festival gala", "reality", "talk show")
 	hasDocumentaryText := containsAnyText(text, "纪录", "纪录片", "documentary", "docu", "national geographic", "natgeo")
+	hasConcertText := containsAnyText(text, "演唱会", "音乐会", "concert", "live concert")
 	isAdultText := containsAnyText(text, "adult", "nsfw", "成人", "番号", "jav", "9kg", "uncensored", "无码", "有码") || classifierJAVCodeRE.MatchString(strings.ToUpper(rawText))
 
 	hasGenre := func(values ...string) bool {
@@ -77,11 +76,32 @@ func classifyMediaCategory(input mediaClassifyInput, categories map[string]strin
 		}
 		return false
 	}
+	animeCategory := func() string {
+		if isChineseAnime {
+			return categoryName(categories, "cn_anime", "国漫")
+		}
+		if isJapanese {
+			return categoryName(categories, "jp_anime", "日番")
+		}
+		if isKorean {
+			return categoryName(categories, "kr_anime", "韩漫")
+		}
+		if isUSAnime || (!hasMetadata && containsAnyText(categoryText, "美漫", "欧美动漫", "欧美动画", "西方动画")) {
+			return categoryName(categories, "us_anime", "美漫")
+		}
+		return categoryName(categories, "other_anime", "其他")
+	}
 
 	switch mediaType {
 	case "movie":
 		if isAdultText {
 			return categoryName(categories, "adult", "成人")
+		}
+		if hasGenre("10402", "MUSIC", "音乐") || hasConcertText {
+			return categoryName(categories, "concert_movie", "演唱会")
+		}
+		if hasGenre("99", "DOCUMENTARY", "纪录", "纪录片") || hasDocumentaryText {
+			return categoryName(categories, "documentary_movie", "纪录片")
 		}
 		if hasGenre("16", "ANIMATION", "动画", "动漫") || hasAnimeText {
 			return categoryName(categories, "animation_movie", "动画电影")
@@ -92,26 +112,23 @@ func classifyMediaCategory(input mediaClassifyInput, categories map[string]strin
 		if isChinese {
 			return categoryName(categories, "chinese_movie", "华语电影")
 		}
-		return categoryName(categories, "foreign_movie", "外语电影")
+		if hasAny(languages, "JA", "KO") || (!hasAny(languages, "ZH", "ZH-CN", "ZH-TW", "CN", "BO", "ZA") && hasAny(countries, "JP", "KP", "KR")) {
+			return categoryName(categories, "jk_movie", "日韩电影")
+		}
+		return categoryName(categories, "euus_movie", "欧美电影")
 	case "anime":
+		if isAdultText {
+			return categoryName(categories, "adult", "成人")
+		}
 		if !hasMetadata && sourceHint != "" {
 			return sourceHint
 		}
-		if isChineseAnime {
-			return categoryName(categories, "cn_anime", "国漫")
-		}
-		if isWesternByMetadata || (!hasMetadata && containsAnyText(categoryText, "欧美动漫", "欧美动画", "西方动画")) {
-			return categoryName(categories, "euus_anime", "欧美动漫")
-		}
-		return categoryName(categories, "jp_anime", "日番")
+		return animeCategory()
 	case "variety":
 		return categoryName(categories, "variety", "综艺")
 	case "tv":
 		if isAdultText {
 			return categoryName(categories, "adult", "成人")
-		}
-		if hasGenre("10764", "10767", "REALITY", "TALK", "综艺", "真人秀", "脱口秀") || hasVarietyText {
-			return categoryName(categories, "variety", "综艺")
 		}
 		if hasGenre("99", "DOCUMENTARY", "纪录", "纪录片") || hasDocumentaryText {
 			return categoryName(categories, "documentary", "纪录片")
@@ -119,14 +136,11 @@ func classifyMediaCategory(input mediaClassifyInput, categories map[string]strin
 		if hasGenre("10762", "KIDS", "儿童") {
 			return categoryName(categories, "children", "儿童")
 		}
+		if hasGenre("10764", "10767", "REALITY", "TALK", "综艺", "真人秀", "脱口秀") || hasVarietyText {
+			return categoryName(categories, "variety", "综艺")
+		}
 		if hasGenre("16", "ANIMATION", "动画", "动漫") || hasAnimeText {
-			if isChineseAnime {
-				return categoryName(categories, "cn_anime", "国漫")
-			}
-			if isWesternByMetadata || (!hasMetadata && containsAnyText(categoryText, "欧美动漫", "欧美动画", "西方动画")) {
-				return categoryName(categories, "euus_anime", "欧美动漫")
-			}
-			return categoryName(categories, "jp_anime", "日番")
+			return animeCategory()
 		}
 		if !hasMetadata && sourceHint != "" {
 			return sourceHint
@@ -140,7 +154,7 @@ func classifyMediaCategory(input mediaClassifyInput, categories map[string]strin
 		if isWestern {
 			return categoryName(categories, "euus_tv", "欧美剧")
 		}
-		return categoryName(categories, "uncategorized_tv", "未分类")
+		return categoryName(categories, "euus_tv", "欧美剧")
 	case "adult":
 		return categoryName(categories, "adult", "成人")
 	}
@@ -166,11 +180,11 @@ func normalizeMediaType(mediaType, title, category string) string {
 		return "adult"
 	case containsAnyText(raw, "综艺", "真人秀"):
 		return "variety"
-	case (containsAnyText(raw, "国漫", "日漫", "日番", "动漫", "动画") || classifierAnimeRE.MatchString(raw)) && !containsAnyText(raw, "动画电影"):
+	case (containsAnyText(raw, "国漫", "日漫", "日番", "韩漫", "美漫", "欧美动漫", "其他动漫", "动漫", "动画") || classifierAnimeRE.MatchString(raw)) && !containsAnyText(raw, "动画电影"):
 		return "anime"
 	case containsAnyText(raw, "电视剧", "国产剧", "欧美剧", "日韩剧", "日剧", "韩剧", "剧集") || classifierTVRE.MatchString(raw):
 		return "tv"
-	case containsAnyText(raw, "电影") || classifierMovieRE.MatchString(raw):
+	case containsAnyText(raw, "电影", "演唱会") || classifierMovieRE.MatchString(raw):
 		return "movie"
 	}
 	text := strings.ToLower(title + " " + category)

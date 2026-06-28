@@ -56,7 +56,7 @@ func (o *OrganizerService) resolveOrganizeSourceIdentity(ctx context.Context, re
 	src := req.Source
 	ext := filepath.Ext(src)
 	season, episode := ParseEpisode(src)
-	title, year := CleanQuery(src)
+	title, year := CleanQueryWithRecognition(ctx, o.repo, src)
 	if organizeWeakFileTitle(title) {
 		if folderTitle, folderYear := organizeTitleFromParentFolder(src, req.SourceRoot, season > 0 || episode > 0); folderTitle != "" {
 			title = folderTitle
@@ -133,7 +133,7 @@ func organizeStandaloneMovieSourceHint(src string, identity organizeSourceIdenti
 	if identity.Season > 0 || identity.Episode > 0 {
 		return organizeEpisodeLooksSourcedFromMovieYear(src, identity)
 	}
-	_, year := CleanQuery(filepath.Base(src))
+	_, year := CleanQueryWithRecognition(context.Background(), nil, filepath.Base(src))
 	if year <= 0 {
 		year = identity.Year
 	}
@@ -184,9 +184,9 @@ func (o *OrganizerService) applyOrganizeSourceCategory(
 	} else if category := o.smartClassifySourceFile(ctx, req.Source, req.SourceRoot, layout.MediaType, identity.Title, identity.ParsedTitle, metadataMatch); category != "" {
 		layout.Category = category
 	}
-	if forcedType == "" {
-		if impliedType, normalizedCategory := o.mediaTypeForDirectoryCategory(layout.Category); impliedType != "" {
-			layout.Category = normalizedCategory
+	if impliedType, normalizedCategory := o.mediaTypeForDirectoryCategory(layout.Category); impliedType != "" {
+		layout.Category = normalizedCategory
+		if forcedType == "" {
 			if layout.MediaType == "" || layout.MediaType == "tv" || layout.MediaType == "anime" || pathLayout.Category != layout.Category {
 				layout.MediaType = impliedType
 			}
