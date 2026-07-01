@@ -1,12 +1,14 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	"github.com/ShukeBta/MediaStationGo/internal/config"
 	"github.com/ShukeBta/MediaStationGo/internal/model"
@@ -58,6 +60,30 @@ func TestIngestPathAddsSingleFile(t *testing.T) {
 	}
 	if added, _ := sc.IngestPath(t.Context(), lib.ID, other); added {
 		t.Fatal("non-video file should not be ingested")
+	}
+}
+
+func TestScanLibraryReturnsNotFoundForMissingLibrary(t *testing.T) {
+	sc, _ := newScannerTestEnv(t)
+
+	res, err := sc.ScanLibrary(t.Context(), "missing-library")
+	if err == nil {
+		t.Fatalf("ScanLibrary() error = nil, result = %#v", res)
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) && err.Error() != "library not found" {
+		t.Fatalf("ScanLibrary() error = %v, want not found", err)
+	}
+}
+
+func TestIngestPathReturnsNotFoundForMissingLibrary(t *testing.T) {
+	sc, _ := newScannerTestEnv(t)
+
+	added, err := sc.IngestPath(t.Context(), "missing-library", filepath.Join(t.TempDir(), "movie.mkv"))
+	if err == nil {
+		t.Fatalf("IngestPath() error = nil, added = %v", added)
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) && err.Error() != "library not found" {
+		t.Fatalf("IngestPath() error = %v, want not found", err)
 	}
 }
 

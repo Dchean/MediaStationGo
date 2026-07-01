@@ -68,8 +68,11 @@ func (s *ScannerService) TryBeginLocalScan(libraryID string) (func(), bool) {
 
 func (s *ScannerService) scanLibrary(ctx context.Context, libraryID string, autoScrape bool) (*ScanResult, error) {
 	lib, err := s.repo.Library.FindByID(ctx, libraryID)
-	if err != nil || lib == nil {
+	if err != nil {
 		return nil, err
+	}
+	if lib == nil {
+		return nil, errors.New("library not found")
 	}
 	if mount, ok := ParseCloudLibraryMount(lib.Path); ok {
 		return s.scanMountedCloudLibrary(ctx, lib, mount, autoScrape)
@@ -229,8 +232,11 @@ func (s *ScannerService) finishLocalLibraryScan(ctx context.Context, lib *model.
 // added or updated.
 func (s *ScannerService) IngestPath(ctx context.Context, libraryID, path string) (bool, error) {
 	lib, err := s.repo.Library.FindByID(ctx, libraryID)
-	if err != nil || lib == nil {
+	if err != nil {
 		return false, err
+	}
+	if lib == nil {
+		return false, errors.New("library not found")
 	}
 	root, err := s.localLibraryRootForPath(ctx, lib, path)
 	if err != nil || root == nil {
