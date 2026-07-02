@@ -510,6 +510,12 @@ Beginners should not. Editing `docker-compose.yml` directly is easier to underst
 | Operations | Task queue, recycle bin, duplicate files, notifications, logs |
 | AI | OpenAI-compatible API, AI search, recommendations, assistant |
 
+Directory hardlinks are handled by recreating the directory tree and hardlinking
+each contained file. Linux cannot hardlink a directory itself. Hardlinks still
+require the source and target files to be on the same filesystem/subvolume from
+inside the container; if media and downloads are separate bind mounts, disks,
+btrfs subvolumes, or cloud mounts, use copy or symlink instead.
+
 ## Development
 
 Regular users should use Docker. Developers can run:

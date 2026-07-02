@@ -193,9 +193,6 @@ func (s *FileManagerService) Transfer(sourcePath, destDir string, mode TransferM
 	if err != nil {
 		return nil, err
 	}
-	if info.IsDir() {
-		return nil, errors.New("directory transfer is not supported yet")
-	}
 	dst := filepath.Join(dstDir, filepath.Base(src))
 	if !s.withinAllowed(dst, roots) {
 		return nil, ErrPathOutOfBounds
@@ -206,7 +203,11 @@ func (s *FileManagerService) Transfer(sourcePath, destDir string, mode TransferM
 	if mode == "" {
 		mode = TransferCopy
 	}
-	if err := transferFile(src, dst, mode); err != nil {
+	if info.IsDir() {
+		if err := transferDirectory(src, dst, mode); err != nil {
+			return nil, err
+		}
+	} else if err := transferFile(src, dst, mode); err != nil {
 		return nil, err
 	}
 	return &FileOperationResult{Path: dst}, nil

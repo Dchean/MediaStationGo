@@ -134,3 +134,52 @@ func moveFile(src, dst string) error {
 	}
 	return os.Remove(src)
 }
+
+func transferDirectory(src, dst string, mode TransferMode) error {
+	if _, err := os.Stat(dst); err == nil {
+		return fmt.Errorf("destination already exists: %s", dst)
+	}
+	switch mode {
+	case TransferSymlink:
+		return transferFile(src, dst, mode)
+	case TransferMove:
+		if err := os.Rename(src, dst); err == nil {
+			return nil
+		}
+		if err := transferDirectoryTree(src, dst, TransferCopy); err != nil {
+			return err
+		}
+		return os.RemoveAll(src)
+	case TransferHardlink, TransferCopy:
+		return transferDirectoryTree(src, dst, mode)
+	default:
+		return transferDirectory(src, dst, TransferMove)
+	}
+}
+
+func transferDirectoryTree(src, dst string, mode TransferMode) error {
+	if err := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return os.MkdirAll(dst, 0o755) // #nosec G301 -- media folders must remain readable by local players.
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755) // #nosec G301 -- media folders must remain readable by local players.
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { // #nosec G301 -- media folders must remain readable by local players.
+			return err
+		}
+		return transferFile(path, target, mode)
+	}); err != nil {
+		_ = os.RemoveAll(dst)
+		return err
+	}
+	return nil
+}

@@ -407,6 +407,10 @@ MediaStationGo 支持 Telegram Bot 绑定、用户菜单、群组管理菜单和
 
 确认 qBittorrent 保存路径已经通过 `volumes` 挂载进 MediaStationGo 容器，并且 `MEDIASTATION_DOWNLOAD_DIR` 与 `MEDIASTATION_DOWNLOAD_CONTAINER_DIR` 对应正确。
 
+**硬链接目录在 Docker / NAS 上看不到内容？**
+
+硬链接不能直接链接“目录”本身，只能链接目录里的文件。文件管理器执行目录硬链接时会递归创建目标目录结构，并为每个文件创建硬链接。硬链接还要求源文件和目标文件在容器内属于同一个文件系统/子卷；如果下载目录和媒体目录是两个独立 bind mount、不同硬盘、不同 btrfs 子卷或网盘挂载，系统会返回 `invalid cross-device link`，此时请选择“复制”或“软链接”。
+
 **第三方播放器无法连接？**
 
 确认播放器填写的是 `http://服务器IP:18080`，账号密码使用 MediaStationGo 用户账号。反代部署时需要正确设置外部访问地址和 HTTPS 头。

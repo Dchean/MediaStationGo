@@ -93,12 +93,77 @@ func TestFileManagerRecursiveListAndMutations(t *testing.T) {
 	}
 }
 
+func TestFileManagerTransferDirectoryHardlinksFiles(t *testing.T) {
+	root := t.TempDir()
+	if hardlinksUnsupported(t, root) {
+		t.Skip("hardlinks unsupported on this filesystem")
+	}
+	sourceDir := filepath.Join(root, "downloads", "Show")
+	seasonDir := filepath.Join(sourceDir, "Season 01")
+	targetRoot := filepath.Join(root, "media")
+	if err := os.MkdirAll(seasonDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(targetRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sourceFile := filepath.Join(seasonDir, "Show.S01E01.mkv")
+	if err := os.WriteFile(sourceFile, []byte("episode"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := newFileManagerTestService(t, root)
+
+	res, err := svc.Transfer(sourceDir, targetRoot, TransferHardlink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetFile := filepath.Join(res.Path, "Season 01", "Show.S01E01.mkv")
+	sourceInfo, err := os.Stat(sourceFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetInfo, err := os.Stat(targetFile)
+	if err != nil {
+		t.Fatalf("hardlinked directory file missing: %v", err)
+	}
+	if !os.SameFile(sourceInfo, targetInfo) {
+		t.Fatal("directory hardlink should hardlink contained files")
+	}
+	listing, err := svc.List(res.Path, 100, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, entry := range listing.Entries {
+		if entry.Path == targetFile {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("target directory listing did not include %s", targetFile)
+	}
+}
+
 func TestFileManagerRefusesRootMutation(t *testing.T) {
 	root := t.TempDir()
 	svc := newFileManagerTestService(t, root)
 	if err := svc.Delete(root); !errors.Is(err, ErrRootMutation) {
 		t.Fatalf("Delete(root) err = %v, want ErrRootMutation", err)
 	}
+}
+
+func hardlinksUnsupported(t *testing.T, root string) bool {
+	t.Helper()
+	src := filepath.Join(root, "hardlink-probe-src")
+	dst := filepath.Join(root, "hardlink-probe-dst")
+	if err := os.WriteFile(src, []byte("probe"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := os.Link(src, dst)
+	_ = os.Remove(src)
+	_ = os.Remove(dst)
+	return err != nil
 }
 
 func TestFileManagerIncludesConfiguredOrganizeRoots(t *testing.T) {
